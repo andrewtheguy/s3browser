@@ -86,25 +86,22 @@ export async function saveUploadState(upload: Omit<PersistedUpload, 'id' | 'crea
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
-
     const now = Date.now();
-    const persistedUpload: PersistedUpload = {
-      ...upload,
-      id: upload.id || generateUploadId(),
-      createdAt: upload.id ? (undefined as unknown as number) : now, // Will be preserved if updating
-      updatedAt: now,
-    };
 
-    // If updating, preserve original createdAt
     if (upload.id) {
-      const getRequest = store.get(upload.id);
+      // Updating existing upload - fetch to preserve createdAt
+      const existingId = upload.id;
+      const getRequest = store.get(existingId);
       getRequest.onsuccess = () => {
         const existing = getRequest.result as PersistedUpload | undefined;
-        if (existing) {
-          persistedUpload.createdAt = existing.createdAt;
-        } else {
-          persistedUpload.createdAt = now;
-        }
+        const createdAt = existing?.createdAt ?? now;
+
+        const persistedUpload: PersistedUpload = {
+          ...upload,
+          id: existingId,
+          createdAt,
+          updatedAt: now,
+        };
 
         const putRequest = store.put(persistedUpload);
         putRequest.onsuccess = () => resolve(persistedUpload);
@@ -112,10 +109,17 @@ export async function saveUploadState(upload: Omit<PersistedUpload, 'id' | 'crea
       };
       getRequest.onerror = () => reject(new Error('Failed to get existing upload'));
     } else {
-      persistedUpload.createdAt = now;
-      const request = store.put(persistedUpload);
-      request.onsuccess = () => resolve(persistedUpload);
-      request.onerror = () => reject(new Error('Failed to save upload state'));
+      // New upload
+      const persistedUpload: PersistedUpload = {
+        ...upload,
+        id: generateUploadId(),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const putRequest = store.put(persistedUpload);
+      putRequest.onsuccess = () => resolve(persistedUpload);
+      putRequest.onerror = () => reject(new Error('Failed to save upload state'));
     }
   });
 }
