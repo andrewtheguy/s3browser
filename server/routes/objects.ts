@@ -75,12 +75,10 @@ router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> 
       }
     }
 
-    // Sort: folders first, then files, alphabetically
-    objects.sort((a, b) => {
-      if (a.isFolder && !b.isFolder) return -1;
-      if (!a.isFolder && b.isFolder) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    // Note: Objects are returned in S3's native order (typically lexicographic by key).
+    // Sorting (folders first, then alphabetically) should be done client-side after
+    // aggregating all pages via continuationToken, since per-page sorting would
+    // produce inconsistent results when isTruncated is true.
 
     res.json({
       objects,

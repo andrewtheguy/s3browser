@@ -62,3 +62,15 @@ export function getPathSegments(path: string): string[] {
   if (!path) return [];
   return path.split('/').filter(Boolean);
 }
+
+/**
+ * Sort S3 objects: folders first, then files, alphabetically by name.
+ * Should be called client-side after aggregating all pages when using pagination.
+ */
+export function sortObjects<T extends { isFolder: boolean; name: string }>(objects: T[]): T[] {
+  return [...objects].sort((a, b) => {
+    if (a.isFolder && !b.isFolder) return -1;
+    if (!a.isFolder && b.isFolder) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}

@@ -9,7 +9,7 @@ import {
 import type { S3Object, BrowserContextValue } from '../types';
 import { useS3ClientContext } from './useS3ClientContext';
 import { listObjects } from '../services/api';
-import { getPathSegments } from '../utils/formatters';
+import { getPathSegments, sortObjects } from '../utils/formatters';
 
 interface BrowserState {
   currentPath: string;
@@ -67,7 +67,8 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
       try {
         const result = await listObjects(path);
         if (requestId === requestIdRef.current) {
-          dispatch({ type: 'FETCH_SUCCESS', objects: result.objects });
+          // Sort client-side: folders first, then files, alphabetically
+          dispatch({ type: 'FETCH_SUCCESS', objects: sortObjects(result.objects) });
         }
       } catch (err) {
         if (requestId === requestIdRef.current) {
