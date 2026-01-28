@@ -25,6 +25,19 @@ export function useUpload() {
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const mountGenerationRef = useRef(0);
 
+  // Refs to avoid stale closures in callbacks
+  const uploadsRef = useRef<UploadProgress[]>(uploads);
+  const pendingResumableRef = useRef<PersistedUpload[]>(pendingResumable);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    uploadsRef.current = uploads;
+  }, [uploads]);
+
+  useEffect(() => {
+    pendingResumableRef.current = pendingResumable;
+  }, [pendingResumable]);
+
   const refreshPendingUploads = useCallback(async () => {
     const currentGeneration = mountGenerationRef.current;
     try {
@@ -315,8 +328,8 @@ export function useUpload() {
       abortControllersRef.current.delete(id);
     }
 
-    // Find the upload to get details for cleanup
-    const uploadItem = uploads.find((u) => u.id === id);
+    // Find the upload to get details for cleanup (read from ref to avoid stale closure)
+    const uploadItem = uploadsRef.current.find((u) => u.id === id);
     if (uploadItem?.uploadId && uploadItem.isMultipart) {
       // Abort the S3 multipart upload
       try {
@@ -335,7 +348,7 @@ export function useUpload() {
 
     // Refresh pending resumable list
     void refreshPendingUploads();
-  }, [uploads, refreshPendingUploads]);
+  }, [refreshPendingUploads]);
 
   const pauseUpload = useCallback((id: string) => {
     const controller = abortControllersRef.current.get(id);
@@ -351,17 +364,14 @@ export function useUpload() {
 
   const resumeUpload = useCallback(
     async (id: string) => {
-      const uploadItem = uploads.find((u) => u.id === id);
+      // Read from ref to avoid stale closure
+      const uploadItem = uploadsRef.current.find((u) => u.id === id);
       if (!uploadItem || !uploadItem.persistenceId) {
         throw new Error('Cannot resume upload - no persistence data');
       }
 
-      // Get persisted state
-      const persisted = await getUploadByFile(
-        uploadItem.file.name,
-        uploadItem.file.size,
-        uploadItem.file.lastModified
-      );
+      // Get persisted state using direct ID lookup
+      const persisted = await getUploadById(uploadItem.persistenceId).catch(() => null);
 
       if (!persisted) {
         throw new Error('Cannot resume upload - persistence data not found');
@@ -405,12 +415,13 @@ export function useUpload() {
       // Refresh pending resumable list
       void refreshPendingUploads();
     },
-    [uploads, updateUpload, uploadMultipartFile, refreshPendingUploads]
+    [updateUpload, uploadMultipartFile, refreshPendingUploads]
   );
 
   const retryUpload = useCallback(
     async (id: string) => {
-      const uploadItem = uploads.find((u) => u.id === id);
+      // Read from ref to avoid stale closure
+      const uploadItem = uploadsRef.current.find((u) => u.id === id);
       if (!uploadItem) return;
 
       const abortController = new AbortController();
@@ -457,7 +468,7 @@ export function useUpload() {
         abortControllersRef.current.delete(id);
       }
     },
-    [uploads, updateUpload, uploadSingleFileWithProxy, uploadMultipartFile]
+    [updateUpload, uploadSingleFileWithProxy, uploadMultipartFile]
   );
 
   const clearCompleted = useCallback(() => {
@@ -474,8 +485,8 @@ export function useUpload() {
   }, []);
 
   const removePendingResumable = useCallback(async (persistenceId: string) => {
-    // Get the persisted upload to abort S3 if needed
-    const pending = pendingResumable.find((p) => p.id === persistenceId);
+    // Get the persisted upload to abort S3 if needed (read from ref to avoid stale closure)
+    const pending = pendingResumableRef.current.find((p) => p.id === persistenceId);
     if (pending?.uploadId) {
       try {
         await abortUpload(pending.uploadId, pending.key);
@@ -486,7 +497,7 @@ export function useUpload() {
 
     await deleteUploadState(persistenceId);
     setPendingResumable((prev) => prev.filter((p) => p.id !== persistenceId));
-  }, [pendingResumable]);
+  }, []);
 
   const createNewFolder = useCallback(
     async (folderName: string, prefix: string = ''): Promise<void> => {
