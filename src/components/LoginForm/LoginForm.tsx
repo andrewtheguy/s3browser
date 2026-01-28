@@ -10,10 +10,18 @@ import {
   CircularProgress,
   FormControlLabel,
   Checkbox,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  ListItemSecondaryAction,
+  IconButton,
+  Divider,
 } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
-import { useS3Client } from '../../hooks';
-import type { LoginCredentials } from '../../types';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { useS3Client, useConnectionHistory } from '../../hooks';
+import type { LoginCredentials, SavedConnection } from '../../types';
 
 function isValidUrl(value: string): boolean {
   if (!value) return true; // Empty is valid (optional field)
@@ -27,10 +35,13 @@ function isValidUrl(value: string): boolean {
 
 export function LoginForm() {
   const { connect, error } = useS3Client();
+  const { connections, saveConnection, deleteConnection, updateLastUsed } = useConnectionHistory();
   const [isLoading, setIsLoading] = useState(false);
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
   const [endpointTouched, setEndpointTouched] = useState(false);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    connectionName: '',
     region: '',
     accessKeyId: '',
     secretAccessKey: '',
@@ -54,6 +65,22 @@ export function LoginForm() {
         endpoint: formData.endpoint || undefined,
       };
       await connect(credentials);
+
+      // On successful connect, save/update connection if name provided
+      if (formData.connectionName.trim()) {
+        saveConnection({
+          id: selectedConnectionId || undefined,
+          name: formData.connectionName.trim(),
+          endpoint: formData.endpoint,
+          accessKeyId: formData.accessKeyId,
+          bucket: formData.bucket,
+          region: autoDetectRegion ? undefined : formData.region || undefined,
+          autoDetectRegion,
+        });
+      } else if (selectedConnectionId) {
+        // Update lastUsedAt even if no name change
+        updateLastUsed(selectedConnectionId);
+      }
     } catch {
       // Error is handled by context
     } finally {
@@ -65,6 +92,27 @@ export function LoginForm() {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const handleSelectConnection = (connection: SavedConnection) => {
+    setSelectedConnectionId(connection.id);
+    setFormData({
+      connectionName: connection.name,
+      endpoint: connection.endpoint,
+      accessKeyId: connection.accessKeyId,
+      bucket: connection.bucket,
+      region: connection.region || '',
+      secretAccessKey: '', // Never auto-fill secret
+    });
+    setAutoDetectRegion(connection.autoDetectRegion);
+  };
+
+  const handleDeleteConnection = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    deleteConnection(id);
+    if (selectedConnectionId === id) {
+      setSelectedConnectionId(null);
+    }
   };
 
   const isFormValid =
@@ -116,7 +164,70 @@ export function LoginForm() {
             </Alert>
           )}
 
+          {connections.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Recent Connections
+              </Typography>
+              <List
+                dense
+                sx={{
+                  bgcolor: 'background.paper',
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  maxHeight: 150,
+                  overflow: 'auto',
+                }}
+              >
+                {connections.map((connection, index) => (
+                  <Box key={connection.id}>
+                    {index > 0 && <Divider />}
+                    <ListItem
+                      disablePadding
+                      secondaryAction={
+                        <ListItemSecondaryAction>
+                          <IconButton
+                            edge="end"
+                            size="small"
+                            onClick={(e) => handleDeleteConnection(e, connection.id)}
+                            aria-label="delete"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      }
+                    >
+                      <ListItemButton
+                        selected={selectedConnectionId === connection.id}
+                        onClick={() => handleSelectConnection(connection)}
+                      >
+                        <ListItemText
+                          primary={connection.name}
+                          secondary={`${connection.bucket} @ ${connection.endpoint}`}
+                          primaryTypographyProps={{ noWrap: true }}
+                          secondaryTypographyProps={{ noWrap: true, fontSize: '0.75rem' }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  </Box>
+                ))}
+              </List>
+            </Box>
+          )}
+
           <Box component="form" onSubmit={handleSubmit}>
+            <TextField
+              fullWidth
+              label="Connection Name"
+              value={formData.connectionName}
+              onChange={handleChange('connectionName')}
+              margin="normal"
+              autoComplete="off"
+              placeholder="My AWS Account"
+              helperText="Optional. Provide a name to save this connection for later."
+            />
+
             <TextField
               fullWidth
               label="Endpoint URL"
@@ -152,6 +263,7 @@ export function LoginForm() {
               margin="normal"
               required
               autoComplete="off"
+              helperText={selectedConnectionId ? 'Enter your secret key (not saved for security)' : undefined}
             />
 
             <TextField

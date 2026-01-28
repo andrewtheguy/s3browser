@@ -67,6 +67,17 @@ export interface BrowserContextValue {
   pathSegments: string[];
 }
 
+export interface SavedConnection {
+  id: string;
+  name: string;
+  endpoint: string;
+  accessKeyId: string;
+  bucket: string;
+  region?: string;
+  autoDetectRegion: boolean;
+  lastUsedAt: number;
+}
+
 export const AWS_REGIONS = [
   { value: 'us-east-1', label: 'US East (N. Virginia)' },
   { value: 'us-east-2', label: 'US East (Ohio)' },
