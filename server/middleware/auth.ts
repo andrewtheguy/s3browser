@@ -44,22 +44,32 @@ export function generateSessionId(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+export function normalizeEndpoint(endpoint?: string): string | undefined {
+  if (!endpoint) return undefined;
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    return endpoint;
+  }
+  return `https://${endpoint}`;
+}
+
 export function createSession(credentials: S3Credentials): string {
   const sessionId = generateSessionId();
+  const endpoint = normalizeEndpoint(credentials.endpoint);
+
   const client = new S3Client({
     region: credentials.region,
     credentials: {
       accessKeyId: credentials.accessKeyId,
       secretAccessKey: credentials.secretAccessKey,
     },
-    ...(credentials.endpoint && {
-      endpoint: credentials.endpoint,
+    ...(endpoint && {
+      endpoint,
       forcePathStyle: true, // Required for most S3-compatible services
     }),
   });
 
   sessions.set(sessionId, {
-    credentials,
+    credentials: { ...credentials, endpoint },
     client,
     createdAt: Date.now(),
   });
@@ -116,34 +126,49 @@ export async function getBucketRegion(
   }
 }
 
-export async function validateCredentials(credentials: S3Credentials): Promise<boolean> {
+export async function validateCredentials(credentials: S3Credentials): Promise<{ valid: boolean; error?: string }> {
+  const endpoint = normalizeEndpoint(credentials.endpoint);
+
+  console.log('Validating credentials for bucket:', credentials.bucket, 'endpoint:', endpoint || 'AWS S3');
+
   const client = new S3Client({
     region: credentials.region,
     credentials: {
       accessKeyId: credentials.accessKeyId,
       secretAccessKey: credentials.secretAccessKey,
     },
-    ...(credentials.endpoint && {
-      endpoint: credentials.endpoint,
+    ...(endpoint && {
+      endpoint,
       forcePathStyle: true,
     }),
   });
 
   try {
     await client.send(new HeadBucketCommand({ Bucket: credentials.bucket }));
-    return true;
+    return { valid: true };
   } catch (error: unknown) {
-    // HeadBucket may fail due to permissions but credentials could still be valid
-    // Check if it's an access denied vs invalid credentials
-    if (error instanceof Error && error.name === 'NotFound') {
-      return false;
+    console.error('Credential validation error:', error);
+
+    if (error instanceof Error) {
+      // Bucket not found
+      if (error.name === 'NotFound') {
+        return { valid: false, error: 'Bucket not found' };
+      }
+      // Access denied - credentials might still be valid
+      if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
+        return { valid: true };
+      }
+      // Invalid credentials
+      if (error.name === 'InvalidAccessKeyId' || error.name === 'SignatureDoesNotMatch') {
+        return { valid: false, error: 'Invalid credentials' };
+      }
+      // Network/connection errors
+      if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+        return { valid: false, error: `Cannot connect to endpoint: ${error.message}` };
+      }
+      return { valid: false, error: error.message };
     }
-    // For other errors (like AccessDenied), credentials might still be valid
-    // but user doesn't have HeadBucket permission - we'll allow it
-    if (error instanceof Error && (error.name === 'AccessDenied' || error.name === 'Forbidden')) {
-      return true;
-    }
-    return false;
+    return { valid: false, error: 'Unknown error' };
   }
 }
 

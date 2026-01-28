@@ -40,9 +40,9 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       endpoint: endpoint || undefined,
     };
 
-    const isValid = await validateCredentials(credentials);
-    if (!isValid) {
-      res.status(401).json({ error: 'Invalid credentials or bucket not found' });
+    const validation = await validateCredentials(credentials);
+    if (!validation.valid) {
+      res.status(401).json({ error: validation.error || 'Invalid credentials or bucket not found' });
       return;
     }
 
