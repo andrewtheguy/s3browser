@@ -191,6 +191,12 @@ router.post(
       return;
     }
 
+    // Validate key matches the tracked upload
+    if (key !== tracked.sanitizedKey) {
+      res.status(403).json({ error: 'Key does not match the upload' });
+      return;
+    }
+
     const partNum = Number(partNumber);
     if (partNum > tracked.totalParts) {
       res.status(400).json({ error: `Part number ${partNum} exceeds total parts ${tracked.totalParts}` });
@@ -308,6 +314,12 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
 
   if (!tracked) {
     res.status(404).json({ error: 'Upload not found or expired' });
+    return;
+  }
+
+  // Validate key matches the tracked upload
+  if (key !== tracked.sanitizedKey) {
+    res.status(403).json({ error: 'Key does not match the upload' });
     return;
   }
 
