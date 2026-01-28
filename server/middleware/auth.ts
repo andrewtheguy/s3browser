@@ -277,8 +277,9 @@ export async function validateCredentialsOnly(
               return { valid: true };
             }
           }
-          // Return original STS error if S3 fallback doesn't clarify
-          return { valid: false, error: `STS blocked by policy and S3 check failed: ${error.message}` };
+          // Return S3 fallback error since that's what actually failed
+          const s3ErrorMessage = s3Error instanceof Error ? s3Error.message : String(s3Error);
+          return { valid: false, error: `STS blocked by policy and S3 check failed: ${s3ErrorMessage}` };
         }
       }
 
