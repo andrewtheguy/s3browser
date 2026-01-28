@@ -6,8 +6,17 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, readdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
+
+function cleanupBunBuildFiles() {
+  // Remove .bun-build temp files created during compilation
+  for (const file of readdirSync(projectRoot)) {
+    if (file.endsWith('.bun-build')) {
+      unlinkSync(join(projectRoot, file));
+    }
+  }
+}
 
 const projectRoot = join(import.meta.dir, '..');
 const standaloneEntry = join(projectRoot, 'server', 'standalone.ts');
@@ -40,6 +49,9 @@ async function build() {
     console.error('Error: Standalone compilation failed');
     process.exit(1);
   }
+
+  // Clean up temp files
+  cleanupBunBuildFiles();
 
   // Verify output exists
   if (!existsSync(outputPath)) {
