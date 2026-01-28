@@ -90,7 +90,7 @@ router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> 
 router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   // Get the key from the URL path (everything after /api/objects/)
   const keyParam = req.params.key;
-  const key = Array.isArray(keyParam) ? keyParam[0] : keyParam;
+  const key = Array.isArray(keyParam) ? keyParam.join('/') : keyParam;
 
   if (!key) {
     res.status(400).json({ error: 'Object key is required' });
