@@ -71,7 +71,7 @@ interface UploadTrackingData {
 const uploadTracker = new Map<string, UploadTrackingData>();
 
 // Clean up old tracking entries (older than 24 hours)
-setInterval(() => {
+const uploadTrackerCleanupInterval = setInterval(() => {
   const now = Date.now();
   const maxAge = 24 * 60 * 60 * 1000;
   for (const [trackingKey, data] of uploadTracker) {
@@ -80,6 +80,21 @@ setInterval(() => {
     }
   }
 }, 60 * 60 * 1000); // Check every hour
+
+// Cleanup function for tests and hot reloads
+export function cleanupUploadTracker(): void {
+  clearInterval(uploadTrackerCleanupInterval);
+  uploadTracker.clear();
+}
+
+// Clear interval on process shutdown
+process.on('SIGINT', () => {
+  clearInterval(uploadTrackerCleanupInterval);
+});
+
+process.on('SIGTERM', () => {
+  clearInterval(uploadTrackerCleanupInterval);
+});
 
 // All routes require authentication
 router.use(authMiddleware);
