@@ -8,13 +8,12 @@ export interface InitiateUploadResponse {
   partSize: number;
 }
 
-export interface PresignResponse {
-  url: string;
-  partNumber: number;
+export interface UploadPartResponse {
+  etag: string;
 }
 
-export interface PresignSingleResponse {
-  url: string;
+export interface UploadSingleResponse {
+  success: boolean;
   key: string;
 }
 
@@ -58,49 +57,14 @@ export async function initiateUpload(
   return response;
 }
 
-/**
- * Get a presigned URL for a specific part
- */
-export async function getPartPresignedUrl(
-  uploadId: string,
-  key: string,
-  partNumber: number
-): Promise<PresignResponse> {
-  const response = await apiPost<PresignResponse>('/upload/presign', {
-    uploadId,
-    key,
-    partNumber,
-  });
-  if (!response) {
-    throw new Error('Failed to get presigned URL for part');
-  }
-  return response;
-}
 
 /**
- * Get a presigned URL for single-part upload (small files)
- */
-export async function getPresignedSingleUrl(
-  key: string,
-  contentType: string,
-  fileSize: number
-): Promise<PresignSingleResponse> {
-  const response = await apiPost<PresignSingleResponse>('/upload/presign-single', {
-    key,
-    contentType,
-    fileSize,
-  });
-  if (!response) {
-    throw new Error('Failed to get presigned URL');
-  }
-  return response;
-}
-
-/**
- * Upload a single part using XHR for progress tracking
+ * Upload a single part through the server proxy
  */
 export function uploadPart(
-  url: string,
+  uploadId: string,
+  key: string,
+  partNumber: number,
   chunk: Blob,
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
@@ -136,12 +100,15 @@ export function uploadPart(
     xhr.addEventListener('load', () => {
       cleanup();
       if (xhr.status >= 200 && xhr.status < 300) {
-        // Get ETag from response headers
-        const etag = xhr.getResponseHeader('ETag');
-        if (etag) {
-          resolve(etag);
-        } else {
-          reject(new Error('No ETag in response'));
+        try {
+          const response = JSON.parse(xhr.responseText) as UploadPartResponse;
+          if (response.etag) {
+            resolve(response.etag);
+          } else {
+            reject(new Error('No ETag in response'));
+          }
+        } catch {
+          reject(new Error('Invalid response from server'));
         }
       } else {
         reject(new Error(`Part upload failed with status ${xhr.status}`));
@@ -158,16 +125,23 @@ export function uploadPart(
       reject(new DOMException('Upload aborted', 'AbortError'));
     });
 
-    xhr.open('PUT', url);
+    const params = new URLSearchParams({
+      uploadId,
+      key,
+      partNumber: String(partNumber),
+    });
+    xhr.open('POST', `/api/upload/part?${params.toString()}`);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.send(chunk);
   });
 }
 
 /**
- * Upload a small file using a single presigned URL
+ * Upload a small file through the server proxy
  */
 export function uploadSingleFile(
-  url: string,
+  key: string,
   file: File,
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
@@ -219,7 +193,9 @@ export function uploadSingleFile(
       reject(new DOMException('Upload aborted', 'AbortError'));
     });
 
-    xhr.open('PUT', url);
+    const params = new URLSearchParams({ key });
+    xhr.open('POST', `/api/upload/single?${params.toString()}`);
+    xhr.withCredentials = true;
     xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
     xhr.send(file);
   });
@@ -282,9 +258,7 @@ async function uploadPartWithRetry(
         throw new DOMException('Upload aborted', 'AbortError');
       }
 
-      // Get fresh presigned URL for each attempt (they may expire)
-      const { url } = await getPartPresignedUrl(uploadId, key, partNumber);
-      const etag = await uploadPart(url, chunk, onProgress, abortSignal);
+      const etag = await uploadPart(uploadId, key, partNumber, chunk, onProgress, abortSignal);
       return etag;
     } catch (error) {
       // Don't retry abort errors

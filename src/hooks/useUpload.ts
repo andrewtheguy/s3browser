@@ -2,7 +2,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useS3ClientContext } from '../contexts';
 import { createFolder } from '../services/api';
 import {
-  getPresignedSingleUrl,
   uploadSingleFile,
   uploadFileMultipart,
   abortUpload,
@@ -75,20 +74,13 @@ export function useUpload() {
     );
   }, []);
 
-  const uploadSingleFileWithPresign = useCallback(
+  const uploadSingleFileWithProxy = useCallback(
     async (uploadItem: UploadProgress, abortController: AbortController) => {
       const { file, key } = uploadItem;
 
-      // Get presigned URL
-      const { url } = await getPresignedSingleUrl(
-        key,
-        file.type || 'application/octet-stream',
-        file.size
-      );
-
-      // Upload directly to S3
+      // Upload through server proxy
       await uploadSingleFile(
-        url,
+        key,
         file,
         (loaded, total) => {
           updateUpload(uploadItem.id, {
@@ -276,7 +268,7 @@ export function useUpload() {
               existingUpload?.id
             );
           } else {
-            await uploadSingleFileWithPresign(uploadItem, abortController);
+            await uploadSingleFileWithProxy(uploadItem, abortController);
           }
 
           updateUpload(uploadItem.id, {
@@ -302,7 +294,7 @@ export function useUpload() {
       // Refresh pending resumable list
       void refreshPendingUploads();
     },
-    [isConnected, updateUpload, uploadSingleFileWithPresign, uploadMultipartFile, refreshPendingUploads]
+    [isConnected, updateUpload, uploadSingleFileWithProxy, uploadMultipartFile, refreshPendingUploads]
   );
 
   const cancelUpload = useCallback(async (id: string) => {
@@ -427,7 +419,7 @@ export function useUpload() {
         if (useMultipart) {
           await uploadMultipartFile(uploadItem, abortController);
         } else {
-          await uploadSingleFileWithPresign(uploadItem, abortController);
+          await uploadSingleFileWithProxy(uploadItem, abortController);
         }
 
         updateUpload(id, {
@@ -448,7 +440,7 @@ export function useUpload() {
         abortControllersRef.current.delete(id);
       }
     },
-    [uploads, updateUpload, uploadSingleFileWithPresign, uploadMultipartFile]
+    [uploads, updateUpload, uploadSingleFileWithProxy, uploadMultipartFile]
   );
 
   const clearCompleted = useCallback(() => {

@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, default as express } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { Upload } from '@aws-sdk/lib-storage';
@@ -9,7 +9,6 @@ import {
   AbortMultipartUploadCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
 import { UPLOAD_CONFIG } from '../config/upload.js';
 
@@ -128,48 +127,93 @@ router.post(
   }
 );
 
-// POST /api/upload/presign-single - Get presigned URL for small file upload
-router.post('/presign-single', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { key, contentType, fileSize } = req.body;
-  const session = req.session!;
-  const sessionId = req.sessionId!;
+// POST /api/upload/single - Proxy single file upload through server to S3
+router.post(
+  '/single',
+  express.raw({ limit: '10mb', type: '*/*' }),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const key = req.query.key as string;
+    const session = req.session!;
+    const sessionId = req.sessionId!;
 
-  if (!key || typeof key !== 'string') {
-    res.status(400).json({ error: 'Key is required' });
-    return;
+    if (!key || typeof key !== 'string') {
+      res.status(400).json({ error: 'Key query parameter is required' });
+      return;
+    }
+
+    const keyValidation = validateAndSanitizeKey(key, sessionId);
+    if (!keyValidation.valid) {
+      res.status(400).json({ error: keyValidation.error });
+      return;
+    }
+
+    const contentType = req.headers['content-type'] || 'application/octet-stream';
+
+    const command = new PutObjectCommand({
+      Bucket: session.credentials.bucket,
+      Key: keyValidation.sanitizedKey,
+      Body: req.body as Buffer,
+      ContentType: contentType,
+    });
+
+    await session.client.send(command);
+    res.json({ success: true, key: keyValidation.sanitizedKey });
   }
+);
 
-  if (typeof fileSize !== 'number' || fileSize <= 0) {
-    res.status(400).json({ error: 'Valid fileSize is required' });
-    return;
+// POST /api/upload/part - Proxy multipart part upload through server to S3
+router.post(
+  '/part',
+  express.raw({ limit: '15mb', type: '*/*' }),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const uploadId = req.query.uploadId as string;
+    const partNumber = req.query.partNumber as string;
+    const key = req.query.key as string;
+    const session = req.session!;
+    const sessionId = req.sessionId!;
+
+    if (!uploadId || typeof uploadId !== 'string') {
+      res.status(400).json({ error: 'uploadId query parameter is required' });
+      return;
+    }
+
+    if (!partNumber || isNaN(Number(partNumber)) || Number(partNumber) < 1) {
+      res.status(400).json({ error: 'Valid partNumber query parameter (>= 1) is required' });
+      return;
+    }
+
+    if (!key || typeof key !== 'string') {
+      res.status(400).json({ error: 'key query parameter is required' });
+      return;
+    }
+
+    // Validate against tracked upload
+    const trackingKey = `${sessionId}:${uploadId}`;
+    const tracked = uploadTracker.get(trackingKey);
+
+    if (!tracked) {
+      res.status(404).json({ error: 'Upload not found or expired' });
+      return;
+    }
+
+    const partNum = Number(partNumber);
+    if (partNum > tracked.totalParts) {
+      res.status(400).json({ error: `Part number ${partNum} exceeds total parts ${tracked.totalParts}` });
+      return;
+    }
+
+    const command = new UploadPartCommand({
+      Bucket: session.credentials.bucket,
+      Key: tracked.sanitizedKey,
+      UploadId: uploadId,
+      PartNumber: partNum,
+      Body: req.body as Buffer,
+    });
+
+    const result = await session.client.send(command);
+    res.json({ etag: result.ETag });
   }
-
-  if (fileSize > UPLOAD_CONFIG.MAX_FILE_SIZE) {
-    res.status(400).json({ error: `File size exceeds maximum of ${UPLOAD_CONFIG.MAX_FILE_SIZE} bytes` });
-    return;
-  }
-
-  const keyValidation = validateAndSanitizeKey(key, sessionId);
-  if (!keyValidation.valid) {
-    res.status(400).json({ error: keyValidation.error });
-    return;
-  }
-
-  const command = new PutObjectCommand({
-    Bucket: session.credentials.bucket,
-    Key: keyValidation.sanitizedKey,
-    ContentType: contentType || 'application/octet-stream',
-  });
-
-  const url = await getSignedUrl(session.client, command, {
-    expiresIn: UPLOAD_CONFIG.PRESIGN_EXPIRY,
-  });
-
-  res.json({
-    url,
-    key: keyValidation.sanitizedKey,
-  });
-});
+);
 
 // POST /api/upload/initiate - Start a multipart upload
 router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -232,55 +276,6 @@ router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promi
     totalParts,
     partSize: UPLOAD_CONFIG.PART_SIZE,
   });
-});
-
-// POST /api/upload/presign - Get presigned URL for a specific part
-router.post('/presign', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { uploadId, key, partNumber } = req.body;
-  const session = req.session!;
-  const sessionId = req.sessionId!;
-
-  if (!uploadId || typeof uploadId !== 'string') {
-    res.status(400).json({ error: 'uploadId is required' });
-    return;
-  }
-
-  if (!key || typeof key !== 'string') {
-    res.status(400).json({ error: 'Key is required' });
-    return;
-  }
-
-  if (typeof partNumber !== 'number' || partNumber < 1) {
-    res.status(400).json({ error: 'Valid partNumber (>= 1) is required' });
-    return;
-  }
-
-  // Validate against tracked upload
-  const trackingKey = `${sessionId}:${uploadId}`;
-  const tracked = uploadTracker.get(trackingKey);
-
-  if (!tracked) {
-    res.status(404).json({ error: 'Upload not found or expired' });
-    return;
-  }
-
-  if (partNumber > tracked.totalParts) {
-    res.status(400).json({ error: `Part number ${partNumber} exceeds total parts ${tracked.totalParts}` });
-    return;
-  }
-
-  const command = new UploadPartCommand({
-    Bucket: session.credentials.bucket,
-    Key: tracked.sanitizedKey,
-    UploadId: uploadId,
-    PartNumber: partNumber,
-  });
-
-  const url = await getSignedUrl(session.client, command, {
-    expiresIn: UPLOAD_CONFIG.PRESIGN_EXPIRY,
-  });
-
-  res.json({ url, partNumber });
 });
 
 // POST /api/upload/complete - Complete a multipart upload
