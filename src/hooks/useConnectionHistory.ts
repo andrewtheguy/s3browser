@@ -10,7 +10,11 @@ function loadConnections(): SavedConnection[] {
     if (!data) return [];
     const parsed = JSON.parse(data);
     if (!Array.isArray(parsed)) return [];
-    return parsed;
+    // Only load connections with valid name (no spaces, non-empty)
+    return parsed.filter(
+      (c): c is SavedConnection =>
+        typeof c.name === 'string' && c.name.length > 0 && !c.name.includes(' ')
+    );
   } catch {
     return [];
   }
@@ -27,15 +31,16 @@ export function useConnectionHistory() {
     setConnections(loadConnections());
   }, []);
 
-  const saveConnection = useCallback((connection: Omit<SavedConnection, 'id' | 'lastUsedAt'> & { id?: string }) => {
+  const saveConnection = useCallback((connection: Omit<SavedConnection, 'lastUsedAt'>) => {
+    if (!connection.name || connection.name.includes(' ')) {
+      return; // Don't save if name is empty or has spaces
+    }
+
     setConnections((prev) => {
-      const existingIndex = connection.id
-        ? prev.findIndex((c) => c.id === connection.id)
-        : -1;
+      const existingIndex = prev.findIndex((c) => c.name === connection.name);
 
       const newConnection: SavedConnection = {
         ...connection,
-        id: connection.id || crypto.randomUUID(),
         lastUsedAt: Date.now(),
       };
 
@@ -56,23 +61,9 @@ export function useConnectionHistory() {
     });
   }, []);
 
-  const deleteConnection = useCallback((id: string) => {
+  const deleteConnection = useCallback((name: string) => {
     setConnections((prev) => {
-      const updated = prev.filter((c) => c.id !== id);
-      persistConnections(updated);
-      return updated;
-    });
-  }, []);
-
-  const updateLastUsed = useCallback((id: string) => {
-    setConnections((prev) => {
-      const index = prev.findIndex((c) => c.id === id);
-      if (index < 0) return prev;
-
-      const updated = [...prev];
-      updated[index] = { ...updated[index], lastUsedAt: Date.now() };
-      updated.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-
+      const updated = prev.filter((c) => c.name !== name);
       persistConnections(updated);
       return updated;
     });
@@ -82,6 +73,5 @@ export function useConnectionHistory() {
     connections,
     saveConnection,
     deleteConnection,
-    updateLastUsed,
   };
 }

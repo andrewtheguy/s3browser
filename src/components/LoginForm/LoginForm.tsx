@@ -33,13 +33,19 @@ function isValidUrl(value: string): boolean {
   }
 }
 
+function isValidConnectionName(value: string): boolean {
+  if (!value) return true; // Empty is valid (optional field)
+  return !value.includes(' ');
+}
+
 export function LoginForm() {
   const { connect, error } = useS3Client();
-  const { connections, saveConnection, deleteConnection, updateLastUsed } = useConnectionHistory();
+  const { connections, saveConnection, deleteConnection } = useConnectionHistory();
   const [isLoading, setIsLoading] = useState(false);
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
   const [endpointTouched, setEndpointTouched] = useState(false);
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [nameTouched, setNameTouched] = useState(false);
+  const [selectedConnectionName, setSelectedConnectionName] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     connectionName: '',
     region: '',
@@ -51,6 +57,8 @@ export function LoginForm() {
 
   const endpointValid = isValidUrl(formData.endpoint);
   const showEndpointError = endpointTouched && !endpointValid;
+  const nameValid = isValidConnectionName(formData.connectionName);
+  const showNameError = nameTouched && !nameValid;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -65,21 +73,16 @@ export function LoginForm() {
     };
     const success = await connect(credentials);
 
-    if (success) {
-      // Only save/update connection on successful connect
-      if (formData.connectionName.trim()) {
-        saveConnection({
-          id: selectedConnectionId || undefined,
-          name: formData.connectionName.trim(),
-          endpoint: formData.endpoint,
-          accessKeyId: formData.accessKeyId,
-          bucket: formData.bucket,
-          region: autoDetectRegion ? undefined : formData.region || undefined,
-          autoDetectRegion,
-        });
-      } else if (selectedConnectionId) {
-        updateLastUsed(selectedConnectionId);
-      }
+    if (success && formData.connectionName.trim() && nameValid) {
+      // Only save connection on successful connect with valid name
+      saveConnection({
+        name: formData.connectionName.trim(),
+        endpoint: formData.endpoint,
+        accessKeyId: formData.accessKeyId,
+        bucket: formData.bucket,
+        region: autoDetectRegion ? undefined : formData.region || undefined,
+        autoDetectRegion,
+      });
     }
 
     setIsLoading(false);
@@ -92,9 +95,9 @@ export function LoginForm() {
   };
 
   const handleConnectionChange = (e: SelectChangeEvent<string>) => {
-    const id = e.target.value;
-    if (id === 'new') {
-      setSelectedConnectionId(null);
+    const name = e.target.value;
+    if (name === 'new') {
+      setSelectedConnectionName(null);
       setFormData({
         connectionName: '',
         endpoint: 'https://s3.amazonaws.com',
@@ -107,9 +110,9 @@ export function LoginForm() {
       return;
     }
 
-    const connection = connections.find((c) => c.id === id);
+    const connection = connections.find((c) => c.name === name);
     if (connection) {
-      setSelectedConnectionId(connection.id);
+      setSelectedConnectionName(connection.name);
       setFormData({
         connectionName: connection.name,
         endpoint: connection.endpoint,
@@ -122,12 +125,12 @@ export function LoginForm() {
     }
   };
 
-  const handleDeleteConnection = (e: React.MouseEvent, id: string) => {
+  const handleDeleteConnection = (e: React.MouseEvent, name: string) => {
     e.stopPropagation();
     e.preventDefault();
-    deleteConnection(id);
-    if (selectedConnectionId === id) {
-      setSelectedConnectionId(null);
+    deleteConnection(name);
+    if (selectedConnectionName === name) {
+      setSelectedConnectionName(null);
       setFormData({
         connectionName: '',
         endpoint: 'https://s3.amazonaws.com',
@@ -145,7 +148,8 @@ export function LoginForm() {
     formData.accessKeyId &&
     formData.secretAccessKey &&
     formData.bucket &&
-    endpointValid;
+    endpointValid &&
+    nameValid;
 
   return (
     <Box
@@ -193,18 +197,18 @@ export function LoginForm() {
             <InputLabel id="connection-select-label">Connection</InputLabel>
             <Select
               labelId="connection-select-label"
-              value={selectedConnectionId || 'new'}
+              value={selectedConnectionName || 'new'}
               label="Connection"
               onChange={handleConnectionChange}
               renderValue={(value) => {
                 if (value === 'new') return 'New Connection';
-                const conn = connections.find((c) => c.id === value);
+                const conn = connections.find((c) => c.name === value);
                 return conn?.name || 'New Connection';
               }}
             >
               <MenuItem value="new">New Connection</MenuItem>
               {connections.map((connection) => (
-                <MenuItem key={connection.id} value={connection.id}>
+                <MenuItem key={connection.name} value={connection.name}>
                   <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
                     <ListItemText
                       primary={connection.name}
@@ -215,7 +219,7 @@ export function LoginForm() {
                     />
                     <IconButton
                       size="small"
-                      onClick={(e) => handleDeleteConnection(e, connection.id)}
+                      onClick={(e) => handleDeleteConnection(e, connection.name)}
                       aria-label="delete"
                       sx={{ flexShrink: 0 }}
                     >
@@ -233,10 +237,16 @@ export function LoginForm() {
               label="Connection Name"
               value={formData.connectionName}
               onChange={handleChange('connectionName')}
+              onBlur={() => setNameTouched(true)}
               margin="normal"
               autoComplete="off"
-              placeholder="My AWS Account"
-              helperText="Optional. Provide a name to save this connection for later."
+              placeholder="my-aws-account"
+              error={showNameError}
+              helperText={
+                showNameError
+                  ? 'Connection name cannot contain spaces'
+                  : 'Optional. Provide a name (no spaces) to save this connection.'
+              }
             />
 
             <TextField
@@ -274,7 +284,7 @@ export function LoginForm() {
               margin="normal"
               required
               autoComplete="off"
-              helperText={selectedConnectionId ? 'Enter your secret key (not saved for security)' : undefined}
+              helperText={selectedConnectionName ? 'Enter your secret key (not saved for security)' : undefined}
             />
 
             <TextField

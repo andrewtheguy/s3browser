@@ -68,8 +68,7 @@ export interface BrowserContextValue {
 }
 
 export interface SavedConnection {
-  id: string;
-  name: string;
+  name: string;              // Used as unique key
   endpoint: string;
   accessKeyId: string;
   bucket: string;
