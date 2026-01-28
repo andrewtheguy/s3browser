@@ -24,7 +24,7 @@ export function LoginForm() {
     accessKeyId: '',
     secretAccessKey: '',
     bucket: '',
-    endpoint: '',
+    endpoint: 'https://s3.amazonaws.com',
   });
 
   const handleSubmit = async (e: FormEvent) => {
@@ -102,29 +102,15 @@ export function LoginForm() {
           )}
 
           <Box component="form" onSubmit={handleSubmit}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={autoDetectRegion}
-                  onChange={(e) => setAutoDetectRegion(e.target.checked)}
-                />
-              }
-              label="Auto-detect region from bucket"
-              sx={{ mt: 1 }}
+            <TextField
+              fullWidth
+              label="Endpoint URL"
+              value={formData.endpoint}
+              onChange={handleChange('endpoint')}
+              margin="normal"
+              autoComplete="off"
+              helperText="Default is AWS S3. Change for S3-compatible services (MinIO, etc.)"
             />
-
-            {!autoDetectRegion && (
-              <TextField
-                fullWidth
-                label="Region"
-                value={formData.region}
-                onChange={handleChange('region')}
-                margin="normal"
-                required
-                autoComplete="off"
-                placeholder="us-east-1"
-              />
-            )}
 
             <TextField
               fullWidth
@@ -157,16 +143,29 @@ export function LoginForm() {
               autoComplete="off"
             />
 
-            <TextField
-              fullWidth
-              label="Custom Endpoint (optional)"
-              value={formData.endpoint}
-              onChange={handleChange('endpoint')}
-              margin="normal"
-              autoComplete="off"
-              placeholder="http://localhost:9000"
-              helperText="For S3-compatible services (MinIO, DigitalOcean Spaces, etc.)"
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoDetectRegion}
+                  onChange={(e) => setAutoDetectRegion(e.target.checked)}
+                />
+              }
+              label="Auto-detect region from bucket"
+              sx={{ mt: 1 }}
             />
+
+            {!autoDetectRegion && (
+              <TextField
+                fullWidth
+                label="Region"
+                value={formData.region}
+                onChange={handleChange('region')}
+                margin="normal"
+                required
+                autoComplete="off"
+                placeholder="us-east-1"
+              />
+            )}
 
             <Button
               type="submit"
