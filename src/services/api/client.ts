@@ -49,8 +49,8 @@ export async function apiRequest<T>(
   return response.json();
 }
 
-export async function apiGet<T>(endpoint: string): Promise<T | null> {
-  return apiRequest<T>(endpoint, { method: 'GET' });
+export async function apiGet<T>(endpoint: string, signal?: AbortSignal): Promise<T | null> {
+  return apiRequest<T>(endpoint, { method: 'GET', signal });
 }
 
 export async function apiPost<T>(endpoint: string, body?: unknown): Promise<T | null> {

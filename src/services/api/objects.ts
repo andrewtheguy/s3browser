@@ -20,12 +20,12 @@ export interface S3ListResult {
   isTruncated: boolean;
 }
 
-export async function listObjects(prefix: string = '', continuationToken?: string): Promise<S3ListResult> {
+export async function listObjects(prefix: string = '', continuationToken?: string, signal?: AbortSignal): Promise<S3ListResult> {
   let url = `/objects?prefix=${encodeURIComponent(prefix)}`;
   if (continuationToken) {
     url += `&continuationToken=${encodeURIComponent(continuationToken)}`;
   }
-  const response = await apiGet<ListObjectsResponse>(url);
+  const response = await apiGet<ListObjectsResponse>(url, signal);
 
   if (!response) {
     throw new Error('Failed to list objects: empty response');

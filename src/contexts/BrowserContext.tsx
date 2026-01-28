@@ -56,21 +56,34 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
   const { isConnected } = useS3ClientContext();
   const requestIdRef = useRef(0);
   const initialFetchDoneRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchObjects = useCallback(
     async (path: string) => {
       if (!isConnected) return;
 
+      // Abort any in-flight request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       const requestId = ++requestIdRef.current;
       dispatch({ type: 'FETCH_START' });
 
       try {
-        const result = await listObjects(path);
+        const result = await listObjects(path, undefined, abortController.signal);
         if (requestId === requestIdRef.current) {
           // Sort client-side: folders first, then files, alphabetically
           dispatch({ type: 'FETCH_SUCCESS', objects: sortObjects(result.objects) });
         }
       } catch (err) {
+        // Skip dispatch for aborted requests
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
         if (requestId === requestIdRef.current) {
           const message = err instanceof Error ? err.message : 'Failed to list objects';
           dispatch({ type: 'FETCH_ERROR', error: message });
@@ -110,9 +123,14 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
     }
   }, [isConnected]);
 
-  // Invalidate pending requests on unmount
+  // Abort pending requests and invalidate on unmount
   useEffect(() => {
+    const abortController = abortControllerRef;
     return () => {
+      if (abortController.current) {
+        abortController.current.abort();
+        abortController.current = null;
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally increment current value at cleanup time
       requestIdRef.current++;
     };
