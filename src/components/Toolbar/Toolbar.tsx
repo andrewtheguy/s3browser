@@ -51,12 +51,15 @@ export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
           mb: 2,
         }}
       >
-        <Chip
-          label={`Bucket: ${credentials?.bucket ?? '—'}`}
-          color="primary"
-          variant="outlined"
-          sx={{ fontWeight: 500 }}
-        />
+        <Tooltip title="Click to change bucket">
+          <Chip
+            label={`Bucket: ${credentials?.bucket ?? '—'}`}
+            color="primary"
+            variant="outlined"
+            onClick={() => void navigate('/')}
+            sx={{ fontWeight: 500, cursor: 'pointer' }}
+          />
+        </Tooltip>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Tooltip title="Refresh">

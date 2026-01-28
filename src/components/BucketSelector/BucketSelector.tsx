@@ -41,8 +41,12 @@ export function BucketSelector() {
 
     try {
       const bucketList = await listBuckets();
-      setBuckets(bucketList);
-      if (bucketList.length === 0) {
+      // Sort buckets alphabetically by name
+      const sortedBuckets = [...bucketList].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+      setBuckets(sortedBuckets);
+      if (sortedBuckets.length === 0) {
         setShowManualInput(true);
       }
     } catch (err) {
