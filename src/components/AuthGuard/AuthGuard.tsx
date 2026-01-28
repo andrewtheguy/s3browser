@@ -8,14 +8,28 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { isConnected, credentials } = useS3ClientContext();
+  const { isConnected, isCheckingSession, credentials } = useS3ClientContext();
   const { bucket } = useParams<{ bucket: string }>();
   const location = useLocation();
 
-  // Show loading state during initial auth check
-  // The S3ClientContext checks session status on mount
+  // Show loading state while checking session status
+  if (isCheckingSession) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Session check complete and not connected - redirect to home with returnTo param
   if (!isConnected) {
-    // Not connected - redirect to home with returnTo param
     const returnTo = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/?returnTo=${returnTo}`} replace />;
   }

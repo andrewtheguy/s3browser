@@ -16,6 +16,7 @@ interface SessionInfo {
 interface S3ClientState {
   session: SessionInfo | null;
   isConnected: boolean;
+  isCheckingSession: boolean;
   error: string | null;
 }
 
@@ -25,7 +26,8 @@ type S3ClientAction =
   | { type: 'CONNECT_ERROR'; error: string }
   | { type: 'DISCONNECT' }
   | { type: 'BUCKET_SELECTED'; bucket: string }
-  | { type: 'BUCKET_SELECT_ERROR'; error: string };
+  | { type: 'BUCKET_SELECT_ERROR'; error: string }
+  | { type: 'SESSION_CHECK_COMPLETE' };
 
 function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
   switch (action.type) {
@@ -35,18 +37,21 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
       return {
         session: action.session,
         isConnected: true,
+        isCheckingSession: false,
         error: null,
       };
     case 'CONNECT_ERROR':
       return {
         session: null,
         isConnected: false,
+        isCheckingSession: false,
         error: action.error,
       };
     case 'DISCONNECT':
       return {
         session: null,
         isConnected: false,
+        isCheckingSession: false,
         error: null,
       };
     case 'BUCKET_SELECTED':
@@ -60,6 +65,11 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         ...state,
         error: action.error,
       };
+    case 'SESSION_CHECK_COMPLETE':
+      return {
+        ...state,
+        isCheckingSession: false,
+      };
     default:
       return state;
   }
@@ -68,6 +78,7 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
 const initialState: S3ClientState = {
   session: null,
   isConnected: false,
+  isCheckingSession: true,
   error: null,
 };
 
@@ -121,11 +132,15 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     void (async () => {
       try {
         const status = await getAuthStatus(abortController.signal);
-        if (!abortController.signal.aborted && status.authenticated && status.region) {
-          dispatch({
-            type: 'CONNECT_SUCCESS',
-            session: { region: status.region, bucket: status.bucket || null },
-          });
+        if (!abortController.signal.aborted) {
+          if (status.authenticated && status.region) {
+            dispatch({
+              type: 'CONNECT_SUCCESS',
+              session: { region: status.region, bucket: status.bucket || null },
+            });
+          } else {
+            dispatch({ type: 'SESSION_CHECK_COMPLETE' });
+          }
         }
       } catch (error) {
         // Ignore abort errors from cleanup
@@ -134,6 +149,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
         }
         // Log other errors - user stays disconnected (initial state)
         console.error('Session status check failed:', error);
+        dispatch({ type: 'SESSION_CHECK_COMPLETE' });
       }
     })();
 
@@ -154,6 +170,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
         }
       : null,
     isConnected: state.isConnected,
+    isCheckingSession: state.isCheckingSession,
     requiresBucketSelection,
     error: state.error,
     connect,
