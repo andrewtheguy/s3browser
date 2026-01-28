@@ -24,6 +24,12 @@ export default defineConfig([
         'warn',
         { allowConstantExport: true, allowExportNames: ['S3ClientContext', 'BrowserContext'] },
       ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+      'require-await': 'off',
+      '@typescript-eslint/require-await': 'error',
     },
   },
 ])

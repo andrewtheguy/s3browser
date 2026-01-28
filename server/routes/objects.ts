@@ -34,67 +34,63 @@ router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> 
   const continuationToken = (req.query.continuationToken as string) || undefined;
   const session = req.session!;
 
-  try {
-    const command = new ListObjectsV2Command({
-      Bucket: session.credentials.bucket,
-      Prefix: prefix,
-      Delimiter: '/',
-      MaxKeys: 1000,
-      ContinuationToken: continuationToken,
-    });
+  const command = new ListObjectsV2Command({
+    Bucket: session.credentials.bucket,
+    Prefix: prefix,
+    Delimiter: '/',
+    MaxKeys: 1000,
+    ContinuationToken: continuationToken,
+  });
 
-    const response = await session.client.send(command);
-    const objects: S3Object[] = [];
+  const response = await session.client.send(command);
+  const objects: S3Object[] = [];
 
-    // Add folders (CommonPrefixes)
-    if (response.CommonPrefixes) {
-      for (const prefixObj of response.CommonPrefixes) {
-        if (prefixObj.Prefix) {
-          objects.push({
-            key: prefixObj.Prefix,
-            name: extractFileName(prefixObj.Prefix),
-            isFolder: true,
-          });
-        }
+  // Add folders (CommonPrefixes)
+  if (response.CommonPrefixes) {
+    for (const prefixObj of response.CommonPrefixes) {
+      if (prefixObj.Prefix) {
+        objects.push({
+          key: prefixObj.Prefix,
+          name: extractFileName(prefixObj.Prefix),
+          isFolder: true,
+        });
       }
     }
-
-    // Add files (Contents)
-    if (response.Contents) {
-      for (const item of response.Contents) {
-        if (item.Key && item.Key !== prefix) {
-          objects.push({
-            key: item.Key,
-            name: extractFileName(item.Key),
-            size: item.Size,
-            lastModified: item.LastModified?.toISOString(),
-            isFolder: false,
-            etag: item.ETag,
-          });
-        }
-      }
-    }
-
-    // Note: Objects are returned in S3's native order (typically lexicographic by key).
-    // Sorting (folders first, then alphabetically) should be done client-side after
-    // aggregating all pages via continuationToken, since per-page sorting would
-    // produce inconsistent results when isTruncated is true.
-
-    res.json({
-      objects,
-      continuationToken: response.NextContinuationToken,
-      isTruncated: response.IsTruncated ?? false,
-    });
-  } catch (error) {
-    console.error('List objects error:', error);
-    res.status(500).json({ error: 'Failed to list objects' });
   }
+
+  // Add files (Contents)
+  if (response.Contents) {
+    for (const item of response.Contents) {
+      if (item.Key && item.Key !== prefix) {
+        objects.push({
+          key: item.Key,
+          name: extractFileName(item.Key),
+          size: item.Size,
+          lastModified: item.LastModified?.toISOString(),
+          isFolder: false,
+          etag: item.ETag,
+        });
+      }
+    }
+  }
+
+  // Note: Objects are returned in S3's native order (typically lexicographic by key).
+  // Sorting (folders first, then alphabetically) should be done client-side after
+  // aggregating all pages via continuationToken, since per-page sorting would
+  // produce inconsistent results when isTruncated is true.
+
+  res.json({
+    objects,
+    continuationToken: response.NextContinuationToken,
+    isTruncated: response.IsTruncated ?? false,
+  });
 });
 
 // DELETE /api/objects/:key
-router.delete('/*', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   // Get the key from the URL path (everything after /api/objects/)
-  const key = req.params[0];
+  const keyParam = req.params.key;
+  const key = Array.isArray(keyParam) ? keyParam.join('/') : keyParam;
 
   if (!key) {
     res.status(400).json({ error: 'Object key is required' });
@@ -103,46 +99,36 @@ router.delete('/*', async (req: AuthenticatedRequest, res: Response): Promise<vo
 
   const session = req.session!;
 
-  try {
-    const command = new DeleteObjectCommand({
-      Bucket: session.credentials.bucket,
-      Key: key,
-    });
+  const command = new DeleteObjectCommand({
+    Bucket: session.credentials.bucket,
+    Key: key,
+  });
 
-    await session.client.send(command);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Delete object error:', error);
-    res.status(500).json({ error: 'Failed to delete object' });
-  }
+  await session.client.send(command);
+  res.json({ success: true });
 });
 
 // POST /api/objects/folder
 router.post('/folder', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const { path } = req.body;
 
-  if (!path) {
-    res.status(400).json({ error: 'Folder path is required' });
+  if (typeof path !== 'string' || path.trim().length === 0) {
+    res.status(400).json({ error: 'Folder path must be a non-empty string' });
     return;
   }
 
   const session = req.session!;
   const folderPath = path.endsWith('/') ? path : `${path}/`;
 
-  try {
-    const command = new PutObjectCommand({
-      Bucket: session.credentials.bucket,
-      Key: folderPath,
-      Body: '',
-      ContentType: 'application/x-directory',
-    });
+  const command = new PutObjectCommand({
+    Bucket: session.credentials.bucket,
+    Key: folderPath,
+    Body: '',
+    ContentType: 'application/x-directory',
+  });
 
-    await session.client.send(command);
-    res.json({ success: true, key: folderPath });
-  } catch (error) {
-    console.error('Create folder error:', error);
-    res.status(500).json({ error: 'Failed to create folder' });
-  }
+  await session.client.send(command);
+  res.json({ success: true, key: folderPath });
 });
 
 export default router;

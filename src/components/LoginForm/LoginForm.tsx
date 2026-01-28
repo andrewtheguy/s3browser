@@ -15,17 +15,31 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import { useS3Client } from '../../hooks';
 import type { LoginCredentials } from '../../types';
 
+function isValidUrl(value: string): boolean {
+  if (!value) return true; // Empty is valid (optional field)
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function LoginForm() {
   const { connect, error } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
+  const [endpointTouched, setEndpointTouched] = useState(false);
   const [formData, setFormData] = useState({
     region: '',
     accessKeyId: '',
     secretAccessKey: '',
     bucket: '',
-    endpoint: '',
+    endpoint: 'https://s3.amazonaws.com',
   });
+
+  const endpointValid = isValidUrl(formData.endpoint);
+  const showEndpointError = endpointTouched && !endpointValid;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -57,7 +71,8 @@ export function LoginForm() {
     (autoDetectRegion || formData.region) &&
     formData.accessKeyId &&
     formData.secretAccessKey &&
-    formData.bucket;
+    formData.bucket &&
+    endpointValid;
 
   return (
     <Box
@@ -102,29 +117,21 @@ export function LoginForm() {
           )}
 
           <Box component="form" onSubmit={handleSubmit}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={autoDetectRegion}
-                  onChange={(e) => setAutoDetectRegion(e.target.checked)}
-                />
+            <TextField
+              fullWidth
+              label="Endpoint URL"
+              value={formData.endpoint}
+              onChange={handleChange('endpoint')}
+              onBlur={() => setEndpointTouched(true)}
+              margin="normal"
+              autoComplete="off"
+              error={showEndpointError}
+              helperText={
+                showEndpointError
+                  ? 'Please enter a valid URL (e.g., https://s3.amazonaws.com)'
+                  : 'Default is AWS S3. Change for S3-compatible services (MinIO, etc.)'
               }
-              label="Auto-detect region from bucket"
-              sx={{ mt: 1 }}
             />
-
-            {!autoDetectRegion && (
-              <TextField
-                fullWidth
-                label="Region"
-                value={formData.region}
-                onChange={handleChange('region')}
-                margin="normal"
-                required
-                autoComplete="off"
-                placeholder="us-east-1"
-              />
-            )}
 
             <TextField
               fullWidth
@@ -157,16 +164,29 @@ export function LoginForm() {
               autoComplete="off"
             />
 
-            <TextField
-              fullWidth
-              label="Custom Endpoint (optional)"
-              value={formData.endpoint}
-              onChange={handleChange('endpoint')}
-              margin="normal"
-              autoComplete="off"
-              placeholder="http://localhost:9000"
-              helperText="For S3-compatible services (MinIO, DigitalOcean Spaces, etc.)"
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoDetectRegion}
+                  onChange={(e) => setAutoDetectRegion(e.target.checked)}
+                />
+              }
+              label="Auto-detect region from bucket"
+              sx={{ mt: 1 }}
             />
+
+            {!autoDetectRegion && (
+              <TextField
+                fullWidth
+                label="Region"
+                value={formData.region}
+                onChange={handleChange('region')}
+                margin="normal"
+                required
+                autoComplete="off"
+                placeholder="us-east-1"
+              />
+            )}
 
             <Button
               type="submit"

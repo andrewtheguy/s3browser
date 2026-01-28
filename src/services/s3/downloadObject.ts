@@ -8,7 +8,7 @@ export interface DownloadObjectParams {
   expiresIn?: number;
 }
 
-export async function getDownloadUrl({
+export function getDownloadUrl({
   client,
   bucket,
   key,
@@ -40,6 +40,9 @@ export async function downloadObject(params: DownloadObjectParams): Promise<void
   link.download = filename;
   link.target = '_blank';
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+  }
 }

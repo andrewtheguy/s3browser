@@ -3,7 +3,8 @@
     "allow": [
       "WebFetch(domain:ui.docs.amplify.aws)",
       "Bash(grep:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "mcp__github__get_file_contents"
     ]
   }
 }

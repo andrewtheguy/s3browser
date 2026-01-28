@@ -90,23 +90,29 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
 
   // Check session status on mount
   useEffect(() => {
-    let mounted = true;
+    const abortController = new AbortController();
 
-    getAuthStatus()
-      .then((status) => {
-        if (mounted && status.authenticated && status.region && status.bucket) {
+    (async () => {
+      try {
+        const status = await getAuthStatus(abortController.signal);
+        if (!abortController.signal.aborted && status.authenticated && status.region && status.bucket) {
           dispatch({
             type: 'CONNECT_SUCCESS',
             session: { region: status.region, bucket: status.bucket },
           });
         }
-      })
-      .catch(() => {
-        // Session check failed, stay disconnected
-      });
+      } catch (error) {
+        // Ignore abort errors from cleanup
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
+        // Log other errors - user stays disconnected (initial state)
+        console.error('Session status check failed:', error);
+      }
+    })();
 
     return () => {
-      mounted = false;
+      abortController.abort();
     };
   }, []);
 

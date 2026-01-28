@@ -34,8 +34,8 @@ export async function logout(): Promise<void> {
   await apiPost('/auth/logout');
 }
 
-export async function getAuthStatus(): Promise<AuthStatus> {
-  const response = await apiGet<AuthStatus>('/auth/status');
+export async function getAuthStatus(signal?: AbortSignal): Promise<AuthStatus> {
+  const response = await apiGet<AuthStatus>('/auth/status', signal);
   if (!response) {
     throw new Error('Failed to get auth status: empty response');
   }

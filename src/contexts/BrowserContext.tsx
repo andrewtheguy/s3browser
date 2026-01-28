@@ -132,8 +132,10 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
         abortController.current.abort();
         abortController.current = null;
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally increment current value at cleanup time
+      // Reset refs for StrictMode compatibility (refs persist across unmount/remount)
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally modify refs at cleanup time
       requestIdRef.current++;
+      initialFetchDoneRef.current = false;
     };
   }, []);
 
