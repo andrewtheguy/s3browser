@@ -26,8 +26,21 @@ export function DeleteDialog({
 }: DeleteDialogProps) {
   if (!item) return null;
 
+  const handleClose = (_event: object, reason: 'backdropClick' | 'escapeKeyDown') => {
+    if (isDeleting && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
+      return;
+    }
+    onCancel();
+  };
+
   return (
-    <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      disableEscapeKeyDown={isDeleting}
+      maxWidth="xs"
+      fullWidth
+    >
       <DialogTitle>
         Delete {item.isFolder ? 'Folder' : 'File'}
       </DialogTitle>
