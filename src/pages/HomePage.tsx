@@ -9,7 +9,7 @@ export function HomePage() {
     return <LoginForm />;
   }
 
-  // Show bucket selector when connected (even if a bucket is already selected)
-  // This allows users to change buckets by navigating to "/"
+  // Show bucket selector when connected
+  // LoginForm handles redirect to browse page if bucket was provided at login
   return <BucketSelector />;
 }

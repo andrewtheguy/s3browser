@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Box,
   Card,
@@ -21,6 +22,7 @@ import type { SelectChangeEvent } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useS3Client, useConnectionHistory } from '../../hooks';
+import { buildBrowseUrl } from '../../utils/urlEncoding';
 import type { LoginCredentials } from '../../types';
 
 function isValidUrl(value: string): boolean {
@@ -39,6 +41,7 @@ function isValidConnectionName(value: string): boolean {
 }
 
 export function LoginForm() {
+  const navigate = useNavigate();
   const { connect, error } = useS3Client();
   const { connections, saveConnection, deleteConnection } = useConnectionHistory();
   const [isLoading, setIsLoading] = useState(false);
@@ -89,6 +92,11 @@ export function LoginForm() {
       if (success) {
         setEndpointTouched(false);
         setNameTouched(false);
+
+        // If bucket was provided, redirect to browse page
+        if (formData.bucket) {
+          void navigate(buildBrowseUrl(formData.bucket, ''), { replace: true });
+        }
       }
     } finally {
       setIsLoading(false);
