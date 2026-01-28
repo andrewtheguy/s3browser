@@ -8,7 +8,7 @@ export interface DownloadObjectParams {
   expiresIn?: number;
 }
 
-export async function getDownloadUrl({
+export function getDownloadUrl({
   client,
   bucket,
   key,

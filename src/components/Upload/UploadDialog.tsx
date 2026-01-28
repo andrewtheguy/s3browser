@@ -58,7 +58,7 @@ export function UploadDialog({
   );
 
   const handleResumeFromPending = useCallback(
-    async (pending: typeof pendingResumable[0]) => {
+    (pending: typeof pendingResumable[0]) => {
       // Create a File-like object from the pending upload info
       // Note: We can't fully reconstruct the File, user needs to re-select
       // This is a limitation - we'll prompt them to re-select the file
