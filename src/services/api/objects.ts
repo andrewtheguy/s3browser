@@ -20,10 +20,12 @@ export interface S3ListResult {
   isTruncated: boolean;
 }
 
-export async function listObjects(prefix: string = ''): Promise<S3ListResult> {
-  const response = await apiGet<ListObjectsResponse>(
-    `/objects?prefix=${encodeURIComponent(prefix)}`
-  );
+export async function listObjects(prefix: string = '', continuationToken?: string): Promise<S3ListResult> {
+  let url = `/objects?prefix=${encodeURIComponent(prefix)}`;
+  if (continuationToken) {
+    url += `&continuationToken=${encodeURIComponent(continuationToken)}`;
+  }
+  const response = await apiGet<ListObjectsResponse>(url);
 
   // Convert lastModified strings to Date objects
   const objects: S3Object[] = response.objects.map((obj) => ({

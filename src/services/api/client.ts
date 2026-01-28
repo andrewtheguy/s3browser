@@ -20,8 +20,29 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `Request failed with status ${response.status}`);
+    let errorMessage = `Request failed with status ${response.status}`;
+    try {
+      const text = await response.text();
+      if (text) {
+        const parsed = JSON.parse(text);
+        errorMessage = parsed.error || errorMessage;
+      }
+    } catch {
+      // Failed to parse error response, use default message
+    }
+    throw new Error(errorMessage);
+  }
+
+  // Handle empty responses (204 No Content or empty body)
+  const contentLength = response.headers.get('content-length');
+  const contentType = response.headers.get('content-type');
+
+  if (
+    response.status === 204 ||
+    contentLength === '0' ||
+    !contentType?.includes('application/json')
+  ) {
+    return null as T;
   }
 
   return response.json();
