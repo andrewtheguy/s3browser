@@ -55,8 +55,14 @@ router.use(authMiddleware);
 
 // GET /api/download/url?key=
 router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const session = req.session!;
-  const sessionId = req.sessionId!;
+  // Defensive check: authMiddleware should populate these, but verify to avoid runtime errors
+  if (!req.session || !req.sessionId) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const session = req.session;
+  const sessionId = req.sessionId;
 
   const keyValidation = validateKey(req.query.key, sessionId);
   if (!keyValidation.valid) {
