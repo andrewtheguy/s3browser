@@ -87,15 +87,6 @@ export function cleanupUploadTracker(): void {
   uploadTracker.clear();
 }
 
-// Clear interval on process shutdown
-process.on('SIGINT', () => {
-  clearInterval(uploadTrackerCleanupInterval);
-});
-
-process.on('SIGTERM', () => {
-  clearInterval(uploadTrackerCleanupInterval);
-});
-
 // All routes require authentication
 router.use(authMiddleware);
 

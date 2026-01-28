@@ -3,7 +3,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.js';
 import objectsRoutes from './routes/objects.js';
-import uploadRoutes from './routes/upload.js';
+import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
 import downloadRoutes from './routes/download.js';
 
 const app = express();
@@ -39,3 +39,12 @@ app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+// Graceful shutdown
+function shutdown() {
+  cleanupUploadTracker();
+  process.exit(0);
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
