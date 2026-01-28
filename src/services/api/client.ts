@@ -7,7 +7,7 @@ export interface ApiError {
 export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
-): Promise<T> {
+): Promise<T | null> {
   const url = `${API_BASE}${endpoint}`;
 
   const response = await fetch(url, {
@@ -37,28 +37,29 @@ export async function apiRequest<T>(
   const contentLength = response.headers.get('content-length');
   const contentType = response.headers.get('content-type');
 
-  if (
-    response.status === 204 ||
-    contentLength === '0' ||
-    !contentType?.includes('application/json')
-  ) {
-    return null as T;
+  if (response.status === 204 || contentLength === '0') {
+    return null;
+  }
+
+  // Reject unexpected non-JSON responses
+  if (!contentType?.includes('application/json')) {
+    throw new Error(`Unexpected content type: ${contentType || 'none'}`);
   }
 
   return response.json();
 }
 
-export async function apiGet<T>(endpoint: string): Promise<T> {
+export async function apiGet<T>(endpoint: string): Promise<T | null> {
   return apiRequest<T>(endpoint, { method: 'GET' });
 }
 
-export async function apiPost<T>(endpoint: string, body?: unknown): Promise<T> {
+export async function apiPost<T>(endpoint: string, body?: unknown): Promise<T | null> {
   return apiRequest<T>(endpoint, {
     method: 'POST',
     body: body ? JSON.stringify(body) : undefined,
   });
 }
 
-export async function apiDelete<T>(endpoint: string): Promise<T> {
+export async function apiDelete<T>(endpoint: string): Promise<T | null> {
   return apiRequest<T>(endpoint, { method: 'DELETE' });
 }

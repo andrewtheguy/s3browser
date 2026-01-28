@@ -27,6 +27,10 @@ export async function listObjects(prefix: string = '', continuationToken?: strin
   }
   const response = await apiGet<ListObjectsResponse>(url);
 
+  if (!response) {
+    throw new Error('Failed to list objects: empty response');
+  }
+
   // Convert lastModified strings to Date objects
   const objects: S3Object[] = response.objects.map((obj) => ({
     ...obj,

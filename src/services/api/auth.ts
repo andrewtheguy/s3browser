@@ -23,7 +23,11 @@ export interface AuthStatus {
 }
 
 export async function login(credentials: LoginCredentials): Promise<LoginResponse> {
-  return apiPost<LoginResponse>('/auth/login', credentials);
+  const response = await apiPost<LoginResponse>('/auth/login', credentials);
+  if (!response) {
+    throw new Error('Login failed: empty response');
+  }
+  return response;
 }
 
 export async function logout(): Promise<void> {
@@ -31,5 +35,9 @@ export async function logout(): Promise<void> {
 }
 
 export async function getAuthStatus(): Promise<AuthStatus> {
-  return apiGet<AuthStatus>('/auth/status');
+  const response = await apiGet<AuthStatus>('/auth/status');
+  if (!response) {
+    throw new Error('Failed to get auth status: empty response');
+  }
+  return response;
 }

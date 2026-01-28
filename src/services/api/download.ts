@@ -8,6 +8,9 @@ export async function getDownloadUrl(key: string): Promise<string> {
   const response = await apiGet<DownloadUrlResponse>(
     `/download/url?key=${encodeURIComponent(key)}`
   );
+  if (!response) {
+    throw new Error('Failed to get download URL: empty response');
+  }
   return response.url;
 }
 
