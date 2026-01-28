@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useS3ClientContext } from '../contexts';
 import { uploadFile, createFolder } from '../services/api';
 import type { UploadProgress } from '../types';
@@ -7,6 +7,19 @@ export function useUpload() {
   const { isConnected } = useS3ClientContext();
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const isMountedRef = useRef(true);
+
+  // Cleanup on unmount: abort all in-progress uploads and prevent state updates
+  useEffect(() => {
+    const abortControllers = abortControllersRef.current;
+    return () => {
+      isMountedRef.current = false;
+      for (const controller of abortControllers.values()) {
+        controller.abort();
+      }
+      abortControllers.clear();
+    };
+  }, []);
 
   const upload = useCallback(
     async (files: File[], prefix: string = ''): Promise<void> => {
@@ -24,17 +37,23 @@ export function useUpload() {
         status: 'pending' as const,
       }));
 
-      setUploads((prev) => [...prev, ...newUploads]);
+      if (isMountedRef.current) {
+        setUploads((prev) => [...prev, ...newUploads]);
+      }
 
       for (const uploadItem of newUploads) {
+        if (!isMountedRef.current) break;
+
         const abortController = new AbortController();
         abortControllersRef.current.set(uploadItem.id, abortController);
 
-        setUploads((prev) =>
-          prev.map((u) =>
-            u.id === uploadItem.id ? { ...u, status: 'uploading' as const } : u
-          )
-        );
+        if (isMountedRef.current) {
+          setUploads((prev) =>
+            prev.map((u) =>
+              u.id === uploadItem.id ? { ...u, status: 'uploading' as const } : u
+            )
+          );
+        }
 
         try {
           await uploadFile({
@@ -42,41 +61,47 @@ export function useUpload() {
             key: uploadItem.key,
             abortSignal: abortController.signal,
             onProgress: (loaded, total) => {
-              setUploads((prev) =>
-                prev.map((u) =>
-                  u.id === uploadItem.id
-                    ? {
-                        ...u,
-                        loaded,
-                        total,
-                        percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
-                      }
-                    : u
-                )
-              );
+              if (isMountedRef.current) {
+                setUploads((prev) =>
+                  prev.map((u) =>
+                    u.id === uploadItem.id
+                      ? {
+                          ...u,
+                          loaded,
+                          total,
+                          percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
+                        }
+                      : u
+                  )
+                );
+              }
             },
           });
 
-          setUploads((prev) =>
-            prev.map((u) =>
-              u.id === uploadItem.id
-                ? { ...u, status: 'completed' as const, percentage: 100 }
-                : u
-            )
-          );
+          if (isMountedRef.current) {
+            setUploads((prev) =>
+              prev.map((u) =>
+                u.id === uploadItem.id
+                  ? { ...u, status: 'completed' as const, percentage: 100 }
+                  : u
+              )
+            );
+          }
         } catch (err) {
           // Ignore abort errors
           if (err instanceof DOMException && err.name === 'AbortError') {
             continue;
           }
-          const message = err instanceof Error ? err.message : 'Upload failed';
-          setUploads((prev) =>
-            prev.map((u) =>
-              u.id === uploadItem.id
-                ? { ...u, status: 'error' as const, error: message }
-                : u
-            )
-          );
+          if (isMountedRef.current) {
+            const message = err instanceof Error ? err.message : 'Upload failed';
+            setUploads((prev) =>
+              prev.map((u) =>
+                u.id === uploadItem.id
+                  ? { ...u, status: 'error' as const, error: message }
+                  : u
+              )
+            );
+          }
         } finally {
           abortControllersRef.current.delete(uploadItem.id);
         }
