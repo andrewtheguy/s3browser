@@ -55,7 +55,7 @@ export function useUpload() {
     const generationRef = mountGenerationRef;
     const currentGeneration = ++generationRef.current;
 
-    (async () => {
+    void (async () => {
       try {
         const pending = await listPendingUploads();
         if (currentGeneration === generationRef.current) {

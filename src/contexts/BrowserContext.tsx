@@ -97,7 +97,7 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
   const navigateTo = useCallback(
     (path: string) => {
       dispatch({ type: 'SET_PATH', path });
-      fetchObjects(path);
+      void fetchObjects(path);
       initialFetchDoneRef.current = true;
     },
     [fetchObjects]
@@ -142,7 +142,7 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
   // Fetch objects when connected (initial fetch only)
   useEffect(() => {
     if (isConnected && !initialFetchDoneRef.current) {
-      fetchObjects('');
+      void fetchObjects('');
       initialFetchDoneRef.current = true;
     }
   }, [isConnected, fetchObjects]);

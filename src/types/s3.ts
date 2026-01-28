@@ -2,8 +2,13 @@ export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
-  bucket: string;
+  bucket?: string;  // Optional - can be selected after login
   endpoint?: string;
+}
+
+export interface BucketInfo {
+  name: string;
+  creationDate?: string;
 }
 
 export interface S3Object {
@@ -44,15 +49,17 @@ export interface LoginCredentials {
   accessKeyId: string;
   secretAccessKey: string;
   region?: string;
-  bucket: string;
+  bucket?: string;  // Optional - can be selected after login
   endpoint?: string;
 }
 
 export interface S3ClientContextValue {
   credentials: S3Credentials | null;
   isConnected: boolean;
+  requiresBucketSelection: boolean;
   connect: (credentials: LoginCredentials) => Promise<boolean>;
-  disconnect: () => void;
+  disconnect: () => void | Promise<void>;
+  selectBucket: (bucket: string) => Promise<boolean>;
   error: string | null;
 }
 
@@ -71,7 +78,7 @@ export interface SavedConnection {
   name: string;              // Used as unique key
   endpoint: string;
   accessKeyId: string;
-  bucket: string;
+  bucket?: string;           // Optional - can be selected after login
   region?: string;
   autoDetectRegion: boolean;
   lastUsedAt: number;

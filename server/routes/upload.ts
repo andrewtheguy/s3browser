@@ -1,7 +1,5 @@
 import { Router, Response, default as express } from 'express';
-import multer from 'multer';
 import path from 'path';
-import { Upload } from '@aws-sdk/lib-storage';
 import {
   CreateMultipartUploadCommand,
   UploadPartCommand,
@@ -9,7 +7,7 @@ import {
   AbortMultipartUploadCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
+import { authMiddleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 import { UPLOAD_CONFIG } from '../config/upload.js';
 
 // Whitelist: alphanumeric, hyphen, underscore, period, forward slash
@@ -47,16 +45,6 @@ function validateAndSanitizeKey(key: string): { valid: false; error: string } | 
 
 const router = Router();
 
-// Configure multer for memory storage (legacy endpoint)
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB max file size for legacy upload
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: MAX_FILE_SIZE,
-  },
-});
-
 // In-memory tracking for multipart uploads
 // Key: `${sessionId}:${uploadId}`
 interface UploadTrackingData {
@@ -66,6 +54,29 @@ interface UploadTrackingData {
   contentType: string;
   createdAt: number;
   fileSize: number;
+}
+
+// Request body interfaces
+interface InitiateUploadBody {
+  key?: string;
+  contentType?: string;
+  fileSize?: number;
+}
+
+interface CompletePart {
+  partNumber: number;
+  etag: string;
+}
+
+interface CompleteUploadBody {
+  uploadId?: string;
+  key?: string;
+  parts?: CompletePart[];
+}
+
+interface AbortUploadBody {
+  uploadId?: string;
+  key?: string;
 }
 
 const uploadTracker = new Map<string, UploadTrackingData>();
@@ -87,58 +98,9 @@ export function cleanupUploadTracker(): void {
   uploadTracker.clear();
 }
 
-// All routes require authentication
+// All routes require authentication and a bucket to be selected
 router.use(authMiddleware);
-
-// POST /api/upload (legacy proxy-based upload)
-router.post(
-  '/',
-  upload.single('file'),
-  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const file = req.file;
-    const key = req.body.key;
-
-    if (!file) {
-      res.status(400).json({ error: 'No file provided' });
-      return;
-    }
-
-    const session = req.session!;
-
-    const keyValidation = validateAndSanitizeKey(key);
-    if (!keyValidation.valid) {
-      res.status(400).json({ error: keyValidation.error });
-      return;
-    }
-
-    const uploadManager = new Upload({
-      client: session.client,
-      params: {
-        Bucket: session.credentials.bucket,
-        Key: keyValidation.sanitizedKey,
-        Body: file.buffer,
-        ContentType: file.mimetype || 'application/octet-stream',
-      },
-      queueSize: 4,
-      partSize: 5 * 1024 * 1024, // 5MB parts
-      leavePartsOnError: false,
-    });
-
-    try {
-      await uploadManager.done();
-      res.json({ success: true, key: keyValidation.sanitizedKey });
-    } catch (error) {
-      console.error('Upload failed:', error);
-      try {
-        await uploadManager.abort();
-      } catch (abortError) {
-        console.error('Failed to abort upload:', abortError);
-      }
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({ success: false, error: 'Upload failed', details: message });
-    }
-  }
-);
+router.use(requireBucket);
 
 // POST /api/upload/single - Proxy single file upload through server to S3
 router.post(
@@ -247,7 +209,8 @@ router.post(
 
 // POST /api/upload/initiate - Start a multipart upload
 router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { key, contentType, fileSize } = req.body;
+  const body = req.body as InitiateUploadBody;
+  const { key, contentType, fileSize } = body;
   const session = req.session!;
   const sessionId = req.sessionId!;
 
@@ -319,7 +282,8 @@ router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promi
 
 // POST /api/upload/complete - Complete a multipart upload
 router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { uploadId, key, parts } = req.body;
+  const body = req.body as CompleteUploadBody;
+  const { uploadId, key, parts } = body;
   const session = req.session!;
   const sessionId = req.sessionId!;
 
@@ -338,12 +302,18 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
     return;
   }
 
-  // Validate parts format
-  for (const part of parts) {
-    if (typeof part.partNumber !== 'number' || typeof part.etag !== 'string') {
-      res.status(400).json({ error: 'Each part must have partNumber and etag' });
-      return;
-    }
+  // Validate parts format - runtime check since body could have incorrect data
+  const isValidParts = parts.every(
+    (part): part is CompletePart =>
+      typeof part === 'object' &&
+      part !== null &&
+      typeof part.partNumber === 'number' &&
+      typeof part.etag === 'string'
+  );
+
+  if (!isValidParts) {
+    res.status(400).json({ error: 'Each part must have partNumber and etag' });
+    return;
   }
 
   // Validate against tracked upload
@@ -402,7 +372,8 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
 
 // POST /api/upload/abort - Abort a multipart upload
 router.post('/abort', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { uploadId, key } = req.body;
+  const body = req.body as AbortUploadBody;
+  const { uploadId, key } = body;
   const session = req.session!;
   const sessionId = req.sessionId!;
 

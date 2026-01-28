@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import path from 'path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
+import { authMiddleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 
 // Whitelist: alphanumeric, hyphen, underscore, period, forward slash
 const VALID_KEY_PATTERN = /^[a-zA-Z0-9\-_./]+$/;
@@ -44,8 +44,9 @@ function validateKey(key: unknown): { valid: false; error: string } | { valid: t
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and a bucket to be selected
 router.use(authMiddleware);
+router.use(requireBucket);
 
 // GET /api/download/url?key=
 router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<void> => {

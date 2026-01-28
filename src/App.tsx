@@ -1,6 +1,7 @@
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { S3ClientProvider, BrowserProvider, useS3ClientContext } from './contexts';
 import { LoginForm } from './components/LoginForm';
+import { BucketSelector } from './components/BucketSelector';
 import { S3Browser } from './components/S3Browser';
 
 const theme = createTheme({
@@ -25,10 +26,14 @@ const theme = createTheme({
 });
 
 function AppContent() {
-  const { isConnected } = useS3ClientContext();
+  const { isConnected, requiresBucketSelection } = useS3ClientContext();
 
   if (!isConnected) {
     return <LoginForm />;
+  }
+
+  if (requiresBucketSelection) {
+    return <BucketSelector />;
   }
 
   return (

@@ -28,11 +28,17 @@ export interface UploadPartProgress {
   total: number;
 }
 
+export interface PersistenceError {
+  partNumber: number;
+  error: string;
+}
+
 export interface MultipartUploadOptions {
   file: File;
   key: string;
   onProgress?: (loaded: number, total: number, partProgress?: UploadPartProgress) => void;
-  onPartComplete?: (partNumber: number, etag: string, completedParts: number, totalParts: number) => void;
+  onPartComplete?: (partNumber: number, etag: string, completedParts: number, totalParts: number) => void | Promise<void>;
+  onPersistenceError?: (partNumber: number, err: Error) => void;
   onInitiated?: (uploadId: string, sanitizedKey: string) => void;
   abortSignal?: AbortSignal;
   existingUploadId?: string;
@@ -279,7 +285,7 @@ async function uploadPartWithRetry(
       // Wait before retry (exponential backoff with jitter) with abort awareness
       if (attempt < maxRetries - 1) {
         const delayMs = Math.pow(2, attempt) * 1000;
-        // Add jitter (±50%) to prevent thundering herd
+        // Add jitter (50%-100% of delayMs) to prevent thundering herd
         const jitterFactor = 0.5 + Math.random() * 0.5;
         const jitteredDelayMs = Math.floor(delayMs * jitterFactor);
 
@@ -322,6 +328,7 @@ export async function uploadFileMultipart({
   key,
   onProgress,
   onPartComplete,
+  onPersistenceError,
   onInitiated,
   abortSignal,
   existingUploadId,
@@ -330,6 +337,7 @@ export async function uploadFileMultipart({
   uploadId: string;
   key: string;
   completedParts: CompletedPart[];
+  persistenceErrors?: PersistenceError[];
 }> {
   const contentType = file.type || 'application/octet-stream';
   const fileSize = file.size;
@@ -357,6 +365,9 @@ export async function uploadFileMultipart({
   // Track completed parts
   const completedParts: CompletedPart[] = [...existingParts];
   const completedPartNumbers = new Set(existingParts.map((p) => p.partNumber));
+
+  // Track persistence errors (from onPartComplete callback failures)
+  const persistenceErrors: PersistenceError[] = [];
 
   // Track progress per part
   const partProgress = new Map<number, number>();
@@ -436,7 +447,17 @@ export async function uploadFileMultipart({
         completedPartNumbers.add(partNumber);
 
         if (onPartComplete) {
-          onPartComplete(partNumber, etag, completedParts.length, totalParts);
+          try {
+            await onPartComplete(partNumber, etag, completedParts.length, totalParts);
+          } catch (err) {
+            // Log but don't fail the upload - persistence is for resume capability
+            console.error('onPartComplete callback failed:', err);
+            const error = err instanceof Error ? err : new Error(String(err));
+            persistenceErrors.push({ partNumber, error: error.message });
+            if (onPersistenceError) {
+              onPersistenceError(partNumber, error);
+            }
+          }
         }
 
         if (onProgress) {
@@ -481,5 +502,6 @@ export async function uploadFileMultipart({
     uploadId,
     key: sanitizedKey,
     completedParts,
+    persistenceErrors: persistenceErrors.length > 0 ? persistenceErrors : undefined,
   };
 }

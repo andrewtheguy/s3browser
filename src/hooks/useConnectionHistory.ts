@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import type { SavedConnection } from '../types';
 
 const STORAGE_KEY = 's3browser_connections';
@@ -32,8 +32,8 @@ function isValidSavedConnection(c: unknown): c is SavedConnection {
     return false;
   }
 
-  // bucket: non-empty string
-  if (typeof obj.bucket !== 'string' || obj.bucket.length === 0) {
+  // bucket: optional, but if present must be string
+  if (obj.bucket !== undefined && typeof obj.bucket !== 'string') {
     return false;
   }
 
@@ -59,7 +59,7 @@ function loadConnections(): SavedConnection[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
-    const parsed = JSON.parse(data);
+    const parsed: unknown = JSON.parse(data);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(isValidSavedConnection);
   } catch {
@@ -94,11 +94,7 @@ function persistConnections(connections: SavedConnection[]): void {
 }
 
 export function useConnectionHistory() {
-  const [connections, setConnections] = useState<SavedConnection[]>([]);
-
-  useEffect(() => {
-    setConnections(loadConnections());
-  }, []);
+  const [connections, setConnections] = useState<SavedConnection[]>(loadConnections);
 
   const saveConnection = useCallback((connection: Omit<SavedConnection, 'lastUsedAt'>) => {
     if (!connection.name || connection.name.includes(' ')) {

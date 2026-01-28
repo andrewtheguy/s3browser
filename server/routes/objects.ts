@@ -4,12 +4,17 @@ import {
   DeleteObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
+import { authMiddleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and a bucket to be selected
 router.use(authMiddleware);
+router.use(requireBucket);
+
+interface FolderRequestBody {
+  path?: string;
+}
 
 interface S3Object {
   key: string;
@@ -110,7 +115,8 @@ router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise
 
 // POST /api/objects/folder
 router.post('/folder', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { path } = req.body;
+  const body = req.body as FolderRequestBody;
+  const { path } = body;
 
   if (typeof path !== 'string' || path.trim().length === 0) {
     res.status(400).json({ error: 'Folder path must be a non-empty string' });
