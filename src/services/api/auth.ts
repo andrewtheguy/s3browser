@@ -5,18 +5,21 @@ export interface LoginCredentials {
   secretAccessKey: string;
   region?: string;
   bucket: string;
+  endpoint?: string;
 }
 
 export interface LoginResponse {
   success: boolean;
   region: string;
   bucket: string;
+  endpoint?: string;
 }
 
 export interface AuthStatus {
   authenticated: boolean;
   region?: string;
   bucket?: string;
+  endpoint?: string;
 }
 
 export async function login(credentials: LoginCredentials): Promise<LoginResponse> {

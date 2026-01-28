@@ -7,6 +7,7 @@ export interface S3Credentials {
   secretAccessKey: string;
   region: string;
   bucket: string;
+  endpoint?: string;
 }
 
 export interface LoginInput {
@@ -14,6 +15,7 @@ export interface LoginInput {
   secretAccessKey: string;
   region?: string;
   bucket: string;
+  endpoint?: string;
 }
 
 interface SessionData {
@@ -50,6 +52,10 @@ export function createSession(credentials: S3Credentials): string {
       accessKeyId: credentials.accessKeyId,
       secretAccessKey: credentials.secretAccessKey,
     },
+    ...(credentials.endpoint && {
+      endpoint: credentials.endpoint,
+      forcePathStyle: true, // Required for most S3-compatible services
+    }),
   });
 
   sessions.set(sessionId, {
@@ -81,8 +87,14 @@ export function deleteSession(sessionId: string): boolean {
 export async function getBucketRegion(
   accessKeyId: string,
   secretAccessKey: string,
-  bucket: string
+  bucket: string,
+  endpoint?: string
 ): Promise<string> {
+  // For custom endpoints, region detection doesn't apply - use us-east-1 as default
+  if (endpoint) {
+    return 'us-east-1';
+  }
+
   // Use us-east-1 as the initial region to query bucket location
   // GetBucketLocation works from any region but us-east-1 is the default
   const client = new S3Client({
@@ -111,6 +123,10 @@ export async function validateCredentials(credentials: S3Credentials): Promise<b
       accessKeyId: credentials.accessKeyId,
       secretAccessKey: credentials.secretAccessKey,
     },
+    ...(credentials.endpoint && {
+      endpoint: credentials.endpoint,
+      forcePathStyle: true,
+    }),
   });
 
   try {

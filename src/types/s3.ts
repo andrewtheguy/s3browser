@@ -3,6 +3,7 @@ export interface S3Credentials {
   secretAccessKey: string;
   region: string;
   bucket: string;
+  endpoint?: string;
 }
 
 export interface S3Object {
@@ -35,6 +36,7 @@ export interface LoginCredentials {
   secretAccessKey: string;
   region?: string;
   bucket: string;
+  endpoint?: string;
 }
 
 export interface S3ClientContextValue {

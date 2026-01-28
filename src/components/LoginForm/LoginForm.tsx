@@ -9,8 +9,12 @@ import {
   Alert,
   MenuItem,
   CircularProgress,
+  Collapse,
+  IconButton,
 } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useS3Client } from '../../hooks';
 import { AWS_REGIONS, type LoginCredentials } from '../../types';
 
@@ -19,11 +23,13 @@ const AUTO_DETECT_VALUE = '__auto__';
 export function LoginForm() {
   const { connect, error } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [formData, setFormData] = useState({
     region: AUTO_DETECT_VALUE,
     accessKeyId: '',
     secretAccessKey: '',
     bucket: '',
+    endpoint: '',
   });
 
   const handleSubmit = async (e: FormEvent) => {
@@ -36,6 +42,7 @@ export function LoginForm() {
         secretAccessKey: formData.secretAccessKey,
         bucket: formData.bucket,
         region: formData.region === AUTO_DETECT_VALUE ? undefined : formData.region,
+        endpoint: formData.endpoint || undefined,
       };
       await connect(credentials);
     } catch {
@@ -90,7 +97,7 @@ export function LoginForm() {
             textAlign="center"
             mb={3}
           >
-            Enter your AWS credentials to connect to your S3 bucket
+            Connect to AWS S3 or S3-compatible storage
           </Typography>
 
           {error && (
@@ -149,6 +156,36 @@ export function LoginForm() {
               required
               autoComplete="off"
             />
+
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                mt: 1,
+                cursor: 'pointer',
+              }}
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              <Typography variant="body2" color="text.secondary">
+                Advanced options
+              </Typography>
+              <IconButton size="small">
+                {showAdvanced ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </IconButton>
+            </Box>
+
+            <Collapse in={showAdvanced}>
+              <TextField
+                fullWidth
+                label="Custom Endpoint (optional)"
+                value={formData.endpoint}
+                onChange={handleChange('endpoint')}
+                margin="normal"
+                autoComplete="off"
+                placeholder="https://s3.example.com"
+                helperText="For S3-compatible services (MinIO, DigitalOcean Spaces, etc.)"
+              />
+            </Collapse>
 
             <Button
               type="submit"

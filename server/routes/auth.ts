@@ -12,7 +12,7 @@ const router = Router();
 
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
-  const { accessKeyId, secretAccessKey, region, bucket } = req.body;
+  const { accessKeyId, secretAccessKey, region, bucket, endpoint } = req.body;
 
   if (!accessKeyId || !secretAccessKey || !bucket) {
     res.status(400).json({ error: 'Missing required credentials' });
@@ -24,7 +24,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     let detectedRegion = region;
     if (!detectedRegion) {
       try {
-        detectedRegion = await getBucketRegion(accessKeyId, secretAccessKey, bucket);
+        detectedRegion = await getBucketRegion(accessKeyId, secretAccessKey, bucket, endpoint);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to detect region';
         res.status(400).json({ error: message });
@@ -37,6 +37,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       secretAccessKey,
       region: detectedRegion,
       bucket,
+      endpoint: endpoint || undefined,
     };
 
     const isValid = await validateCredentials(credentials);
@@ -59,6 +60,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       success: true,
       region: detectedRegion,
       bucket,
+      endpoint: endpoint || undefined,
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -98,6 +100,7 @@ router.get('/status', (req: Request, res: Response): void => {
     authenticated: true,
     region: session.credentials.region,
     bucket: session.credentials.bucket,
+    endpoint: session.credentials.endpoint,
   });
 });
 
