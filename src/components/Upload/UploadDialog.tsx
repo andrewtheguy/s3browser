@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -47,12 +47,25 @@ export function UploadDialog({
     onClose();
   }, [isUploading, clearAll, onClose]);
 
+  // Track whether onUploadComplete has been called for current batch
+  const completedCallbackFiredRef = useRef(false);
+  const previousUploadCountRef = useRef(0);
+
   // Refresh file list when all uploads complete
   useEffect(() => {
-    const hasCompleted = uploads.some((u) => u.status === 'completed');
     const hasUploading = uploads.some((u) => u.status === 'uploading');
+    const hasPending = uploads.some((u) => u.status === 'pending');
+    const completedCount = uploads.filter((u) => u.status === 'completed').length;
 
-    if (hasCompleted && !hasUploading) {
+    // Reset flag when new uploads are added
+    if (uploads.length > previousUploadCountRef.current || hasPending || hasUploading) {
+      completedCallbackFiredRef.current = false;
+    }
+    previousUploadCountRef.current = uploads.length;
+
+    // Fire callback only once when all uploads finish
+    if (completedCount > 0 && !hasUploading && !hasPending && !completedCallbackFiredRef.current) {
+      completedCallbackFiredRef.current = true;
       onUploadComplete();
     }
   }, [uploads, onUploadComplete]);

@@ -44,7 +44,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
         }}
       >
         <Chip
-          label={`Bucket: ${credentials?.bucket}`}
+          label={`Bucket: ${credentials?.bucket ?? '—'}`}
           color="primary"
           variant="outlined"
           sx={{ fontWeight: 500 }}
