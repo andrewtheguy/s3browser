@@ -205,6 +205,9 @@ export async function validateCredentialsOnly(
       console.error('Credential validation error (ListBuckets):', error);
 
       if (error instanceof Error) {
+        if (error.name === 'ExpiredToken' || error.name === 'ExpiredTokenException' || error.message.includes('ExpiredToken')) {
+          return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
+        }
         if (error.name === 'InvalidAccessKeyId' || error.name === 'SignatureDoesNotMatch') {
           return { valid: false, error: 'Invalid credentials' };
         }
@@ -221,7 +224,9 @@ export async function validateCredentialsOnly(
     }
   }
 
-  // For AWS, use STS GetCallerIdentity (lightweight, always allowed for valid creds)
+  // For AWS, try STS GetCallerIdentity first (lightweight check).
+  // Note: SCPs or explicit deny policies can block sts:GetCallerIdentity even for valid credentials,
+  // causing false negatives. If STS is denied, we fall back to S3 ListBuckets.
   const stsClient = new STSClient({
     region,
     credentials: { accessKeyId, secretAccessKey },
@@ -234,12 +239,49 @@ export async function validateCredentialsOnly(
     console.error('Credential validation error (STS):', error);
 
     if (error instanceof Error) {
+      if (error.name === 'ExpiredToken' || error.name === 'ExpiredTokenException' || error.message.includes('ExpiredToken')) {
+        return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
+      }
       if (error.name === 'InvalidClientTokenId' || error.name === 'SignatureDoesNotMatch') {
         return { valid: false, error: 'Invalid credentials' };
       }
       if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
         return { valid: false, error: `Cannot connect to AWS: ${error.message}` };
       }
+
+      // STS might be blocked by SCP or explicit deny - fall back to S3 ListBuckets
+      if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
+        console.log('STS GetCallerIdentity denied (possibly by SCP), falling back to S3 ListBuckets');
+
+        const s3Client = new S3Client({
+          region,
+          credentials: { accessKeyId, secretAccessKey },
+        });
+
+        try {
+          await s3Client.send(new ListBucketsCommand({}));
+          return { valid: true };
+        } catch (s3Error: unknown) {
+          console.error('Fallback S3 ListBuckets also failed:', s3Error);
+
+          if (s3Error instanceof Error) {
+            if (s3Error.name === 'ExpiredToken' || s3Error.name === 'ExpiredTokenException' || s3Error.message.includes('ExpiredToken')) {
+              return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
+            }
+            if (s3Error.name === 'InvalidAccessKeyId' || s3Error.name === 'SignatureDoesNotMatch') {
+              return { valid: false, error: 'Invalid credentials' };
+            }
+            if (s3Error.name === 'AccessDenied' || s3Error.name === 'Forbidden') {
+              // Both STS and S3 ListBuckets denied - credentials likely valid but restricted
+              // Allow login and let bucket-specific operations determine access
+              return { valid: true };
+            }
+          }
+          // Return original STS error if S3 fallback doesn't clarify
+          return { valid: false, error: `STS blocked by policy and S3 check failed: ${error.message}` };
+        }
+      }
+
       return { valid: false, error: error.message };
     }
     return { valid: false, error: 'Unknown error' };
