@@ -23,40 +23,56 @@ export function useUpload() {
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [pendingResumable, setPendingResumable] = useState<PersistedUpload[]>([]);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
-  const isMountedRef = useRef(true);
+  const mountGenerationRef = useRef(0);
+
+  const refreshPendingUploads = useCallback(async () => {
+    const currentGeneration = mountGenerationRef.current;
+    try {
+      const pending = await listPendingUploads();
+      if (currentGeneration === mountGenerationRef.current) {
+        setPendingResumable(pending);
+      }
+    } catch (error) {
+      console.error('Failed to refresh pending uploads:', error);
+    }
+  }, []);
 
   // Load pending resumable uploads on mount
   useEffect(() => {
+    const generationRef = mountGenerationRef;
+    const currentGeneration = ++generationRef.current;
+
     (async () => {
       try {
         const pending = await listPendingUploads();
-        if (isMountedRef.current) {
+        if (currentGeneration === generationRef.current) {
           setPendingResumable(pending);
         }
       } catch (error) {
-        console.error(error);
+        console.error('Failed to load pending uploads:', error);
       }
     })();
+
+    return () => {
+      generationRef.current++;
+    };
   }, []);
 
-  // Cleanup on unmount: abort all in-progress uploads and prevent state updates
+  // Cleanup on unmount: abort all in-progress uploads
   useEffect(() => {
-    const abortControllers = abortControllersRef.current;
+    const controllers = abortControllersRef.current;
     return () => {
-      isMountedRef.current = false;
-      for (const controller of abortControllers.values()) {
+      for (const controller of controllers.values()) {
         controller.abort();
       }
-      abortControllers.clear();
+      controllers.clear();
     };
   }, []);
 
   const updateUpload = useCallback((id: string, updates: Partial<UploadProgress>) => {
-    if (isMountedRef.current) {
-      setUploads((prev) =>
-        prev.map((u) => (u.id === id ? { ...u, ...updates } : u))
-      );
-    }
+    setUploads((prev) =>
+      prev.map((u) => (u.id === id ? { ...u, ...updates } : u))
+    );
   }, []);
 
   const uploadSingleFileWithPresign = useCallback(
@@ -225,12 +241,9 @@ export function useUpload() {
         newUploads.push(uploadProgress);
       }
 
-      if (isMountedRef.current) {
-        setUploads((prev) => [...prev, ...newUploads]);
-      }
+      setUploads((prev) => [...prev, ...newUploads]);
 
       for (const uploadItem of newUploads) {
-        if (!isMountedRef.current) break;
 
         // Skip files that exceed size limit
         if (uploadItem.status === 'error') {
@@ -287,18 +300,9 @@ export function useUpload() {
       }
 
       // Refresh pending resumable list
-      (async () => {
-        try {
-          const pending = await listPendingUploads();
-          if (isMountedRef.current) {
-            setPendingResumable(pending);
-          }
-        } catch (error) {
-          console.error(error);
-        }
-      })();
+      void refreshPendingUploads();
     },
-    [isConnected, updateUpload, uploadSingleFileWithPresign, uploadMultipartFile]
+    [isConnected, updateUpload, uploadSingleFileWithPresign, uploadMultipartFile, refreshPendingUploads]
   );
 
   const cancelUpload = useCallback(async (id: string) => {
@@ -327,17 +331,8 @@ export function useUpload() {
     setUploads((prev) => prev.filter((u) => u.id !== id));
 
     // Refresh pending resumable list
-    (async () => {
-      try {
-        const pending = await listPendingUploads();
-        if (isMountedRef.current) {
-          setPendingResumable(pending);
-        }
-      } catch (error) {
-        console.error(error);
-      }
-    })();
-  }, [uploads]);
+    void refreshPendingUploads();
+  }, [uploads, refreshPendingUploads]);
 
   const pauseUpload = useCallback((id: string) => {
     const controller = abortControllersRef.current.get(id);
@@ -406,18 +401,9 @@ export function useUpload() {
       }
 
       // Refresh pending resumable list
-      (async () => {
-        try {
-          const pending = await listPendingUploads();
-          if (isMountedRef.current) {
-            setPendingResumable(pending);
-          }
-        } catch (error) {
-          console.error(error);
-        }
-      })();
+      void refreshPendingUploads();
     },
-    [uploads, updateUpload, uploadMultipartFile]
+    [uploads, updateUpload, uploadMultipartFile, refreshPendingUploads]
   );
 
   const retryUpload = useCallback(
