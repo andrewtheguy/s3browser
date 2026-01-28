@@ -77,19 +77,14 @@ router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<voi
     return;
   }
 
-  try {
-    const command = new GetObjectCommand({
-      Bucket: session.credentials.bucket,
-      Key: keyValidation.validatedKey,
-    });
+  const command = new GetObjectCommand({
+    Bucket: session.credentials.bucket,
+    Key: keyValidation.validatedKey,
+  });
 
-    // Generate presigned URL with 1 hour expiry
-    const url = await getSignedUrl(session.client, command, { expiresIn: 3600 });
-    res.json({ url });
-  } catch (error) {
-    console.error('Get download URL error:', error);
-    res.status(500).json({ error: 'Failed to generate download URL' });
-  }
+  // Generate presigned URL with 1 hour expiry
+  const url = await getSignedUrl(session.client, command, { expiresIn: 3600 });
+  res.json({ url });
 });
 
 export default router;

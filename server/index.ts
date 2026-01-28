@@ -1,4 +1,5 @@
-import express from 'express';
+import 'express-async-errors';
+import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.js';
 import objectsRoutes from './routes/objects.js';
@@ -21,6 +22,12 @@ app.use('/api/download', downloadRoutes);
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Global error handler - catches unhandled errors from async routes
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(PORT, () => {

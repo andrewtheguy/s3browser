@@ -110,26 +110,21 @@ router.post(
       return;
     }
 
-    try {
-      const uploadManager = new Upload({
-        client: session.client,
-        params: {
-          Bucket: session.credentials.bucket,
-          Key: keyValidation.sanitizedKey,
-          Body: file.buffer,
-          ContentType: file.mimetype || 'application/octet-stream',
-        },
-        queueSize: 4,
-        partSize: 5 * 1024 * 1024, // 5MB parts
-        leavePartsOnError: false,
-      });
+    const uploadManager = new Upload({
+      client: session.client,
+      params: {
+        Bucket: session.credentials.bucket,
+        Key: keyValidation.sanitizedKey,
+        Body: file.buffer,
+        ContentType: file.mimetype || 'application/octet-stream',
+      },
+      queueSize: 4,
+      partSize: 5 * 1024 * 1024, // 5MB parts
+      leavePartsOnError: false,
+    });
 
-      await uploadManager.done();
-      res.json({ success: true, key: keyValidation.sanitizedKey });
-    } catch (error) {
-      console.error('Upload error:', error);
-      res.status(500).json({ error: 'Failed to upload file' });
-    }
+    await uploadManager.done();
+    res.json({ success: true, key: keyValidation.sanitizedKey });
   }
 );
 
@@ -160,25 +155,20 @@ router.post('/presign-single', async (req: AuthenticatedRequest, res: Response):
     return;
   }
 
-  try {
-    const command = new PutObjectCommand({
-      Bucket: session.credentials.bucket,
-      Key: keyValidation.sanitizedKey,
-      ContentType: contentType || 'application/octet-stream',
-    });
+  const command = new PutObjectCommand({
+    Bucket: session.credentials.bucket,
+    Key: keyValidation.sanitizedKey,
+    ContentType: contentType || 'application/octet-stream',
+  });
 
-    const url = await getSignedUrl(session.client, command, {
-      expiresIn: UPLOAD_CONFIG.PRESIGN_EXPIRY,
-    });
+  const url = await getSignedUrl(session.client, command, {
+    expiresIn: UPLOAD_CONFIG.PRESIGN_EXPIRY,
+  });
 
-    res.json({
-      url,
-      key: keyValidation.sanitizedKey,
-    });
-  } catch (error) {
-    console.error('Presign single error:', error);
-    res.status(500).json({ error: 'Failed to generate presigned URL' });
-  }
+  res.json({
+    url,
+    key: keyValidation.sanitizedKey,
+  });
 });
 
 // POST /api/upload/initiate - Start a multipart upload
@@ -208,45 +198,40 @@ router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promi
     return;
   }
 
-  try {
-    const command = new CreateMultipartUploadCommand({
-      Bucket: session.credentials.bucket,
-      Key: keyValidation.sanitizedKey,
-      ContentType: contentType || 'application/octet-stream',
-    });
+  const command = new CreateMultipartUploadCommand({
+    Bucket: session.credentials.bucket,
+    Key: keyValidation.sanitizedKey,
+    ContentType: contentType || 'application/octet-stream',
+  });
 
-    const response = await session.client.send(command);
-    const uploadId = response.UploadId;
+  const response = await session.client.send(command);
+  const uploadId = response.UploadId;
 
-    if (!uploadId) {
-      res.status(500).json({ error: 'Failed to initiate multipart upload' });
-      return;
-    }
-
-    // Calculate total parts
-    const totalParts = Math.ceil(fileSize / UPLOAD_CONFIG.PART_SIZE);
-
-    // Track the upload
-    const trackingKey = `${sessionId}:${uploadId}`;
-    uploadTracker.set(trackingKey, {
-      key,
-      sanitizedKey: keyValidation.sanitizedKey,
-      totalParts,
-      contentType: contentType || 'application/octet-stream',
-      createdAt: Date.now(),
-      fileSize,
-    });
-
-    res.json({
-      uploadId,
-      key: keyValidation.sanitizedKey,
-      totalParts,
-      partSize: UPLOAD_CONFIG.PART_SIZE,
-    });
-  } catch (error) {
-    console.error('Initiate multipart error:', error);
+  if (!uploadId) {
     res.status(500).json({ error: 'Failed to initiate multipart upload' });
+    return;
   }
+
+  // Calculate total parts
+  const totalParts = Math.ceil(fileSize / UPLOAD_CONFIG.PART_SIZE);
+
+  // Track the upload
+  const trackingKey = `${sessionId}:${uploadId}`;
+  uploadTracker.set(trackingKey, {
+    key,
+    sanitizedKey: keyValidation.sanitizedKey,
+    totalParts,
+    contentType: contentType || 'application/octet-stream',
+    createdAt: Date.now(),
+    fileSize,
+  });
+
+  res.json({
+    uploadId,
+    key: keyValidation.sanitizedKey,
+    totalParts,
+    partSize: UPLOAD_CONFIG.PART_SIZE,
+  });
 });
 
 // POST /api/upload/presign - Get presigned URL for a specific part
@@ -284,23 +269,18 @@ router.post('/presign', async (req: AuthenticatedRequest, res: Response): Promis
     return;
   }
 
-  try {
-    const command = new UploadPartCommand({
-      Bucket: session.credentials.bucket,
-      Key: tracked.sanitizedKey,
-      UploadId: uploadId,
-      PartNumber: partNumber,
-    });
+  const command = new UploadPartCommand({
+    Bucket: session.credentials.bucket,
+    Key: tracked.sanitizedKey,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+  });
 
-    const url = await getSignedUrl(session.client, command, {
-      expiresIn: UPLOAD_CONFIG.PRESIGN_EXPIRY,
-    });
+  const url = await getSignedUrl(session.client, command, {
+    expiresIn: UPLOAD_CONFIG.PRESIGN_EXPIRY,
+  });
 
-    res.json({ url, partNumber });
-  } catch (error) {
-    console.error('Presign part error:', error);
-    res.status(500).json({ error: 'Failed to generate presigned URL for part' });
-  }
+  res.json({ url, partNumber });
 });
 
 // POST /api/upload/complete - Complete a multipart upload
@@ -341,31 +321,26 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
     return;
   }
 
-  try {
-    const command = new CompleteMultipartUploadCommand({
-      Bucket: session.credentials.bucket,
-      Key: tracked.sanitizedKey,
-      UploadId: uploadId,
-      MultipartUpload: {
-        Parts: parts
-          .sort((a: { partNumber: number }, b: { partNumber: number }) => a.partNumber - b.partNumber)
-          .map((p: { partNumber: number; etag: string }) => ({
-            PartNumber: p.partNumber,
-            ETag: p.etag,
-          })),
-      },
-    });
+  const command = new CompleteMultipartUploadCommand({
+    Bucket: session.credentials.bucket,
+    Key: tracked.sanitizedKey,
+    UploadId: uploadId,
+    MultipartUpload: {
+      Parts: parts
+        .sort((a: { partNumber: number }, b: { partNumber: number }) => a.partNumber - b.partNumber)
+        .map((p: { partNumber: number; etag: string }) => ({
+          PartNumber: p.partNumber,
+          ETag: p.etag,
+        })),
+    },
+  });
 
-    await session.client.send(command);
+  await session.client.send(command);
 
-    // Clean up tracking
-    uploadTracker.delete(trackingKey);
+  // Clean up tracking
+  uploadTracker.delete(trackingKey);
 
-    res.json({ success: true, key: tracked.sanitizedKey });
-  } catch (error) {
-    console.error('Complete multipart error:', error);
-    res.status(500).json({ error: 'Failed to complete multipart upload' });
-  }
+  res.json({ success: true, key: tracked.sanitizedKey });
 });
 
 // POST /api/upload/abort - Abort a multipart upload
@@ -401,25 +376,20 @@ router.post('/abort', async (req: AuthenticatedRequest, res: Response): Promise<
     sanitizedKey = keyValidation.sanitizedKey;
   }
 
+  const command = new AbortMultipartUploadCommand({
+    Bucket: session.credentials.bucket,
+    Key: sanitizedKey,
+    UploadId: uploadId,
+  });
+
   try {
-    const command = new AbortMultipartUploadCommand({
-      Bucket: session.credentials.bucket,
-      Key: sanitizedKey,
-      UploadId: uploadId,
-    });
-
     await session.client.send(command);
-
-    // Clean up tracking
+  } finally {
+    // Clean up tracking regardless of success/failure
     uploadTracker.delete(trackingKey);
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Abort multipart error:', error);
-    // Still clean up tracking even if abort fails
-    uploadTracker.delete(trackingKey);
-    res.status(500).json({ error: 'Failed to abort multipart upload' });
   }
+
+  res.json({ success: true });
 });
 
 export default router;
