@@ -5,7 +5,7 @@ A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, D
 ## Features
 
 - Browse S3 buckets with folder navigation
-- Upload files (max 100MB per file)
+- Upload files up to 5GB with multipart upload and resume support
 - Download files via presigned URLs
 - Create folders
 - Delete files and folders
@@ -83,9 +83,8 @@ For MinIO, DigitalOcean Spaces, or other S3-compatible services:
 
 ## Limitations
 
-- Maximum file size: 100MB
+- Maximum file size: 5GB
 - Session expires after 4 hours
-- Files are uploaded to memory before being sent to S3 (not suitable for very large files)
 
 ## Security
 
