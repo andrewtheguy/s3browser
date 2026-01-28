@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { Navigate, useParams, useLocation } from 'react-router';
+import { Navigate, useParams } from 'react-router';
 import { Box, CircularProgress } from '@mui/material';
 import { useS3ClientContext } from '../../contexts';
 
@@ -10,7 +10,6 @@ interface AuthGuardProps {
 export function AuthGuard({ children }: AuthGuardProps) {
   const { isConnected, isCheckingSession, credentials } = useS3ClientContext();
   const { bucket } = useParams<{ bucket: string }>();
-  const location = useLocation();
 
   // Show loading state while checking session status
   if (isCheckingSession) {
@@ -28,10 +27,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
     );
   }
 
-  // Session check complete and not connected - redirect to home with returnTo param
+  // Session check complete and not connected - redirect to home
   if (!isConnected) {
-    const returnTo = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/?returnTo=${returnTo}`} replace />;
+    return <Navigate to="/" replace />;
   }
 
   // Connected but no bucket in context yet - need to select bucket
