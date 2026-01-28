@@ -1,5 +1,3 @@
-import { S3Client } from '@aws-sdk/client-s3';
-
 export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
@@ -32,11 +30,17 @@ export interface UploadProgress {
   error?: string;
 }
 
+export interface LoginCredentials {
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+  bucket: string;
+}
+
 export interface S3ClientContextValue {
-  client: S3Client | null;
   credentials: S3Credentials | null;
   isConnected: boolean;
-  connect: (credentials: S3Credentials) => Promise<void>;
+  connect: (credentials: LoginCredentials) => Promise<void>;
   disconnect: () => void;
   error: string | null;
 }

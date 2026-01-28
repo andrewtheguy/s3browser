@@ -1,15 +1,15 @@
 import { useCallback, useState } from 'react';
 import { useS3ClientContext } from '../contexts';
-import { deleteObject } from '../services/s3';
+import { deleteObject } from '../services/api';
 
 export function useDelete() {
-  const { client, credentials } = useS3ClientContext();
+  const { isConnected } = useS3ClientContext();
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const remove = useCallback(
     async (key: string): Promise<void> => {
-      if (!client || !credentials) {
+      if (!isConnected) {
         throw new Error('Not connected to S3');
       }
 
@@ -17,11 +17,7 @@ export function useDelete() {
       setError(null);
 
       try {
-        await deleteObject({
-          client,
-          bucket: credentials.bucket,
-          key,
-        });
+        await deleteObject(key);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Delete failed';
         setError(message);
@@ -30,7 +26,7 @@ export function useDelete() {
         setIsDeleting(false);
       }
     },
-    [client, credentials]
+    [isConnected]
   );
 
   return {

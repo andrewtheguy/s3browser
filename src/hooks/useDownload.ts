@@ -1,15 +1,15 @@
 import { useCallback, useState } from 'react';
 import { useS3ClientContext } from '../contexts';
-import { downloadObject } from '../services/s3';
+import { downloadFile } from '../services/api';
 
 export function useDownload() {
-  const { client, credentials } = useS3ClientContext();
+  const { isConnected } = useS3ClientContext();
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const download = useCallback(
     async (key: string): Promise<void> => {
-      if (!client || !credentials) {
+      if (!isConnected) {
         throw new Error('Not connected to S3');
       }
 
@@ -17,11 +17,7 @@ export function useDownload() {
       setError(null);
 
       try {
-        await downloadObject({
-          client,
-          bucket: credentials.bucket,
-          key,
-        });
+        await downloadFile(key);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Download failed';
         setError(message);
@@ -30,7 +26,7 @@ export function useDownload() {
         setIsDownloading(false);
       }
     },
-    [client, credentials]
+    [isConnected]
   );
 
   return {

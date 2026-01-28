@@ -1,16 +1,16 @@
 import { useState, useCallback, useRef } from 'react';
 import { useS3ClientContext } from '../contexts';
-import { uploadObject, createFolder } from '../services/s3';
+import { uploadFile, createFolder } from '../services/api';
 import type { UploadProgress } from '../types';
 
 export function useUpload() {
-  const { client, credentials } = useS3ClientContext();
+  const { isConnected } = useS3ClientContext();
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   const upload = useCallback(
     async (files: File[], prefix: string = ''): Promise<void> => {
-      if (!client || !credentials) {
+      if (!isConnected) {
         throw new Error('Not connected to S3');
       }
 
@@ -36,12 +36,10 @@ export function useUpload() {
         );
 
         try {
-          await uploadObject({
-            client,
-            bucket: credentials.bucket,
-            key: uploadItem.key,
+          await uploadFile({
             file: uploadItem.file,
-            abortController,
+            key: uploadItem.key,
+            abortSignal: abortController.signal,
             onProgress: (loaded, total) => {
               setUploads((prev) =>
                 prev.map((u) =>
@@ -66,6 +64,10 @@ export function useUpload() {
             )
           );
         } catch (err) {
+          // Ignore abort errors
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            continue;
+          }
           const message = err instanceof Error ? err.message : 'Upload failed';
           setUploads((prev) =>
             prev.map((u) =>
@@ -79,7 +81,7 @@ export function useUpload() {
         }
       }
     },
-    [client, credentials]
+    [isConnected]
   );
 
   const cancelUpload = useCallback((key: string) => {
@@ -106,18 +108,14 @@ export function useUpload() {
 
   const createNewFolder = useCallback(
     async (folderName: string, prefix: string = ''): Promise<void> => {
-      if (!client || !credentials) {
+      if (!isConnected) {
         throw new Error('Not connected to S3');
       }
 
       const folderPath = prefix + folderName;
-      await createFolder({
-        client,
-        bucket: credentials.bucket,
-        folderPath,
-      });
+      await createFolder(folderPath);
     },
-    [client, credentials]
+    [isConnected]
   );
 
   return {

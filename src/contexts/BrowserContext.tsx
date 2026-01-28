@@ -7,7 +7,7 @@ import {
 } from 'react';
 import type { S3Object, BrowserContextValue } from '../types';
 import { useS3ClientContext } from './useS3ClientContext';
-import { listObjects } from '../services/s3';
+import { listObjects } from '../services/api';
 import { getPathSegments } from '../utils/formatters';
 
 interface BrowserState {
@@ -52,27 +52,23 @@ export const BrowserContext = createContext<BrowserContextValue | null>(null);
 
 export function BrowserProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { client, credentials, isConnected } = useS3ClientContext();
+  const { isConnected } = useS3ClientContext();
 
   const fetchObjects = useCallback(
     async (path: string) => {
-      if (!client || !credentials) return;
+      if (!isConnected) return;
 
       dispatch({ type: 'FETCH_START' });
 
       try {
-        const result = await listObjects({
-          client,
-          bucket: credentials.bucket,
-          prefix: path,
-        });
+        const result = await listObjects(path);
         dispatch({ type: 'FETCH_SUCCESS', objects: result.objects });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to list objects';
         dispatch({ type: 'FETCH_ERROR', error: message });
       }
     },
-    [client, credentials]
+    [isConnected]
   );
 
   const navigateTo = useCallback(
@@ -105,10 +101,10 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
 
   // Fetch objects when connected
   useEffect(() => {
-    if (isConnected && client && credentials) {
+    if (isConnected) {
       fetchObjects(state.currentPath);
     }
-  }, [isConnected, client, credentials, fetchObjects, state.currentPath]);
+  }, [isConnected, fetchObjects, state.currentPath]);
 
   const value: BrowserContextValue = {
     currentPath: state.currentPath,
@@ -125,4 +121,3 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
     <BrowserContext.Provider value={value}>{children}</BrowserContext.Provider>
   );
 }
-
