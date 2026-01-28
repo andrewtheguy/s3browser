@@ -63,7 +63,7 @@ export const S3ClientContext = createContext<S3ClientContextValue | null>(null);
 export function S3ClientProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const connect = useCallback(async (credentials: LoginCredentials) => {
+  const connect = useCallback(async (credentials: LoginCredentials): Promise<boolean> => {
     dispatch({ type: 'CONNECT_START' });
 
     try {
@@ -72,10 +72,11 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
         type: 'CONNECT_SUCCESS',
         session: { region: response.region, bucket: response.bucket },
       });
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to connect';
       dispatch({ type: 'CONNECT_ERROR', error: message });
-      throw err;
+      return false;
     }
   }, []);
 

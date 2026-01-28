@@ -10,9 +10,17 @@ import {
   CircularProgress,
   FormControlLabel,
   Checkbox,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  IconButton,
+  ListItemText,
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
-import { useS3Client } from '../../hooks';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { useS3Client, useConnectionHistory } from '../../hooks';
 import type { LoginCredentials } from '../../types';
 
 function isValidUrl(value: string): boolean {
@@ -25,12 +33,21 @@ function isValidUrl(value: string): boolean {
   }
 }
 
+function isValidConnectionName(value: string): boolean {
+  if (!value) return true; // Empty is valid (optional field)
+  return !value.includes(' ');
+}
+
 export function LoginForm() {
   const { connect, error } = useS3Client();
+  const { connections, saveConnection, deleteConnection } = useConnectionHistory();
   const [isLoading, setIsLoading] = useState(false);
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
   const [endpointTouched, setEndpointTouched] = useState(false);
+  const [nameTouched, setNameTouched] = useState(false);
+  const [selectedConnectionName, setSelectedConnectionName] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    connectionName: '',
     region: '',
     accessKeyId: '',
     secretAccessKey: '',
@@ -40,6 +57,8 @@ export function LoginForm() {
 
   const endpointValid = isValidUrl(formData.endpoint);
   const showEndpointError = endpointTouched && !endpointValid;
+  const nameValid = isValidConnectionName(formData.connectionName);
+  const showNameError = nameTouched && !nameValid;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -53,9 +72,19 @@ export function LoginForm() {
         region: autoDetectRegion ? undefined : formData.region || undefined,
         endpoint: formData.endpoint || undefined,
       };
-      await connect(credentials);
-    } catch {
-      // Error is handled by context
+      const success = await connect(credentials);
+
+      if (success && formData.connectionName.trim() && nameValid) {
+        // Only save connection on successful connect with valid name
+        saveConnection({
+          name: formData.connectionName.trim(),
+          endpoint: formData.endpoint,
+          accessKeyId: formData.accessKeyId,
+          bucket: formData.bucket,
+          region: autoDetectRegion ? undefined : formData.region || undefined,
+          autoDetectRegion,
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -67,12 +96,66 @@ export function LoginForm() {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
+  const handleConnectionChange = (e: SelectChangeEvent<string>) => {
+    const name = e.target.value;
+    if (name === 'new') {
+      setSelectedConnectionName(null);
+      setFormData({
+        connectionName: '',
+        endpoint: 'https://s3.amazonaws.com',
+        accessKeyId: '',
+        bucket: '',
+        region: '',
+        secretAccessKey: '',
+      });
+      setAutoDetectRegion(true);
+      setEndpointTouched(false);
+      setNameTouched(false);
+      return;
+    }
+
+    const connection = connections.find((c) => c.name === name);
+    if (connection) {
+      setSelectedConnectionName(connection.name);
+      setFormData({
+        connectionName: connection.name,
+        endpoint: connection.endpoint,
+        accessKeyId: connection.accessKeyId,
+        bucket: connection.bucket,
+        region: connection.region || '',
+        secretAccessKey: '', // Never auto-fill secret
+      });
+      setAutoDetectRegion(connection.autoDetectRegion);
+      setEndpointTouched(false);
+      setNameTouched(false);
+    }
+  };
+
+  const handleDeleteConnection = (e: React.MouseEvent, name: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    deleteConnection(name);
+    if (selectedConnectionName === name) {
+      setSelectedConnectionName(null);
+      setFormData({
+        connectionName: '',
+        endpoint: 'https://s3.amazonaws.com',
+        accessKeyId: '',
+        bucket: '',
+        region: '',
+        secretAccessKey: '',
+      });
+      setAutoDetectRegion(true);
+    }
+  };
+
   const isFormValid =
     (autoDetectRegion || formData.region) &&
     formData.accessKeyId &&
     formData.secretAccessKey &&
     formData.bucket &&
-    endpointValid;
+    endpointValid &&
+    nameValid;
 
   return (
     <Box
@@ -116,7 +199,62 @@ export function LoginForm() {
             </Alert>
           )}
 
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel id="connection-select-label">Connection</InputLabel>
+            <Select
+              labelId="connection-select-label"
+              value={selectedConnectionName || 'new'}
+              label="Connection"
+              onChange={handleConnectionChange}
+              renderValue={(value) => {
+                if (value === 'new') return 'New Connection';
+                const conn = connections.find((c) => c.name === value);
+                return conn?.name || 'New Connection';
+              }}
+            >
+              <MenuItem value="new">New Connection</MenuItem>
+              {connections.map((connection) => (
+                <MenuItem key={connection.name} value={connection.name}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
+                    <ListItemText
+                      primary={connection.name}
+                      secondary={`${connection.bucket} @ ${connection.endpoint}`}
+                      primaryTypographyProps={{ noWrap: true }}
+                      secondaryTypographyProps={{ noWrap: true, fontSize: '0.75rem' }}
+                      sx={{ flex: 1, minWidth: 0, mr: 1 }}
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleDeleteConnection(e, connection.name)}
+                      aria-label="delete"
+                      sx={{ flexShrink: 0 }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
           <Box component="form" onSubmit={handleSubmit}>
+            <TextField
+              fullWidth
+              label="Connection Name"
+              value={formData.connectionName}
+              onChange={handleChange('connectionName')}
+              onBlur={() => setNameTouched(true)}
+              margin="normal"
+              autoComplete="off"
+              placeholder="my-aws-account"
+              error={showNameError}
+              helperText={
+                showNameError
+                  ? 'Connection name cannot contain spaces'
+                  : 'Optional. Provide a name (no spaces) to save this connection.'
+              }
+            />
+
             <TextField
               fullWidth
               label="Endpoint URL"
@@ -152,6 +290,7 @@ export function LoginForm() {
               margin="normal"
               required
               autoComplete="off"
+              helperText={selectedConnectionName ? 'Enter your secret key (not saved for security)' : undefined}
             />
 
             <TextField

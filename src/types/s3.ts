@@ -51,7 +51,7 @@ export interface LoginCredentials {
 export interface S3ClientContextValue {
   credentials: S3Credentials | null;
   isConnected: boolean;
-  connect: (credentials: LoginCredentials) => Promise<void>;
+  connect: (credentials: LoginCredentials) => Promise<boolean>;
   disconnect: () => void;
   error: string | null;
 }
@@ -65,6 +65,16 @@ export interface BrowserContextValue {
   navigateUp: () => void;
   refresh: () => Promise<void>;
   pathSegments: string[];
+}
+
+export interface SavedConnection {
+  name: string;              // Used as unique key
+  endpoint: string;
+  accessKeyId: string;
+  bucket: string;
+  region?: string;
+  autoDetectRegion: boolean;
+  lastUsedAt: number;
 }
 
 export const AWS_REGIONS = [
