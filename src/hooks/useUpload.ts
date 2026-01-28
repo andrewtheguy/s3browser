@@ -134,6 +134,10 @@ export function useUpload() {
       let uploadId = existingUploadId;
       let sanitizedKey = key;
 
+      // Mutable accumulator for completed parts - initialized from existingParts
+      // and updated in onPartComplete to persist progress correctly
+      const completedPartsAccumulator: CompletedPart[] = existingParts ? [...existingParts] : [];
+
       const result = await uploadFileMultipart({
         file,
         key,
@@ -158,14 +162,19 @@ export function useUpload() {
             totalParts: total,
           });
 
+          // Update the mutable accumulator (dedupe by partNumber)
+          const existingIndex = completedPartsAccumulator.findIndex(
+            (p) => p.partNumber === partNumber
+          );
+          if (existingIndex >= 0) {
+            completedPartsAccumulator[existingIndex] = { partNumber, etag };
+          } else {
+            completedPartsAccumulator.push({ partNumber, etag });
+          }
+
           // Persist progress
           if (currentPersistenceId) {
-            const allParts = existingParts ? [...existingParts] : [];
-            if (!allParts.find((p) => p.partNumber === partNumber)) {
-              allParts.push({ partNumber, etag });
-            }
             try {
-              // Update the persistence record with the new uploadId if needed
               await saveUploadState({
                 id: currentPersistenceId,
                 uploadId: uploadId || '',
@@ -175,7 +184,7 @@ export function useUpload() {
                 key,
                 sanitizedKey: sanitizedKey || key,
                 contentType: file.type || 'application/octet-stream',
-                completedParts: allParts,
+                completedParts: completedPartsAccumulator,
                 totalParts: total,
               });
             } catch (err) {

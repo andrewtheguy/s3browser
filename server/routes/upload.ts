@@ -374,12 +374,14 @@ router.post('/abort', async (req: AuthenticatedRequest, res: Response): Promise<
 
   try {
     await session.client.send(command);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to abort multipart upload:', error);
+    res.status(500).json({ success: false, error: 'Failed to abort multipart upload' });
   } finally {
     // Clean up tracking regardless of success/failure
     uploadTracker.delete(trackingKey);
   }
-
-  res.json({ success: true });
 });
 
 export default router;
