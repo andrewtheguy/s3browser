@@ -64,28 +64,30 @@ export function LoginForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    const credentials: LoginCredentials = {
-      accessKeyId: formData.accessKeyId,
-      secretAccessKey: formData.secretAccessKey,
-      bucket: formData.bucket,
-      region: autoDetectRegion ? undefined : formData.region || undefined,
-      endpoint: formData.endpoint || undefined,
-    };
-    const success = await connect(credentials);
-
-    if (success && formData.connectionName.trim() && nameValid) {
-      // Only save connection on successful connect with valid name
-      saveConnection({
-        name: formData.connectionName.trim(),
-        endpoint: formData.endpoint,
+    try {
+      const credentials: LoginCredentials = {
         accessKeyId: formData.accessKeyId,
+        secretAccessKey: formData.secretAccessKey,
         bucket: formData.bucket,
         region: autoDetectRegion ? undefined : formData.region || undefined,
-        autoDetectRegion,
-      });
-    }
+        endpoint: formData.endpoint || undefined,
+      };
+      const success = await connect(credentials);
 
-    setIsLoading(false);
+      if (success && formData.connectionName.trim() && nameValid) {
+        // Only save connection on successful connect with valid name
+        saveConnection({
+          name: formData.connectionName.trim(),
+          endpoint: formData.endpoint,
+          accessKeyId: formData.accessKeyId,
+          bucket: formData.bucket,
+          region: autoDetectRegion ? undefined : formData.region || undefined,
+          autoDetectRegion,
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (field: keyof typeof formData) => (
