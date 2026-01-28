@@ -10,18 +10,18 @@ import {
   CircularProgress,
   FormControlLabel,
   Checkbox,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  ListItemSecondaryAction,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   IconButton,
-  Divider,
+  ListItemText,
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useS3Client, useConnectionHistory } from '../../hooks';
-import type { LoginCredentials, SavedConnection } from '../../types';
+import type { LoginCredentials } from '../../types';
 
 function isValidUrl(value: string): boolean {
   if (!value) return true; // Empty is valid (optional field)
@@ -94,24 +94,52 @@ export function LoginForm() {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
-  const handleSelectConnection = (connection: SavedConnection) => {
-    setSelectedConnectionId(connection.id);
-    setFormData({
-      connectionName: connection.name,
-      endpoint: connection.endpoint,
-      accessKeyId: connection.accessKeyId,
-      bucket: connection.bucket,
-      region: connection.region || '',
-      secretAccessKey: '', // Never auto-fill secret
-    });
-    setAutoDetectRegion(connection.autoDetectRegion);
+  const handleConnectionChange = (e: SelectChangeEvent<string>) => {
+    const id = e.target.value;
+    if (id === 'new') {
+      setSelectedConnectionId(null);
+      setFormData({
+        connectionName: '',
+        endpoint: 'https://s3.amazonaws.com',
+        accessKeyId: '',
+        bucket: '',
+        region: '',
+        secretAccessKey: '',
+      });
+      setAutoDetectRegion(true);
+      return;
+    }
+
+    const connection = connections.find((c) => c.id === id);
+    if (connection) {
+      setSelectedConnectionId(connection.id);
+      setFormData({
+        connectionName: connection.name,
+        endpoint: connection.endpoint,
+        accessKeyId: connection.accessKeyId,
+        bucket: connection.bucket,
+        region: connection.region || '',
+        secretAccessKey: '', // Never auto-fill secret
+      });
+      setAutoDetectRegion(connection.autoDetectRegion);
+    }
   };
 
   const handleDeleteConnection = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    e.preventDefault();
     deleteConnection(id);
     if (selectedConnectionId === id) {
       setSelectedConnectionId(null);
+      setFormData({
+        connectionName: '',
+        endpoint: 'https://s3.amazonaws.com',
+        accessKeyId: '',
+        bucket: '',
+        region: '',
+        secretAccessKey: '',
+      });
+      setAutoDetectRegion(true);
     }
   };
 
@@ -164,57 +192,43 @@ export function LoginForm() {
             </Alert>
           )}
 
-          {connections.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                Recent Connections
-              </Typography>
-              <List
-                dense
-                sx={{
-                  bgcolor: 'background.paper',
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  maxHeight: 150,
-                  overflow: 'auto',
-                }}
-              >
-                {connections.map((connection, index) => (
-                  <Box key={connection.id}>
-                    {index > 0 && <Divider />}
-                    <ListItem
-                      disablePadding
-                      secondaryAction={
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            edge="end"
-                            size="small"
-                            onClick={(e) => handleDeleteConnection(e, connection.id)}
-                            aria-label="delete"
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      }
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel id="connection-select-label">Connection</InputLabel>
+            <Select
+              labelId="connection-select-label"
+              value={selectedConnectionId || 'new'}
+              label="Connection"
+              onChange={handleConnectionChange}
+              renderValue={(value) => {
+                if (value === 'new') return 'New Connection';
+                const conn = connections.find((c) => c.id === value);
+                return conn?.name || 'New Connection';
+              }}
+            >
+              <MenuItem value="new">New Connection</MenuItem>
+              {connections.map((connection) => (
+                <MenuItem key={connection.id} value={connection.id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
+                    <ListItemText
+                      primary={connection.name}
+                      secondary={`${connection.bucket} @ ${connection.endpoint}`}
+                      primaryTypographyProps={{ noWrap: true }}
+                      secondaryTypographyProps={{ noWrap: true, fontSize: '0.75rem' }}
+                      sx={{ flex: 1, minWidth: 0, mr: 1 }}
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleDeleteConnection(e, connection.id)}
+                      aria-label="delete"
+                      sx={{ flexShrink: 0 }}
                     >
-                      <ListItemButton
-                        selected={selectedConnectionId === connection.id}
-                        onClick={() => handleSelectConnection(connection)}
-                      >
-                        <ListItemText
-                          primary={connection.name}
-                          secondary={`${connection.bucket} @ ${connection.endpoint}`}
-                          primaryTypographyProps={{ noWrap: true }}
-                          secondaryTypographyProps={{ noWrap: true, fontSize: '0.75rem' }}
-                        />
-                      </ListItemButton>
-                    </ListItem>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                   </Box>
-                ))}
-              </List>
-            </Box>
-          )}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           <Box component="form" onSubmit={handleSubmit}>
             <TextField
