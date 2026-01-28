@@ -27,12 +27,14 @@ export function uploadFile({
 
     // Handle abort signal
     if (abortSignal) {
-      // Check if already aborted before starting
+      // Attach listener first to avoid race condition
+      abortSignal.addEventListener('abort', abortHandler);
+      // Then check if already aborted (signal may have fired before listener was added)
       if (abortSignal.aborted) {
+        cleanup();
         reject(new DOMException('Upload aborted', 'AbortError'));
         return;
       }
-      abortSignal.addEventListener('abort', abortHandler);
     }
 
     // Progress tracking

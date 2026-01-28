@@ -26,8 +26,8 @@ export function DeleteDialog({
 }: DeleteDialogProps) {
   if (!item) return null;
 
-  const handleClose = (_event: object, reason: 'backdropClick' | 'escapeKeyDown') => {
-    if (isDeleting && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
+  const handleClose = (_event: object, _reason: 'backdropClick' | 'escapeKeyDown') => {
+    if (isDeleting) {
       return;
     }
     onCancel();
