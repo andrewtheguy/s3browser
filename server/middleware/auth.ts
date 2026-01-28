@@ -1,11 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
-import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3';
+import { S3Client, HeadBucketCommand, GetBucketLocationCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 
 export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
+  bucket: string;
+}
+
+export interface LoginInput {
+  accessKeyId: string;
+  secretAccessKey: string;
+  region?: string;
   bucket: string;
 }
 
@@ -69,6 +76,32 @@ export function getSession(sessionId: string): SessionData | undefined {
 
 export function deleteSession(sessionId: string): boolean {
   return sessions.delete(sessionId);
+}
+
+export async function getBucketRegion(
+  accessKeyId: string,
+  secretAccessKey: string,
+  bucket: string
+): Promise<string> {
+  // Use us-east-1 as the initial region to query bucket location
+  // GetBucketLocation works from any region but us-east-1 is the default
+  const client = new S3Client({
+    region: 'us-east-1',
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
+
+  try {
+    const response = await client.send(new GetBucketLocationCommand({ Bucket: bucket }));
+    // LocationConstraint is null/empty for us-east-1 buckets
+    return response.LocationConstraint || 'us-east-1';
+  } catch (error) {
+    // If we can't get the location, default to us-east-1
+    console.error('Failed to get bucket location:', error);
+    throw new Error('Failed to detect bucket region. Please specify the region manually.');
+  }
 }
 
 export async function validateCredentials(credentials: S3Credentials): Promise<boolean> {

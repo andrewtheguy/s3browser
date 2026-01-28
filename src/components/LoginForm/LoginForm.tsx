@@ -12,13 +12,15 @@ import {
 } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
 import { useS3Client } from '../../hooks';
-import { AWS_REGIONS, type S3Credentials } from '../../types';
+import { AWS_REGIONS, type LoginCredentials } from '../../types';
+
+const AUTO_DETECT_VALUE = '__auto__';
 
 export function LoginForm() {
   const { connect, error } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState<S3Credentials>({
-    region: 'us-east-1',
+  const [formData, setFormData] = useState({
+    region: AUTO_DETECT_VALUE,
     accessKeyId: '',
     secretAccessKey: '',
     bucket: '',
@@ -29,7 +31,13 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      await connect(formData);
+      const credentials: LoginCredentials = {
+        accessKeyId: formData.accessKeyId,
+        secretAccessKey: formData.secretAccessKey,
+        bucket: formData.bucket,
+        region: formData.region === AUTO_DETECT_VALUE ? undefined : formData.region,
+      };
+      await connect(credentials);
     } catch {
       // Error is handled by context
     } finally {
@@ -37,7 +45,7 @@ export function LoginForm() {
     }
   };
 
-  const handleChange = (field: keyof S3Credentials) => (
+  const handleChange = (field: keyof typeof formData) => (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
@@ -101,6 +109,9 @@ export function LoginForm() {
               margin="normal"
               required
             >
+              <MenuItem value={AUTO_DETECT_VALUE}>
+                Auto-detect from bucket
+              </MenuItem>
               {AWS_REGIONS.map((region) => (
                 <MenuItem key={region.value} value={region.value}>
                   {region.label}
@@ -162,8 +173,8 @@ export function LoginForm() {
             textAlign="center"
             mt={3}
           >
-            Your credentials are stored in session storage and cleared when you
-            close the browser.
+            Your credentials are stored securely on the server and the session
+            expires after 4 hours.
           </Typography>
         </CardContent>
       </Card>

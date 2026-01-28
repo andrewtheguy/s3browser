@@ -4,6 +4,7 @@ import {
   createSession,
   deleteSession,
   getSession,
+  getBucketRegion,
   S3Credentials,
 } from '../middleware/auth.js';
 
@@ -13,19 +14,31 @@ const router = Router();
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   const { accessKeyId, secretAccessKey, region, bucket } = req.body;
 
-  if (!accessKeyId || !secretAccessKey || !region || !bucket) {
+  if (!accessKeyId || !secretAccessKey || !bucket) {
     res.status(400).json({ error: 'Missing required credentials' });
     return;
   }
 
-  const credentials: S3Credentials = {
-    accessKeyId,
-    secretAccessKey,
-    region,
-    bucket,
-  };
-
   try {
+    // Auto-detect region if not provided
+    let detectedRegion = region;
+    if (!detectedRegion) {
+      try {
+        detectedRegion = await getBucketRegion(accessKeyId, secretAccessKey, bucket);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to detect region';
+        res.status(400).json({ error: message });
+        return;
+      }
+    }
+
+    const credentials: S3Credentials = {
+      accessKeyId,
+      secretAccessKey,
+      region: detectedRegion,
+      bucket,
+    };
+
     const isValid = await validateCredentials(credentials);
     if (!isValid) {
       res.status(401).json({ error: 'Invalid credentials or bucket not found' });
@@ -44,7 +57,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       success: true,
-      region,
+      region: detectedRegion,
       bucket,
     });
   } catch (error) {

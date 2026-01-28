@@ -3,7 +3,7 @@ import { apiPost, apiGet } from './client';
 export interface LoginCredentials {
   accessKeyId: string;
   secretAccessKey: string;
-  region: string;
+  region?: string;
   bucket: string;
 }
 

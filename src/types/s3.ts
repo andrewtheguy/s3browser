@@ -33,7 +33,7 @@ export interface UploadProgress {
 export interface LoginCredentials {
   accessKeyId: string;
   secretAccessKey: string;
-  region: string;
+  region?: string;
   bucket: string;
 }
 
