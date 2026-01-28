@@ -10,6 +10,7 @@ import {
 import {
   saveUploadState,
   getUploadByFile,
+  getUploadById,
   deleteUploadState,
   listPendingUploads,
   type PersistedUpload,
@@ -258,21 +259,17 @@ export function useUpload() {
           const useMultipart = uploadItem.file.size >= UPLOAD_CONFIG.MULTIPART_THRESHOLD;
 
           if (useMultipart) {
-            // Check for existing upload to resume
-            const existingUpload = uploadItem.persistenceId
-              ? await getUploadByFile(
-                  uploadItem.file.name,
-                  uploadItem.file.size,
-                  uploadItem.file.lastModified
-                ).catch(() => null)
+            // Fetch full persistence data only if we have a persistenceId and need completedParts array
+            const persistedData = uploadItem.persistenceId
+              ? await getUploadById(uploadItem.persistenceId).catch(() => null)
               : null;
 
             const result = await uploadMultipartFile(
               uploadItem,
               abortController,
-              existingUpload?.uploadId,
-              existingUpload?.completedParts,
-              existingUpload?.id
+              persistedData?.uploadId ?? uploadItem.uploadId,
+              persistedData?.completedParts,
+              persistedData?.id ?? uploadItem.persistenceId
             );
 
             updateUpload(uploadItem.id, {
