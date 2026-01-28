@@ -40,7 +40,14 @@ const server = app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-async function shutdown() {
+let isShuttingDown = false;
+
+function shutdown() {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
   console.log('Shutting down gracefully...');
 
   // Force exit after 10 seconds if graceful shutdown hangs
@@ -66,5 +73,5 @@ async function shutdown() {
   });
 }
 
-process.on('SIGINT', () => void shutdown());
-process.on('SIGTERM', () => void shutdown());
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
