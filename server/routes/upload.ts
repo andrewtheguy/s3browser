@@ -118,8 +118,19 @@ router.post(
       leavePartsOnError: false,
     });
 
-    await uploadManager.done();
-    res.json({ success: true, key: keyValidation.sanitizedKey });
+    try {
+      await uploadManager.done();
+      res.json({ success: true, key: keyValidation.sanitizedKey });
+    } catch (error) {
+      console.error('Upload failed:', error);
+      try {
+        await uploadManager.abort();
+      } catch (abortError) {
+        console.error('Failed to abort upload:', abortError);
+      }
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ success: false, error: 'Upload failed', details: message });
+    }
   }
 );
 
@@ -151,8 +162,14 @@ router.post(
       ContentType: contentType,
     });
 
-    await session.client.send(command);
-    res.json({ success: true, key: keyValidation.sanitizedKey });
+    try {
+      await session.client.send(command);
+      res.json({ success: true, key: keyValidation.sanitizedKey });
+    } catch (error) {
+      console.error('Single file upload failed:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ success: false, error: message });
+    }
   }
 );
 
@@ -211,8 +228,14 @@ router.post(
       Body: req.body as Buffer,
     });
 
-    const result = await session.client.send(command);
-    res.json({ etag: result.ETag });
+    try {
+      const result = await session.client.send(command);
+      res.json({ etag: result.ETag });
+    } catch (error) {
+      console.error('Upload part failed:', { key: tracked.sanitizedKey, uploadId, partNum, error });
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ error: 'Upload part failed', details: message });
+    }
   }
 );
 
@@ -249,7 +272,16 @@ router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promi
     ContentType: contentType || 'application/octet-stream',
   });
 
-  const response = await session.client.send(command);
+  let response;
+  try {
+    response = await session.client.send(command);
+  } catch (error) {
+    console.error('Failed to initiate multipart upload:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to initiate multipart upload', details: message });
+    return;
+  }
+
   const uploadId = response.UploadId;
 
   if (!uploadId) {
@@ -337,12 +369,29 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
     },
   });
 
-  await session.client.send(command);
-
-  // Clean up tracking
-  uploadTracker.delete(trackingKey);
-
-  res.json({ success: true, key: tracked.sanitizedKey });
+  try {
+    await session.client.send(command);
+    // Clean up tracking only on success
+    uploadTracker.delete(trackingKey);
+    res.json({ success: true, key: tracked.sanitizedKey });
+  } catch (error) {
+    console.error('Failed to complete multipart upload:', error);
+    // Attempt to abort the multipart upload on S3
+    try {
+      const abortCommand = new AbortMultipartUploadCommand({
+        Bucket: session.credentials.bucket,
+        Key: tracked.sanitizedKey,
+        UploadId: uploadId,
+      });
+      await session.client.send(abortCommand);
+    } catch (abortError) {
+      console.error('Failed to abort multipart upload after completion failure:', abortError);
+    }
+    // Clean up tracking after abort attempt
+    uploadTracker.delete(trackingKey);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ success: false, error: 'Failed to complete multipart upload', details: message });
+  }
 });
 
 // POST /api/upload/abort - Abort a multipart upload
