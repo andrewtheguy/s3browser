@@ -14,12 +14,25 @@ export function uploadFile({
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
+    // Cleanup function to remove abort listener
+    const abortHandler = () => {
+      xhr.abort();
+    };
+
+    const cleanup = () => {
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', abortHandler);
+      }
+    };
+
     // Handle abort signal
     if (abortSignal) {
-      abortSignal.addEventListener('abort', () => {
-        xhr.abort();
+      // Check if already aborted before starting
+      if (abortSignal.aborted) {
         reject(new DOMException('Upload aborted', 'AbortError'));
-      });
+        return;
+      }
+      abortSignal.addEventListener('abort', abortHandler);
     }
 
     // Progress tracking
@@ -31,6 +44,7 @@ export function uploadFile({
 
     // Success handler
     xhr.addEventListener('load', () => {
+      cleanup();
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
@@ -45,11 +59,13 @@ export function uploadFile({
 
     // Error handler
     xhr.addEventListener('error', () => {
+      cleanup();
       reject(new Error('Network error during upload'));
     });
 
     // Abort handler
     xhr.addEventListener('abort', () => {
+      cleanup();
       reject(new DOMException('Upload aborted', 'AbortError'));
     });
 
