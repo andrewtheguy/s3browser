@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Box,
   Breadcrumbs,
@@ -21,8 +23,19 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
+  const navigate = useNavigate();
   const { credentials, disconnect } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
+
+  const handleDisconnect = useCallback(async () => {
+    try {
+      await disconnect();
+    } catch (error) {
+      console.error('Disconnect failed:', error);
+    } finally {
+      void navigate('/');
+    }
+  }, [disconnect, navigate]);
 
   const handleBreadcrumbClick = (index: number) => {
     if (index === -1) {
@@ -43,12 +56,15 @@ export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
           mb: 2,
         }}
       >
-        <Chip
-          label={`Bucket: ${credentials?.bucket ?? '—'}`}
-          color="primary"
-          variant="outlined"
-          sx={{ fontWeight: 500 }}
-        />
+        <Tooltip title="Click to change bucket">
+          <Chip
+            label={`Bucket: ${credentials?.bucket ?? '—'}`}
+            color="primary"
+            variant="outlined"
+            onClick={() => void navigate('/')}
+            sx={{ fontWeight: 500, cursor: 'pointer' }}
+          />
+        </Tooltip>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Tooltip title="Refresh">
@@ -71,7 +87,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
             Upload
           </Button>
           <Tooltip title="Disconnect">
-            <IconButton onClick={disconnect} color="error">
+            <IconButton onClick={handleDisconnect} color="error">
               <LogoutIcon />
             </IconButton>
           </Tooltip>

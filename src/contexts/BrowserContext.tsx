@@ -7,20 +7,20 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import type { S3Object, BrowserContextValue } from '../types';
 import { useS3ClientContext } from './useS3ClientContext';
 import { listObjects } from '../services/api';
 import { getPathSegments, sortObjects } from '../utils/formatters';
+import { decodeUrlToS3Path } from '../utils/urlEncoding';
 
 interface BrowserState {
-  currentPath: string;
   objects: S3Object[];
   isLoading: boolean;
   error: string | null;
 }
 
 type BrowserAction =
-  | { type: 'SET_PATH'; path: string }
   | { type: 'FETCH_START' }
   | { type: 'FETCH_SUCCESS'; objects: S3Object[] }
   | { type: 'FETCH_ERROR'; error: string }
@@ -28,8 +28,6 @@ type BrowserAction =
 
 function reducer(state: BrowserState, action: BrowserAction): BrowserState {
   switch (action.type) {
-    case 'SET_PATH':
-      return { ...state, currentPath: action.path };
     case 'FETCH_START':
       return { ...state, isLoading: true, error: null };
     case 'FETCH_SUCCESS':
@@ -44,7 +42,6 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
 }
 
 const initialState: BrowserState = {
-  currentPath: '',
   objects: [],
   isLoading: false,
   error: null,
@@ -52,12 +49,30 @@ const initialState: BrowserState = {
 
 export const BrowserContext = createContext<BrowserContextValue | null>(null);
 
-export function BrowserProvider({ children }: { children: ReactNode }) {
+interface BrowserProviderProps {
+  children: ReactNode;
+  initialPath?: string;
+  buildUrl: (path: string) => string;
+}
+
+export function BrowserProvider({
+  children,
+  initialPath = '',
+  buildUrl,
+}: BrowserProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { isConnected } = useS3ClientContext();
+  const navigate = useNavigate();
+  const { '*': splatPath } = useParams<{ '*': string }>();
   const requestIdRef = useRef(0);
-  const initialFetchDoneRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastFetchedPathRef = useRef<string | null>(null);
+
+  // Current path derived from URL (or initial path on first render)
+  // Use trailing slash for folder-style S3 prefixes
+  const currentPath = splatPath !== undefined
+    ? decodeUrlToS3Path(splatPath, true)
+    : initialPath;
 
   const fetchObjects = useCallback(
     async (path: string) => {
@@ -79,6 +94,7 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
         if (requestId === requestIdRef.current) {
           // Sort client-side: folders first, then files, alphabetically
           dispatch({ type: 'FETCH_SUCCESS', objects: sortObjects(result.objects) });
+          lastFetchedPathRef.current = path;
         }
       } catch (err) {
         // Skip dispatch for aborted requests
@@ -96,35 +112,33 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
 
   const navigateTo = useCallback(
     (path: string) => {
-      dispatch({ type: 'SET_PATH', path });
-      void fetchObjects(path);
-      initialFetchDoneRef.current = true;
+      void navigate(buildUrl(path));
     },
-    [fetchObjects]
+    [navigate, buildUrl]
   );
 
   const navigateUp = useCallback(() => {
-    const segments = getPathSegments(state.currentPath);
+    const segments = getPathSegments(currentPath);
     if (segments.length === 0) return;
 
     segments.pop();
     const newPath = segments.length > 0 ? segments.join('/') + '/' : '';
     navigateTo(newPath);
-  }, [state.currentPath, navigateTo]);
+  }, [currentPath, navigateTo]);
 
   const refresh = useCallback(async () => {
-    await fetchObjects(state.currentPath);
-  }, [state.currentPath, fetchObjects]);
+    await fetchObjects(currentPath);
+  }, [currentPath, fetchObjects]);
 
   // Reset when disconnected
   useEffect(() => {
     if (!isConnected) {
       dispatch({ type: 'RESET' });
-      initialFetchDoneRef.current = false;
+      lastFetchedPathRef.current = null;
     }
   }, [isConnected]);
 
-  // Abort pending requests and invalidate on unmount
+  // Abort pending requests on unmount
   useEffect(() => {
     const abortController = abortControllerRef;
     return () => {
@@ -132,33 +146,31 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
         abortController.current.abort();
         abortController.current = null;
       }
-      // Reset refs for StrictMode compatibility (refs persist across unmount/remount)
       // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally modify refs at cleanup time
       requestIdRef.current++;
-      initialFetchDoneRef.current = false;
+      lastFetchedPathRef.current = null;
     };
   }, []);
 
-  // Fetch objects when connected (initial fetch only)
+  // Fetch objects when path changes (URL-driven)
   useEffect(() => {
-    if (isConnected && !initialFetchDoneRef.current) {
-      void fetchObjects('');
-      initialFetchDoneRef.current = true;
+    if (isConnected && lastFetchedPathRef.current !== currentPath) {
+      void fetchObjects(currentPath);
     }
-  }, [isConnected, fetchObjects]);
+  }, [isConnected, currentPath, fetchObjects]);
 
   const value: BrowserContextValue = useMemo(
     () => ({
-      currentPath: state.currentPath,
+      currentPath,
       objects: state.objects,
       isLoading: state.isLoading,
       error: state.error,
       navigateTo,
       navigateUp,
       refresh,
-      pathSegments: getPathSegments(state.currentPath),
+      pathSegments: getPathSegments(currentPath),
     }),
-    [state.currentPath, state.objects, state.isLoading, state.error, navigateTo, navigateUp, refresh]
+    [currentPath, state.objects, state.isLoading, state.error, navigateTo, navigateUp, refresh]
   );
 
   return (

@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Box,
   Card,
@@ -19,9 +20,11 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useS3Client } from '../../hooks';
 import { listBuckets } from '../../services/api';
+import { buildBrowseUrl } from '../../utils/urlEncoding';
 import type { BucketInfo } from '../../types';
 
 export function BucketSelector() {
+  const navigate = useNavigate();
   const { selectBucket, disconnect, error: contextError } = useS3Client();
   const [buckets, setBuckets] = useState<BucketInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,8 +41,12 @@ export function BucketSelector() {
 
     try {
       const bucketList = await listBuckets();
-      setBuckets(bucketList);
-      if (bucketList.length === 0) {
+      // Sort buckets alphabetically by name
+      const sortedBuckets = [...bucketList].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+      setBuckets(sortedBuckets);
+      if (sortedBuckets.length === 0) {
         setShowManualInput(true);
       }
     } catch (err) {
@@ -65,7 +72,15 @@ export function BucketSelector() {
 
     try {
       const success = await selectBucket(bucketName);
-      if (!success) {
+      if (success) {
+        // Navigate to the browse page for this bucket
+        try {
+          await navigate(buildBrowseUrl(bucketName, ''));
+        } catch (navErr) {
+          const navMessage = navErr instanceof Error ? navErr.message : 'Unknown error';
+          setError(`Failed to navigate to bucket: ${navMessage}`);
+        }
+      } else {
         setError('Failed to select bucket');
       }
     } catch (err) {
