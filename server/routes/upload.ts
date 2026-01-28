@@ -43,10 +43,12 @@ function validateAndSanitizeKey(key: string, sessionId: string): { valid: false;
 const router = Router();
 
 // Configure multer for memory storage
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB max file size
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024 * 1024, // 5GB max file size
+    fileSize: MAX_FILE_SIZE,
   },
 });
 

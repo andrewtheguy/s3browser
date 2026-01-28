@@ -3,6 +3,8 @@ import { useS3ClientContext } from '../contexts';
 import { uploadFile, createFolder } from '../services/api';
 import type { UploadProgress } from '../types';
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+
 export function useUpload() {
   const { isConnected } = useS3ClientContext();
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
@@ -34,7 +36,8 @@ export function useUpload() {
         loaded: 0,
         total: file.size,
         percentage: 0,
-        status: 'pending' as const,
+        status: file.size > MAX_FILE_SIZE ? 'error' as const : 'pending' as const,
+        error: file.size > MAX_FILE_SIZE ? 'File exceeds 100MB limit' : undefined,
       }));
 
       if (isMountedRef.current) {
@@ -43,6 +46,11 @@ export function useUpload() {
 
       for (const uploadItem of newUploads) {
         if (!isMountedRef.current) break;
+
+        // Skip files that exceed size limit
+        if (uploadItem.status === 'error') {
+          continue;
+        }
 
         const abortController = new AbortController();
         abortControllersRef.current.set(uploadItem.id, abortController);
