@@ -56,17 +56,17 @@ export function LoginForm() {
     e.preventDefault();
     setIsLoading(true);
 
-    try {
-      const credentials: LoginCredentials = {
-        accessKeyId: formData.accessKeyId,
-        secretAccessKey: formData.secretAccessKey,
-        bucket: formData.bucket,
-        region: autoDetectRegion ? undefined : formData.region || undefined,
-        endpoint: formData.endpoint || undefined,
-      };
-      await connect(credentials);
+    const credentials: LoginCredentials = {
+      accessKeyId: formData.accessKeyId,
+      secretAccessKey: formData.secretAccessKey,
+      bucket: formData.bucket,
+      region: autoDetectRegion ? undefined : formData.region || undefined,
+      endpoint: formData.endpoint || undefined,
+    };
+    const success = await connect(credentials);
 
-      // On successful connect, save/update connection if name provided
+    if (success) {
+      // Only save/update connection on successful connect
       if (formData.connectionName.trim()) {
         saveConnection({
           id: selectedConnectionId || undefined,
@@ -78,14 +78,11 @@ export function LoginForm() {
           autoDetectRegion,
         });
       } else if (selectedConnectionId) {
-        // Update lastUsedAt even if no name change
         updateLastUsed(selectedConnectionId);
       }
-    } catch {
-      // Error is handled by context
-    } finally {
-      setIsLoading(false);
     }
+
+    setIsLoading(false);
   };
 
   const handleChange = (field: keyof typeof formData) => (

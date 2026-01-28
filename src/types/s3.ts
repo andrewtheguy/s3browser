@@ -51,7 +51,7 @@ export interface LoginCredentials {
 export interface S3ClientContextValue {
   credentials: S3Credentials | null;
   isConnected: boolean;
-  connect: (credentials: LoginCredentials) => Promise<void>;
+  connect: (credentials: LoginCredentials) => Promise<boolean>;
   disconnect: () => void;
   error: string | null;
 }
