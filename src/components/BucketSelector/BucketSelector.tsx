@@ -56,7 +56,7 @@ export function BucketSelector() {
   };
 
   useEffect(() => {
-    fetchBuckets();
+    void fetchBuckets();
   }, []);
 
   const handleSelectBucket = async (bucketName: string) => {

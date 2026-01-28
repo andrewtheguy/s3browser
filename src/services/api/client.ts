@@ -24,8 +24,13 @@ export async function apiRequest<T>(
     try {
       const text = await response.text();
       if (text) {
-        const parsed = JSON.parse(text);
-        errorMessage = parsed.error || errorMessage;
+        const parsed: unknown = JSON.parse(text);
+        if (typeof parsed === 'object' && parsed !== null && 'error' in parsed) {
+          const errorValue = (parsed as { error: unknown }).error;
+          if (typeof errorValue === 'string') {
+            errorMessage = errorValue;
+          }
+        }
       }
     } catch {
       // Failed to parse error response, use default message
@@ -46,7 +51,7 @@ export async function apiRequest<T>(
     throw new Error(`Unexpected content type: ${contentType || 'none'}`);
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }
 
 export function apiGet<T>(endpoint: string, signal?: AbortSignal): Promise<T | null> {

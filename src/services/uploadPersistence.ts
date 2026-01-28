@@ -136,7 +136,7 @@ export async function getUploadById(id: string): Promise<PersistedUpload | null>
     const request = store.get(id);
 
     request.onsuccess = () => {
-      resolve(request.result || null);
+      resolve((request.result as PersistedUpload | undefined) || null);
     };
 
     request.onerror = () => {
@@ -162,7 +162,7 @@ export async function getUploadByFile(
     const request = index.get([fileName, fileSize, fileLastModified]);
 
     request.onsuccess = () => {
-      resolve(request.result || null);
+      resolve((request.result as PersistedUpload | undefined) || null);
     };
 
     request.onerror = () => {
@@ -209,7 +209,7 @@ export async function listPendingUploads(): Promise<PersistedUpload[]> {
     request.onsuccess = () => {
       const cursor = request.result;
       if (cursor) {
-        uploads.push(cursor.value);
+        uploads.push(cursor.value as PersistedUpload);
         cursor.continue();
       } else {
         resolve(uploads);

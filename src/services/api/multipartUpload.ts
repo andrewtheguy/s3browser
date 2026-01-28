@@ -32,7 +32,7 @@ export interface MultipartUploadOptions {
   file: File;
   key: string;
   onProgress?: (loaded: number, total: number, partProgress?: UploadPartProgress) => void;
-  onPartComplete?: (partNumber: number, etag: string, completedParts: number, totalParts: number) => void;
+  onPartComplete?: (partNumber: number, etag: string, completedParts: number, totalParts: number) => void | Promise<void>;
   onInitiated?: (uploadId: string, sanitizedKey: string) => void;
   abortSignal?: AbortSignal;
   existingUploadId?: string;
@@ -436,7 +436,7 @@ export async function uploadFileMultipart({
         completedPartNumbers.add(partNumber);
 
         if (onPartComplete) {
-          onPartComplete(partNumber, etag, completedParts.length, totalParts);
+          void onPartComplete(partNumber, etag, completedParts.length, totalParts);
         }
 
         if (onProgress) {

@@ -62,7 +62,7 @@ export function S3Browser() {
   }, []);
 
   const handleUploadComplete = useCallback(() => {
-    refresh();
+    void refresh();
     showSnackbar('Files uploaded successfully', 'success');
   }, [refresh, showSnackbar]);
 
@@ -174,7 +174,7 @@ export function S3Browser() {
             disabled={isCreatingFolder}
             onKeyPress={(e) => {
               if (e.key === 'Enter' && newFolderName.trim()) {
-                handleCreateFolderConfirm();
+                void handleCreateFolderConfirm();
               }
             }}
           />

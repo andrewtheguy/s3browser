@@ -58,7 +58,7 @@ export interface S3ClientContextValue {
   isConnected: boolean;
   requiresBucketSelection: boolean;
   connect: (credentials: LoginCredentials) => Promise<boolean>;
-  disconnect: () => void;
+  disconnect: () => void | Promise<void>;
   selectBucket: (bucket: string) => Promise<boolean>;
   error: string | null;
 }

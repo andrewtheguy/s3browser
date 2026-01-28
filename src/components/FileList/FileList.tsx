@@ -55,7 +55,7 @@ export function FileList({ onDeleteRequest }: FileListProps) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {[...Array(5)].map((_, index) => (
+            {Array.from({ length: 5 }).map((_, index) => (
               <TableRow key={index}>
                 <TableCell>
                   <Skeleton variant="circular" width={24} height={24} />

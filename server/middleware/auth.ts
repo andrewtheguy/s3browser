@@ -257,7 +257,7 @@ export function authMiddleware(
   res: Response,
   next: NextFunction
 ): void {
-  const sessionId = req.cookies?.sessionId;
+  const sessionId = req.cookies?.sessionId as string | undefined;
 
   if (!sessionId) {
     res.status(401).json({ error: 'Not authenticated' });

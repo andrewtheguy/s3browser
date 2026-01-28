@@ -14,11 +14,24 @@ import {
   validateBucket,
 } from '../middleware/auth.js';
 
+interface LoginRequestBody {
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  region?: string;
+  bucket?: string;
+  endpoint?: string;
+}
+
+interface SelectBucketRequestBody {
+  bucket?: string;
+}
+
 const router = Router();
 
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
-  const { accessKeyId, secretAccessKey, region, bucket, endpoint } = req.body;
+  const body = req.body as LoginRequestBody;
+  const { accessKeyId, secretAccessKey, region, bucket, endpoint } = body;
 
   if (!accessKeyId || !secretAccessKey) {
     res.status(400).json({ error: 'Missing required credentials' });
@@ -95,7 +108,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
 // POST /api/auth/logout
 router.post('/logout', (req: Request, res: Response): void => {
-  const sessionId = req.cookies?.sessionId;
+  const sessionId = req.cookies?.sessionId as string | undefined;
 
   if (sessionId) {
     deleteSession(sessionId);
@@ -107,7 +120,7 @@ router.post('/logout', (req: Request, res: Response): void => {
 
 // GET /api/auth/status
 router.get('/status', (req: Request, res: Response): void => {
-  const sessionId = req.cookies?.sessionId;
+  const sessionId = req.cookies?.sessionId as string | undefined;
 
   if (!sessionId) {
     res.json({ authenticated: false });
@@ -157,7 +170,8 @@ router.get('/buckets', authMiddleware, async (req: AuthenticatedRequest, res: Re
 
 // POST /api/auth/select-bucket - Select a bucket for the current session
 router.post('/select-bucket', authMiddleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { bucket } = req.body;
+  const body = req.body as SelectBucketRequestBody;
+  const { bucket } = body;
   const session = req.session!;
   const sessionId = req.sessionId!;
 

@@ -118,7 +118,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const abortController = new AbortController();
 
-    (async () => {
+    void (async () => {
       try {
         const status = await getAuthStatus(abortController.signal);
         if (!abortController.signal.aborted && status.authenticated && status.region) {
