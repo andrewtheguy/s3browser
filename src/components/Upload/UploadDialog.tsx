@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -15,7 +15,9 @@ import {
   Chip,
   Divider,
   Tooltip,
+  Alert,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -50,6 +52,11 @@ export function UploadDialog({
     isUploading,
   } = useUpload();
 
+  // State and ref for resuming pending uploads via file picker
+  const resumeFileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingToResume, setPendingToResume] = useState<typeof pendingResumable[0] | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
       await upload(files, currentPath);
@@ -59,14 +66,46 @@ export function UploadDialog({
 
   const handleResumeFromPending = useCallback(
     (pending: typeof pendingResumable[0]) => {
-      // Create a File-like object from the pending upload info
-      // Note: We can't fully reconstruct the File, user needs to re-select
-      // This is a limitation - we'll prompt them to re-select the file
-      alert(
-        `To resume "${pending.fileName}", please drag and drop or select the same file again.`
-      );
+      setPendingToResume(pending);
+      setResumeError(null);
+      // Trigger file picker
+      if (resumeFileInputRef.current) {
+        resumeFileInputRef.current.value = '';
+        resumeFileInputRef.current.click();
+      }
     },
     []
+  );
+
+  const handleResumeFileSelect = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      // Clear input for future use
+      if (resumeFileInputRef.current) {
+        resumeFileInputRef.current.value = '';
+      }
+
+      if (!file || !pendingToResume) {
+        setPendingToResume(null);
+        return;
+      }
+
+      // Verify file matches the pending upload (name and size)
+      if (file.name !== pendingToResume.fileName || file.size !== pendingToResume.fileSize) {
+        setResumeError(
+          `File mismatch: Expected "${pendingToResume.fileName}" (${pendingToResume.fileSize} bytes), ` +
+          `got "${file.name}" (${file.size} bytes). Please select the correct file.`
+        );
+        setPendingToResume(null);
+        return;
+      }
+
+      // File matches - upload will automatically detect and resume the pending upload
+      setResumeError(null);
+      setPendingToResume(null);
+      await upload([file], ''); // Use the key from pending upload (already includes path)
+    },
+    [pendingToResume, upload]
   );
 
   const handleClose = useCallback(() => {
@@ -124,6 +163,21 @@ export function UploadDialog({
         </Box>
       </DialogTitle>
       <DialogContent>
+        {/* Hidden file input for resuming uploads */}
+        <input
+          type="file"
+          ref={resumeFileInputRef}
+          onChange={handleResumeFileSelect}
+          style={{ display: 'none' }}
+        />
+
+        {/* Resume error alert */}
+        {resumeError && (
+          <Alert severity="error" onClose={() => setResumeError(null)} sx={{ mb: 2 }}>
+            {resumeError}
+          </Alert>
+        )}
+
         {/* Pending Resumable Uploads Section */}
         {pendingResumable.length > 0 && (
           <Box sx={{ mb: 2 }}>
@@ -133,13 +187,13 @@ export function UploadDialog({
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               These uploads were interrupted. Re-select the same file to resume.
             </Typography>
-            <List dense sx={{ bgcolor: 'warning.light', borderRadius: 1, opacity: 0.9 }}>
+            <List dense sx={(theme) => ({ bgcolor: alpha(theme.palette.warning.light, 0.5), borderRadius: 1 })}>
               {pendingResumable.map((pending) => (
                 <ListItem
                   key={pending.id}
                   secondaryAction={
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <Tooltip title="Resume (re-select file)">
+                      <Tooltip title="Re-select file to resume upload">
                         <IconButton
                           size="small"
                           onClick={() => handleResumeFromPending(pending)}
@@ -163,7 +217,7 @@ export function UploadDialog({
                   </ListItemIcon>
                   <ListItemText
                     primary={
-                      <Typography variant="body2" noWrap sx={{ maxWidth: 180 }}>
+                      <Typography variant="body2" noWrap sx={{ maxWidth: { xs: 120, sm: 200, md: 280 } }}>
                         {pending.fileName}
                       </Typography>
                     }

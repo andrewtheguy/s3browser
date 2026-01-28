@@ -30,11 +30,26 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = () => {
+      // Reset so subsequent calls can retry
+      dbPromise = null;
       reject(new Error('Failed to open IndexedDB'));
     };
 
     request.onsuccess = () => {
-      resolve(request.result);
+      const db = request.result;
+
+      // Handle database version change (e.g., another tab upgraded the schema)
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+
+      // Handle unexpected database close
+      db.onclose = () => {
+        dbPromise = null;
+      };
+
+      resolve(db);
     };
 
     request.onupgradeneeded = (event) => {
