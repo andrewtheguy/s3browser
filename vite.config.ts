@@ -15,6 +15,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        // Deterministic names (no hash) required for standalone build.
+        // server/standalone.ts imports these by exact filename for embedding.
         entryFileNames: 'assets/[name].js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name].[ext]'

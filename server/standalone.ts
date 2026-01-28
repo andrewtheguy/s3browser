@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
+import { parseArgs } from 'util';
 import authRoutes from './routes/auth.js';
 import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
@@ -10,6 +11,27 @@ import indexHtml from '../dist/index.html' with { type: 'text' };
 import indexJs from '../dist/assets/index.js' with { type: 'text' };
 import indexCss from '../dist/assets/index.css' with { type: 'text' };
 
+// Parse CLI arguments
+const { values } = parseArgs({
+  options: {
+    port: { type: 'string', short: 'p' },
+    help: { type: 'boolean', short: 'h' },
+  },
+  strict: false,
+});
+
+if (values.help) {
+  console.log(`Usage: s3browser [options]
+
+Options:
+  -p, --port <port>  Port to listen on (default: 3001)
+  -h, --help         Show this help message
+
+Environment variables:
+  PORT               Port to listen on (overridden by --port)`);
+  process.exit(0);
+}
+
 // Asset map for serving
 const embeddedAssets: Record<string, { content: string; mime: string }> = {
   '/index.html': { content: indexHtml as string, mime: 'text/html' },
@@ -18,7 +40,7 @@ const embeddedAssets: Record<string, { content: string; mime: string }> = {
 };
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = values.port || process.env.PORT || 3001;
 
 // Middleware
 app.use(express.json());
