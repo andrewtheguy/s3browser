@@ -48,7 +48,7 @@ export function useUpload() {
                         ...u,
                         loaded,
                         total,
-                        percentage: Math.round((loaded / total) * 100),
+                        percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
                       }
                     : u
                 )

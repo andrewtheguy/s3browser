@@ -3,6 +3,7 @@ import {
   useReducer,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from 'react';
 import type { S3Object, BrowserContextValue } from '../types';
@@ -53,19 +54,26 @@ export const BrowserContext = createContext<BrowserContextValue | null>(null);
 export function BrowserProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { isConnected } = useS3ClientContext();
+  const requestIdRef = useRef(0);
+  const initialFetchDoneRef = useRef(false);
 
   const fetchObjects = useCallback(
     async (path: string) => {
       if (!isConnected) return;
 
+      const requestId = ++requestIdRef.current;
       dispatch({ type: 'FETCH_START' });
 
       try {
         const result = await listObjects(path);
-        dispatch({ type: 'FETCH_SUCCESS', objects: result.objects });
+        if (requestId === requestIdRef.current) {
+          dispatch({ type: 'FETCH_SUCCESS', objects: result.objects });
+        }
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to list objects';
-        dispatch({ type: 'FETCH_ERROR', error: message });
+        if (requestId === requestIdRef.current) {
+          const message = err instanceof Error ? err.message : 'Failed to list objects';
+          dispatch({ type: 'FETCH_ERROR', error: message });
+        }
       }
     },
     [isConnected]
@@ -75,6 +83,7 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
     (path: string) => {
       dispatch({ type: 'SET_PATH', path });
       fetchObjects(path);
+      initialFetchDoneRef.current = true;
     },
     [fetchObjects]
   );
@@ -96,13 +105,23 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isConnected) {
       dispatch({ type: 'RESET' });
+      initialFetchDoneRef.current = false;
     }
   }, [isConnected]);
 
-  // Fetch objects when connected
+  // Invalidate pending requests on unmount
   useEffect(() => {
-    if (isConnected) {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally increment current value at cleanup time
+      requestIdRef.current++;
+    };
+  }, []);
+
+  // Fetch objects when connected (initial fetch only)
+  useEffect(() => {
+    if (isConnected && !initialFetchDoneRef.current) {
       fetchObjects(state.currentPath);
+      initialFetchDoneRef.current = true;
     }
   }, [isConnected, fetchObjects, state.currentPath]);
 
