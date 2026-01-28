@@ -93,8 +93,8 @@ export function UploadDialog({
       // Verify file matches the pending upload (name and size)
       if (file.name !== pendingToResume.fileName || file.size !== pendingToResume.fileSize) {
         setResumeError(
-          `File mismatch: Expected "${pendingToResume.fileName}" (${pendingToResume.fileSize} bytes), ` +
-          `got "${file.name}" (${file.size} bytes). Please select the correct file.`
+          `File mismatch: Expected "${pendingToResume.fileName}" (${formatFileSize(pendingToResume.fileSize)}), ` +
+          `got "${file.name}" (${formatFileSize(file.size)}). Please select the correct file.`
         );
         setPendingToResume(null);
         return;

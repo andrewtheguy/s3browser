@@ -174,7 +174,7 @@ router.post(
     } catch (error) {
       console.error('Single file upload failed:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({ success: false, error: message });
+      res.status(500).json({ error: 'Single file upload failed', details: message });
     }
   }
 );

@@ -173,18 +173,17 @@ export async function uploadPart(
     abortSignal,
   });
 
+  let response: UploadPartResponse;
   try {
-    const response = JSON.parse(responseText) as UploadPartResponse;
-    if (response.etag) {
-      return response.etag;
-    }
-    throw new Error('No ETag in response');
-  } catch (err) {
-    if (err instanceof Error && err.message === 'No ETag in response') {
-      throw err;
-    }
-    throw new Error('Invalid response from server');
+    response = JSON.parse(responseText) as UploadPartResponse;
+  } catch (parseError) {
+    throw new Error('Invalid response from server', { cause: parseError });
   }
+
+  if (!response.etag) {
+    throw new Error('No ETag in response');
+  }
+  return response.etag;
 }
 
 /**
@@ -277,9 +276,12 @@ async function uploadPartWithRetry(
 
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      // Wait before retry (exponential backoff) with abort awareness
+      // Wait before retry (exponential backoff with jitter) with abort awareness
       if (attempt < maxRetries - 1) {
         const delayMs = Math.pow(2, attempt) * 1000;
+        // Add jitter (±50%) to prevent thundering herd
+        const jitterFactor = 0.5 + Math.random() * 0.5;
+        const jitteredDelayMs = Math.floor(delayMs * jitterFactor);
 
         // Check if already aborted before sleeping
         if (abortSignal?.aborted) {
@@ -291,7 +293,7 @@ async function uploadPartWithRetry(
           const timeoutId = setTimeout(() => {
             cleanup();
             resolve();
-          }, delayMs);
+          }, jitteredDelayMs);
 
           const abortHandler = () => {
             clearTimeout(timeoutId);
