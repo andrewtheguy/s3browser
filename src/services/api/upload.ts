@@ -5,6 +5,9 @@ export interface UploadOptions {
   abortSignal?: AbortSignal;
 }
 
+/**
+ * Legacy upload via server proxy (for backwards compatibility)
+ */
 export function uploadFile({
   file,
   key,

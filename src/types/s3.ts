@@ -28,8 +28,17 @@ export interface UploadProgress {
   loaded: number;
   total: number;
   percentage: number;
-  status: 'pending' | 'uploading' | 'completed' | 'error';
+  status: 'pending' | 'uploading' | 'completed' | 'error' | 'paused';
   error?: string;
+  // Multipart upload fields
+  uploadId?: string;
+  isMultipart?: boolean;
+  completedParts?: number;
+  totalParts?: number;
+  canResume?: boolean;
+  isPaused?: boolean;
+  // Persistence ID for IndexedDB
+  persistenceId?: string;
 }
 
 export interface LoginCredentials {

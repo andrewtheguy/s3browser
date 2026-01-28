@@ -8,20 +8,33 @@ import {
   ListItemIcon,
   ListItemText,
   Chip,
+  Tooltip,
 } from '@mui/material';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import PauseIcon from '@mui/icons-material/Pause';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import type { UploadProgress as UploadProgressType } from '../../types';
 import { formatFileSize } from '../../utils/formatters';
 
 interface UploadProgressProps {
   uploads: UploadProgressType[];
   onCancel: (id: string) => void;
+  onPause?: (id: string) => void;
+  onResume?: (id: string) => void;
+  onRetry?: (id: string) => void;
 }
 
-export function UploadProgress({ uploads, onCancel }: UploadProgressProps) {
+export function UploadProgress({
+  uploads,
+  onCancel,
+  onPause,
+  onResume,
+  onRetry,
+}: UploadProgressProps) {
   if (uploads.length === 0) {
     return null;
   }
@@ -36,15 +49,54 @@ export function UploadProgress({ uploads, onCancel }: UploadProgressProps) {
           <ListItem
             key={upload.id}
             secondaryAction={
-              upload.status === 'uploading' ? (
-                <IconButton
-                  edge="end"
-                  size="small"
-                  onClick={() => onCancel(upload.id)}
-                >
-                  <CloseIcon fontSize="small" />
-                </IconButton>
-              ) : null
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                {upload.status === 'uploading' && upload.isMultipart && onPause && (
+                  <Tooltip title="Pause">
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      onClick={() => onPause(upload.id)}
+                    >
+                      <PauseIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {upload.status === 'paused' && onResume && (
+                  <Tooltip title="Resume">
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      onClick={() => onResume(upload.id)}
+                    >
+                      <PlayArrowIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {upload.status === 'error' && onRetry && (
+                  <Tooltip title="Retry">
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      onClick={() => onRetry(upload.id)}
+                    >
+                      <RefreshIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {(upload.status === 'uploading' ||
+                  upload.status === 'paused' ||
+                  upload.status === 'error') && (
+                  <Tooltip title="Cancel">
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      onClick={() => onCancel(upload.id)}
+                    >
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
             }
             sx={{
               bgcolor: 'background.default',
@@ -57,14 +109,16 @@ export function UploadProgress({ uploads, onCancel }: UploadProgressProps) {
                 <CheckCircleIcon color="success" />
               ) : upload.status === 'error' ? (
                 <ErrorIcon color="error" />
+              ) : upload.status === 'paused' ? (
+                <PauseIcon color="warning" />
               ) : (
                 <InsertDriveFileIcon />
               )}
             </ListItemIcon>
             <ListItemText
               primary={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Typography variant="body2" noWrap sx={{ maxWidth: 180 }}>
                     {upload.file.name}
                   </Typography>
                   <Chip
@@ -72,6 +126,15 @@ export function UploadProgress({ uploads, onCancel }: UploadProgressProps) {
                     label={formatFileSize(upload.total)}
                     sx={{ fontSize: '0.7rem' }}
                   />
+                  {upload.isMultipart && upload.totalParts && (
+                    <Chip
+                      size="small"
+                      label={`Part ${upload.completedParts || 0}/${upload.totalParts}`}
+                      color="primary"
+                      variant="outlined"
+                      sx={{ fontSize: '0.7rem' }}
+                    />
+                  )}
                 </Box>
               }
               secondary={
@@ -88,6 +151,18 @@ export function UploadProgress({ uploads, onCancel }: UploadProgressProps) {
                     />
                     <Typography variant="caption" sx={{ minWidth: 35 }}>
                       {upload.percentage}%
+                    </Typography>
+                  </Box>
+                ) : upload.status === 'paused' ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={upload.percentage}
+                      color="warning"
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <Typography variant="caption" color="warning.main" sx={{ minWidth: 50 }}>
+                      Paused
                     </Typography>
                   </Box>
                 ) : upload.status === 'completed' ? (
