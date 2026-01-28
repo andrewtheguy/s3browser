@@ -92,18 +92,19 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    getAuthStatus()
-      .then((status) => {
+    (async () => {
+      try {
+        const status = await getAuthStatus();
         if (mounted && status.authenticated && status.region && status.bucket) {
           dispatch({
             type: 'CONNECT_SUCCESS',
             session: { region: status.region, bucket: status.bucket },
           });
         }
-      })
-      .catch(() => {
+      } catch {
         // Session check failed, stay disconnected
-      });
+      }
+    })();
 
     return () => {
       mounted = false;

@@ -27,13 +27,16 @@ export function useUpload() {
 
   // Load pending resumable uploads on mount
   useEffect(() => {
-    listPendingUploads()
-      .then((pending) => {
+    (async () => {
+      try {
+        const pending = await listPendingUploads();
         if (isMountedRef.current) {
           setPendingResumable(pending);
         }
-      })
-      .catch(console.error);
+      } catch (error) {
+        console.error(error);
+      }
+    })();
   }, []);
 
   // Cleanup on unmount: abort all in-progress uploads and prevent state updates
@@ -178,7 +181,7 @@ export function useUpload() {
 
       // Upload completed - clean up persistence
       if (currentPersistenceId) {
-        await deleteUploadState(currentPersistenceId).catch(console.error);
+        void deleteUploadState(currentPersistenceId).catch(console.error);
       }
 
       return result;
@@ -284,13 +287,16 @@ export function useUpload() {
       }
 
       // Refresh pending resumable list
-      listPendingUploads()
-        .then((pending) => {
+      (async () => {
+        try {
+          const pending = await listPendingUploads();
           if (isMountedRef.current) {
             setPendingResumable(pending);
           }
-        })
-        .catch(console.error);
+        } catch (error) {
+          console.error(error);
+        }
+      })();
     },
     [isConnected, updateUpload, uploadSingleFileWithPresign, uploadMultipartFile]
   );
@@ -314,20 +320,23 @@ export function useUpload() {
 
       // Clean up persistence
       if (uploadItem.persistenceId) {
-        await deleteUploadState(uploadItem.persistenceId).catch(console.error);
+        void deleteUploadState(uploadItem.persistenceId).catch(console.error);
       }
     }
 
     setUploads((prev) => prev.filter((u) => u.id !== id));
 
     // Refresh pending resumable list
-    listPendingUploads()
-      .then((pending) => {
+    (async () => {
+      try {
+        const pending = await listPendingUploads();
         if (isMountedRef.current) {
           setPendingResumable(pending);
         }
-      })
-      .catch(console.error);
+      } catch (error) {
+        console.error(error);
+      }
+    })();
   }, [uploads]);
 
   const pauseUpload = useCallback((id: string) => {
@@ -397,13 +406,16 @@ export function useUpload() {
       }
 
       // Refresh pending resumable list
-      listPendingUploads()
-        .then((pending) => {
+      (async () => {
+        try {
+          const pending = await listPendingUploads();
           if (isMountedRef.current) {
             setPendingResumable(pending);
           }
-        })
-        .catch(console.error);
+        } catch (error) {
+          console.error(error);
+        }
+      })();
     },
     [uploads, updateUpload, uploadMultipartFile]
   );
