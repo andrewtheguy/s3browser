@@ -74,7 +74,12 @@ export function BucketSelector() {
       const success = await selectBucket(bucketName);
       if (success) {
         // Navigate to the browse page for this bucket
-        void navigate(buildBrowseUrl(bucketName, ''));
+        try {
+          await navigate(buildBrowseUrl(bucketName, ''));
+        } catch (navErr) {
+          const navMessage = navErr instanceof Error ? navErr.message : 'Unknown error';
+          setError(`Failed to navigate to bucket: ${navMessage}`);
+        }
       } else {
         setError('Failed to select bucket');
       }

@@ -15,9 +15,15 @@ export function HomePage() {
     // Only auto-redirect if there's a returnTo param (user was redirected from a protected route)
     // This allows users to explicitly navigate to "/" to change buckets
     if (isConnected && credentials?.bucket && returnTo) {
-      // Validate returnTo starts with /browse/ to prevent open redirect
-      if (returnTo.startsWith('/browse/')) {
-        void navigate(returnTo, { replace: true });
+      // Validate returnTo by parsing and normalizing to prevent path traversal attacks
+      // e.g., '/browse/../admin' would normalize to '/admin' and fail validation
+      try {
+        const url = new URL(returnTo, window.location.origin);
+        if (url.pathname.startsWith('/browse/')) {
+          void navigate(url.pathname + url.search, { replace: true });
+        }
+      } catch {
+        // Invalid URL - ignore and don't redirect
       }
     }
   }, [isConnected, credentials?.bucket, navigate, returnTo]);

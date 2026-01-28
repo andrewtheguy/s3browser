@@ -1,5 +1,5 @@
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
-import { RouterProvider } from 'react-router';
+import { RouterProvider } from 'react-router-dom';
 import { router } from './router';
 
 const theme = createTheme({

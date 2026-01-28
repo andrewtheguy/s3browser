@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Box, CircularProgress, Alert } from '@mui/material';
 import { BrowserProvider, useS3ClientContext } from '../contexts';
@@ -15,7 +15,16 @@ export function BrowsePage() {
   const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Decode the URL path to S3 path (with trailing slash for folder-style prefix)
-  const initialPath = decodeUrlToS3Path(splatPath || '', true);
+  const initialPath = useMemo(
+    () => decodeUrlToS3Path(splatPath || '', true),
+    [splatPath]
+  );
+
+  // Memoize buildUrl to prevent unnecessary re-renders in BrowserProvider
+  const buildUrl = useCallback(
+    (path: string) => buildBrowseUrl(bucket, path),
+    [bucket]
+  );
 
   const doSelectBucket = useCallback(async (bucketName: string) => {
     if (selectingRef.current) return;
@@ -114,10 +123,7 @@ export function BrowsePage() {
   }
 
   return (
-    <BrowserProvider
-      initialPath={initialPath}
-      buildUrl={(path: string) => buildBrowseUrl(bucket, path)}
-    >
+    <BrowserProvider initialPath={initialPath} buildUrl={buildUrl}>
       <S3Browser />
     </BrowserProvider>
   );
