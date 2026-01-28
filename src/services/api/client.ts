@@ -53,13 +53,14 @@ export async function apiGet<T>(endpoint: string, signal?: AbortSignal): Promise
   return apiRequest<T>(endpoint, { method: 'GET', signal });
 }
 
-export async function apiPost<T>(endpoint: string, body?: unknown): Promise<T | null> {
+export async function apiPost<T>(endpoint: string, body?: unknown, signal?: AbortSignal): Promise<T | null> {
   return apiRequest<T>(endpoint, {
     method: 'POST',
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   });
 }
 
-export async function apiDelete<T>(endpoint: string): Promise<T | null> {
-  return apiRequest<T>(endpoint, { method: 'DELETE' });
+export async function apiDelete<T>(endpoint: string, signal?: AbortSignal): Promise<T | null> {
+  return apiRequest<T>(endpoint, { method: 'DELETE', signal });
 }
