@@ -109,6 +109,8 @@ export function LoginForm() {
         secretAccessKey: '',
       });
       setAutoDetectRegion(true);
+      setEndpointTouched(false);
+      setNameTouched(false);
       return;
     }
 
@@ -124,6 +126,8 @@ export function LoginForm() {
         secretAccessKey: '', // Never auto-fill secret
       });
       setAutoDetectRegion(connection.autoDetectRegion);
+      setEndpointTouched(false);
+      setNameTouched(false);
     }
   };
 
