@@ -52,14 +52,12 @@ export const BrowserContext = createContext<BrowserContextValue | null>(null);
 interface BrowserProviderProps {
   children: ReactNode;
   initialPath?: string;
-  bucket: string;
   buildUrl: (path: string) => string;
 }
 
 export function BrowserProvider({
   children,
   initialPath = '',
-  bucket: _bucket,
   buildUrl,
 }: BrowserProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -71,8 +69,9 @@ export function BrowserProvider({
   const lastFetchedPathRef = useRef<string | null>(null);
 
   // Current path derived from URL (or initial path on first render)
+  // Use trailing slash for folder-style S3 prefixes
   const currentPath = splatPath !== undefined
-    ? decodeUrlToS3Path(splatPath)
+    ? decodeUrlToS3Path(splatPath, true)
     : initialPath;
 
   const fetchObjects = useCallback(

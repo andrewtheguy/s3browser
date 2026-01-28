@@ -19,16 +19,18 @@ export function encodeS3PathForUrl(path: string): string {
 
 /**
  * Decode a URL path back to an S3 path
+ * @param urlPath - The URL-encoded path to decode
+ * @param addTrailingSlash - If true, append a trailing slash for folder-style paths (default: false)
  */
-export function decodeUrlToS3Path(urlPath: string): string {
+export function decodeUrlToS3Path(urlPath: string, addTrailingSlash: boolean = false): string {
   if (!urlPath) return '';
 
   // Split, decode each segment, rejoin
   const segments = urlPath.split('/').filter(Boolean);
   const decoded = segments.map(segment => decodeURIComponent(segment)).join('/');
 
-  // Ensure trailing slash for folder paths (if original had content)
-  return decoded ? decoded + '/' : '';
+  if (!decoded) return '';
+  return addTrailingSlash ? decoded + '/' : decoded;
 }
 
 /**

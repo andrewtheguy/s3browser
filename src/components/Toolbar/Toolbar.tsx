@@ -28,8 +28,13 @@ export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
 
   const handleDisconnect = useCallback(async () => {
-    await disconnect();
-    void navigate('/');
+    try {
+      await disconnect();
+    } catch (error) {
+      console.error('Disconnect failed:', error);
+    } finally {
+      void navigate('/');
+    }
   }, [disconnect, navigate]);
 
   const handleBreadcrumbClick = (index: number) => {

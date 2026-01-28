@@ -12,9 +12,10 @@ export function BrowsePage() {
   const [isSelectingBucket, setIsSelectingBucket] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectingRef = useRef(false);
+  const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Decode the URL path to S3 path
-  const initialPath = decodeUrlToS3Path(splatPath || '');
+  // Decode the URL path to S3 path (with trailing slash for folder-style prefix)
+  const initialPath = decodeUrlToS3Path(splatPath || '', true);
 
   const doSelectBucket = useCallback(async (bucketName: string) => {
     if (selectingRef.current) return;
@@ -22,15 +23,21 @@ export function BrowsePage() {
     setIsSelectingBucket(true);
     setError(null);
 
+    // Clear any pending timeout from previous attempts
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
+    }
+
     try {
       const success = await selectBucket(bucketName);
       if (!success) {
         setError(`Failed to access bucket: ${bucketName}`);
-        setTimeout(() => void navigate('/', { replace: true }), 2000);
+        timeoutIdRef.current = setTimeout(() => void navigate('/', { replace: true }), 2000);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to select bucket');
-      setTimeout(() => void navigate('/', { replace: true }), 2000);
+      timeoutIdRef.current = setTimeout(() => void navigate('/', { replace: true }), 2000);
     } finally {
       setIsSelectingBucket(false);
       selectingRef.current = false;
@@ -43,6 +50,16 @@ export function BrowsePage() {
       void doSelectBucket(bucket);
     }
   }, [isConnected, bucket, credentials?.bucket, doSelectBucket]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutIdRef.current) {
+        clearTimeout(timeoutIdRef.current);
+        timeoutIdRef.current = null;
+      }
+    };
+  }, []);
 
   // Show loading while selecting bucket
   if (isSelectingBucket) {
@@ -99,7 +116,6 @@ export function BrowsePage() {
   return (
     <BrowserProvider
       initialPath={initialPath}
-      bucket={bucket}
       buildUrl={(path: string) => buildBrowseUrl(bucket, path)}
     >
       <S3Browser />
