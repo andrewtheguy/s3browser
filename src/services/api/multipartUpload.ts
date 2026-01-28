@@ -59,10 +59,99 @@ export async function initiateUpload(
 }
 
 
+interface XhrUploadOptions {
+  url: string;
+  body: Blob | File;
+  contentType: string;
+  onProgress?: (loaded: number, total: number) => void;
+  abortSignal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+const DEFAULT_UPLOAD_TIMEOUT = 300000; // 5 minutes
+
+/**
+ * Shared XHR upload helper with abort, progress, and timeout handling
+ */
+function performXhrUpload({
+  url,
+  body,
+  contentType,
+  onProgress,
+  abortSignal,
+  timeoutMs = DEFAULT_UPLOAD_TIMEOUT,
+}: XhrUploadOptions): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    const abortHandler = () => {
+      xhr.abort();
+    };
+
+    const cleanup = () => {
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', abortHandler);
+      }
+    };
+
+    // Handle abort signal
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', abortHandler);
+      if (abortSignal.aborted) {
+        cleanup();
+        reject(new DOMException('Upload aborted', 'AbortError'));
+        return;
+      }
+    }
+
+    // Progress tracking
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable && onProgress) {
+        onProgress(event.loaded, event.total);
+      }
+    });
+
+    // Success handler
+    xhr.addEventListener('load', () => {
+      cleanup();
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.responseText);
+      } else {
+        reject(new Error(`Upload failed with status ${xhr.status}`));
+      }
+    });
+
+    // Error handler
+    xhr.addEventListener('error', () => {
+      cleanup();
+      reject(new Error('Network error during upload'));
+    });
+
+    // Abort handler
+    xhr.addEventListener('abort', () => {
+      cleanup();
+      reject(new DOMException('Upload aborted', 'AbortError'));
+    });
+
+    // Timeout handler
+    xhr.addEventListener('timeout', () => {
+      cleanup();
+      reject(new Error('Upload timed out'));
+    });
+
+    // Send request
+    xhr.open('POST', url);
+    xhr.withCredentials = true;
+    xhr.timeout = timeoutMs;
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.send(body);
+  });
+}
+
 /**
  * Upload a single part through the server proxy
  */
-export function uploadPart(
+export async function uploadPart(
   uploadId: string,
   key: string,
   partNumber: number,
@@ -70,135 +159,51 @@ export function uploadPart(
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-
-    const abortHandler = () => {
-      xhr.abort();
-    };
-
-    const cleanup = () => {
-      if (abortSignal) {
-        abortSignal.removeEventListener('abort', abortHandler);
-      }
-    };
-
-    if (abortSignal) {
-      abortSignal.addEventListener('abort', abortHandler);
-      if (abortSignal.aborted) {
-        cleanup();
-        reject(new DOMException('Upload aborted', 'AbortError'));
-        return;
-      }
-    }
-
-    xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable && onProgress) {
-        onProgress(event.loaded, event.total);
-      }
-    });
-
-    xhr.addEventListener('load', () => {
-      cleanup();
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const response = JSON.parse(xhr.responseText) as UploadPartResponse;
-          if (response.etag) {
-            resolve(response.etag);
-          } else {
-            reject(new Error('No ETag in response'));
-          }
-        } catch {
-          reject(new Error('Invalid response from server'));
-        }
-      } else {
-        reject(new Error(`Part upload failed with status ${xhr.status}`));
-      }
-    });
-
-    xhr.addEventListener('error', () => {
-      cleanup();
-      reject(new Error('Network error during part upload'));
-    });
-
-    xhr.addEventListener('abort', () => {
-      cleanup();
-      reject(new DOMException('Upload aborted', 'AbortError'));
-    });
-
-    const params = new URLSearchParams({
-      uploadId,
-      key,
-      partNumber: String(partNumber),
-    });
-    xhr.open('POST', `/api/upload/part?${params.toString()}`);
-    xhr.withCredentials = true;
-    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-    xhr.send(chunk);
+  const params = new URLSearchParams({
+    uploadId,
+    key,
+    partNumber: String(partNumber),
   });
+
+  const responseText = await performXhrUpload({
+    url: `/api/upload/part?${params.toString()}`,
+    body: chunk,
+    contentType: 'application/octet-stream',
+    onProgress,
+    abortSignal,
+  });
+
+  try {
+    const response = JSON.parse(responseText) as UploadPartResponse;
+    if (response.etag) {
+      return response.etag;
+    }
+    throw new Error('No ETag in response');
+  } catch (err) {
+    if (err instanceof Error && err.message === 'No ETag in response') {
+      throw err;
+    }
+    throw new Error('Invalid response from server');
+  }
 }
 
 /**
  * Upload a small file through the server proxy
  */
-export function uploadSingleFile(
+export async function uploadSingleFile(
   key: string,
   file: File,
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
+  const params = new URLSearchParams({ key });
 
-    const abortHandler = () => {
-      xhr.abort();
-    };
-
-    const cleanup = () => {
-      if (abortSignal) {
-        abortSignal.removeEventListener('abort', abortHandler);
-      }
-    };
-
-    if (abortSignal) {
-      abortSignal.addEventListener('abort', abortHandler);
-      if (abortSignal.aborted) {
-        cleanup();
-        reject(new DOMException('Upload aborted', 'AbortError'));
-        return;
-      }
-    }
-
-    xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable && onProgress) {
-        onProgress(event.loaded, event.total);
-      }
-    });
-
-    xhr.addEventListener('load', () => {
-      cleanup();
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
-      } else {
-        reject(new Error(`Upload failed with status ${xhr.status}`));
-      }
-    });
-
-    xhr.addEventListener('error', () => {
-      cleanup();
-      reject(new Error('Network error during upload'));
-    });
-
-    xhr.addEventListener('abort', () => {
-      cleanup();
-      reject(new DOMException('Upload aborted', 'AbortError'));
-    });
-
-    const params = new URLSearchParams({ key });
-    xhr.open('POST', `/api/upload/single?${params.toString()}`);
-    xhr.withCredentials = true;
-    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-    xhr.send(file);
+  await performXhrUpload({
+    url: `/api/upload/single?${params.toString()}`,
+    body: file,
+    contentType: file.type || 'application/octet-stream',
+    onProgress,
+    abortSignal,
   });
 }
 
