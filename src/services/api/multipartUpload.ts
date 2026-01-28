@@ -33,6 +33,7 @@ export interface MultipartUploadOptions {
   key: string;
   onProgress?: (loaded: number, total: number, partProgress?: UploadPartProgress) => void;
   onPartComplete?: (partNumber: number, etag: string, completedParts: number, totalParts: number) => void;
+  onInitiated?: (uploadId: string, sanitizedKey: string) => void;
   abortSignal?: AbortSignal;
   existingUploadId?: string;
   existingParts?: CompletedPart[];
@@ -286,6 +287,7 @@ export async function uploadFileMultipart({
   key,
   onProgress,
   onPartComplete,
+  onInitiated,
   abortSignal,
   existingUploadId,
   existingParts = [],
@@ -310,6 +312,11 @@ export async function uploadFileMultipart({
     const initResponse = await initiateUpload(key, contentType, fileSize);
     uploadId = initResponse.uploadId;
     sanitizedKey = initResponse.key;
+  }
+
+  // Notify caller of initialized upload (for persistence tracking)
+  if (onInitiated) {
+    onInitiated(uploadId, sanitizedKey);
   }
 
   // Track completed parts

@@ -147,17 +147,15 @@ export function useUpload() {
             percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
           });
         },
+        onInitiated: (initiatedUploadId, initiatedSanitizedKey) => {
+          uploadId = initiatedUploadId;
+          sanitizedKey = initiatedSanitizedKey;
+          updateUpload(uploadItem.id, { uploadId: initiatedUploadId });
+        },
         onPartComplete: async (partNumber, etag, completed, total) => {
-          // Update uploadId if not set yet (from initiate response)
-          if (!uploadId && result) {
-            uploadId = result.uploadId;
-            sanitizedKey = result.key;
-          }
-
           updateUpload(uploadItem.id, {
             completedParts: completed,
             totalParts: total,
-            uploadId,
           });
 
           // Persist progress
