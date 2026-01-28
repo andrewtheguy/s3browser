@@ -7,20 +7,20 @@ import {
   Button,
   Typography,
   Alert,
-  MenuItem,
   CircularProgress,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
 import { useS3Client } from '../../hooks';
-import { AWS_REGIONS, type LoginCredentials } from '../../types';
-
-const AUTO_DETECT_VALUE = '__auto__';
+import type { LoginCredentials } from '../../types';
 
 export function LoginForm() {
   const { connect, error } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
+  const [autoDetectRegion, setAutoDetectRegion] = useState(true);
   const [formData, setFormData] = useState({
-    region: AUTO_DETECT_VALUE,
+    region: '',
     accessKeyId: '',
     secretAccessKey: '',
     bucket: '',
@@ -36,7 +36,7 @@ export function LoginForm() {
         accessKeyId: formData.accessKeyId,
         secretAccessKey: formData.secretAccessKey,
         bucket: formData.bucket,
-        region: formData.region === AUTO_DETECT_VALUE ? undefined : formData.region,
+        region: autoDetectRegion ? undefined : formData.region || undefined,
         endpoint: formData.endpoint || undefined,
       };
       await connect(credentials);
@@ -54,7 +54,7 @@ export function LoginForm() {
   };
 
   const isFormValid =
-    formData.region &&
+    (autoDetectRegion || formData.region) &&
     formData.accessKeyId &&
     formData.secretAccessKey &&
     formData.bucket;
@@ -102,24 +102,29 @@ export function LoginForm() {
           )}
 
           <Box component="form" onSubmit={handleSubmit}>
-            <TextField
-              select
-              fullWidth
-              label="AWS Region"
-              value={formData.region}
-              onChange={handleChange('region')}
-              margin="normal"
-              required
-            >
-              <MenuItem value={AUTO_DETECT_VALUE}>
-                Auto-detect from bucket
-              </MenuItem>
-              {AWS_REGIONS.map((region) => (
-                <MenuItem key={region.value} value={region.value}>
-                  {region.label}
-                </MenuItem>
-              ))}
-            </TextField>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoDetectRegion}
+                  onChange={(e) => setAutoDetectRegion(e.target.checked)}
+                />
+              }
+              label="Auto-detect region from bucket"
+              sx={{ mt: 1 }}
+            />
+
+            {!autoDetectRegion && (
+              <TextField
+                fullWidth
+                label="Region"
+                value={formData.region}
+                onChange={handleChange('region')}
+                margin="normal"
+                required
+                autoComplete="off"
+                placeholder="us-east-1"
+              />
+            )}
 
             <TextField
               fullWidth
