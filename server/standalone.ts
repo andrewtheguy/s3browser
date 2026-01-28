@@ -59,20 +59,27 @@ app.get('/api/health', (_req, res) => {
 
 // Serve embedded static assets
 app.get('/{*splat}', (req, res) => {
-  let assetPath = req.path;
+  const assetPath = req.path;
 
-  // Serve index.html for root and non-asset paths (SPA routing)
-  if (assetPath === '/' || !embeddedAssets[assetPath]) {
-    assetPath = '/index.html';
-  }
-
-  const asset = embeddedAssets[assetPath];
-  if (asset) {
+  // Serve asset if it exists
+  if (embeddedAssets[assetPath]) {
+    const asset = embeddedAssets[assetPath];
     res.setHeader('Content-Type', asset.mime);
     res.send(asset.content);
-  } else {
-    res.status(404).send('Not found');
+    return;
   }
+
+  // Return 404 for missing asset requests (paths with extensions or /assets/ prefix)
+  const isAssetRequest = assetPath.startsWith('/assets/') || /\.\w+$/.test(assetPath);
+  if (isAssetRequest) {
+    res.status(404).send('Not found');
+    return;
+  }
+
+  // SPA fallback: serve index.html for all other routes
+  const indexHtmlAsset = embeddedAssets['/index.html'];
+  res.setHeader('Content-Type', indexHtmlAsset.mime);
+  res.send(indexHtmlAsset.content);
 });
 
 // Global error handler
