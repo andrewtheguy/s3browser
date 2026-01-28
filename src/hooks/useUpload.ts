@@ -15,6 +15,7 @@ export function useUpload() {
       }
 
       const newUploads: UploadProgress[] = files.map((file) => ({
+        id: crypto.randomUUID(),
         file,
         key: prefix + file.name,
         loaded: 0,
@@ -27,11 +28,11 @@ export function useUpload() {
 
       for (const uploadItem of newUploads) {
         const abortController = new AbortController();
-        abortControllersRef.current.set(uploadItem.key, abortController);
+        abortControllersRef.current.set(uploadItem.id, abortController);
 
         setUploads((prev) =>
           prev.map((u) =>
-            u.key === uploadItem.key ? { ...u, status: 'uploading' as const } : u
+            u.id === uploadItem.id ? { ...u, status: 'uploading' as const } : u
           )
         );
 
@@ -43,7 +44,7 @@ export function useUpload() {
             onProgress: (loaded, total) => {
               setUploads((prev) =>
                 prev.map((u) =>
-                  u.key === uploadItem.key
+                  u.id === uploadItem.id
                     ? {
                         ...u,
                         loaded,
@@ -58,7 +59,7 @@ export function useUpload() {
 
           setUploads((prev) =>
             prev.map((u) =>
-              u.key === uploadItem.key
+              u.id === uploadItem.id
                 ? { ...u, status: 'completed' as const, percentage: 100 }
                 : u
             )
@@ -71,26 +72,26 @@ export function useUpload() {
           const message = err instanceof Error ? err.message : 'Upload failed';
           setUploads((prev) =>
             prev.map((u) =>
-              u.key === uploadItem.key
+              u.id === uploadItem.id
                 ? { ...u, status: 'error' as const, error: message }
                 : u
             )
           );
         } finally {
-          abortControllersRef.current.delete(uploadItem.key);
+          abortControllersRef.current.delete(uploadItem.id);
         }
       }
     },
     [isConnected]
   );
 
-  const cancelUpload = useCallback((key: string) => {
-    const controller = abortControllersRef.current.get(key);
+  const cancelUpload = useCallback((id: string) => {
+    const controller = abortControllersRef.current.get(id);
     if (controller) {
       controller.abort();
-      abortControllersRef.current.delete(key);
+      abortControllersRef.current.delete(id);
     }
-    setUploads((prev) => prev.filter((u) => u.key !== key));
+    setUploads((prev) => prev.filter((u) => u.id !== id));
   }, []);
 
   const clearCompleted = useCallback(() => {

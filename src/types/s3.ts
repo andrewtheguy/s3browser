@@ -22,6 +22,7 @@ export interface S3ListResult {
 }
 
 export interface UploadProgress {
+  id: string;
   file: File;
   key: string;
   loaded: number;

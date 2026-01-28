@@ -18,7 +18,7 @@ import { formatFileSize } from '../../utils/formatters';
 
 interface UploadProgressProps {
   uploads: UploadProgressType[];
-  onCancel: (key: string) => void;
+  onCancel: (id: string) => void;
 }
 
 export function UploadProgress({ uploads, onCancel }: UploadProgressProps) {
@@ -34,13 +34,13 @@ export function UploadProgress({ uploads, onCancel }: UploadProgressProps) {
       <List dense>
         {uploads.map((upload) => (
           <ListItem
-            key={upload.key}
+            key={upload.id}
             secondaryAction={
               upload.status === 'uploading' ? (
                 <IconButton
                   edge="end"
                   size="small"
-                  onClick={() => onCancel(upload.key)}
+                  onClick={() => onCancel(upload.id)}
                 >
                   <CloseIcon fontSize="small" />
                 </IconButton>
