@@ -40,6 +40,9 @@ export async function downloadObject(params: DownloadObjectParams): Promise<void
   link.download = filename;
   link.target = '_blank';
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  try {
+    link.click();
+  } finally {
+    document.body.removeChild(link);
+  }
 }

@@ -25,8 +25,14 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Global error handler - catches unhandled errors from async routes
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
   console.error('Unhandled error:', err);
+
+  // If headers already sent, delegate to Express's default error handler
+  if (res.headersSent) {
+    return next(err);
+  }
+
   res.status(500).json({ error: 'Internal server error' });
 });
 

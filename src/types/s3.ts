@@ -36,7 +36,6 @@ export interface UploadProgress {
   completedParts?: number;
   totalParts?: number;
   canResume?: boolean;
-  isPaused?: boolean;
   // Persistence ID for IndexedDB
   persistenceId?: string;
 }

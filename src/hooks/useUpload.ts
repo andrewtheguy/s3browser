@@ -349,7 +349,6 @@ export function useUpload() {
 
     updateUpload(id, {
       status: 'paused',
-      isPaused: true,
     });
   }, [updateUpload]);
 
@@ -376,7 +375,6 @@ export function useUpload() {
 
       updateUpload(id, {
         status: 'uploading',
-        isPaused: false,
       });
 
       try {

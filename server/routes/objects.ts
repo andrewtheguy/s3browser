@@ -111,8 +111,8 @@ router.delete('/*', async (req: AuthenticatedRequest, res: Response): Promise<vo
 router.post('/folder', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const { path } = req.body;
 
-  if (!path) {
-    res.status(400).json({ error: 'Folder path is required' });
+  if (typeof path !== 'string' || path.trim().length === 0) {
+    res.status(400).json({ error: 'Folder path must be a non-empty string' });
     return;
   }
 

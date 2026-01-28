@@ -15,10 +15,21 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import { useS3Client } from '../../hooks';
 import type { LoginCredentials } from '../../types';
 
+function isValidUrl(value: string): boolean {
+  if (!value) return true; // Empty is valid (optional field)
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function LoginForm() {
   const { connect, error } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
+  const [endpointTouched, setEndpointTouched] = useState(false);
   const [formData, setFormData] = useState({
     region: '',
     accessKeyId: '',
@@ -26,6 +37,9 @@ export function LoginForm() {
     bucket: '',
     endpoint: 'https://s3.amazonaws.com',
   });
+
+  const endpointValid = isValidUrl(formData.endpoint);
+  const showEndpointError = endpointTouched && !endpointValid;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -57,7 +71,8 @@ export function LoginForm() {
     (autoDetectRegion || formData.region) &&
     formData.accessKeyId &&
     formData.secretAccessKey &&
-    formData.bucket;
+    formData.bucket &&
+    endpointValid;
 
   return (
     <Box
@@ -107,9 +122,15 @@ export function LoginForm() {
               label="Endpoint URL"
               value={formData.endpoint}
               onChange={handleChange('endpoint')}
+              onBlur={() => setEndpointTouched(true)}
               margin="normal"
               autoComplete="off"
-              helperText="Default is AWS S3. Change for S3-compatible services (MinIO, etc.)"
+              error={showEndpointError}
+              helperText={
+                showEndpointError
+                  ? 'Please enter a valid URL (e.g., https://s3.amazonaws.com)'
+                  : 'Default is AWS S3. Change for S3-compatible services (MinIO, etc.)'
+              }
             />
 
             <TextField

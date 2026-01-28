@@ -102,9 +102,12 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
           });
         }
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) {
-          // Session check failed, stay disconnected
+        // Ignore abort errors from cleanup
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
         }
+        // Log other errors - user stays disconnected (initial state)
+        console.error('Session status check failed:', error);
       }
     })();
 
