@@ -57,6 +57,13 @@ router.use(authMiddleware);
 router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   // Defensive check: authMiddleware should populate these, but verify to avoid runtime errors
   if (!req.session || !req.sessionId) {
+    console.warn('Auth check failed in download route:', {
+      hasSession: !!req.session,
+      hasSessionId: !!req.sessionId,
+      partialSessionId: req.sessionId ? req.sessionId.slice(0, 8) + '...' : undefined,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useMemo,
   type ReactNode,
 } from 'react';
 import type { S3Object, BrowserContextValue } from '../types';
@@ -139,21 +140,24 @@ export function BrowserProvider({ children }: { children: ReactNode }) {
   // Fetch objects when connected (initial fetch only)
   useEffect(() => {
     if (isConnected && !initialFetchDoneRef.current) {
-      fetchObjects(state.currentPath);
+      fetchObjects('');
       initialFetchDoneRef.current = true;
     }
-  }, [isConnected, fetchObjects, state.currentPath]);
+  }, [isConnected, fetchObjects]);
 
-  const value: BrowserContextValue = {
-    currentPath: state.currentPath,
-    objects: state.objects,
-    isLoading: state.isLoading,
-    error: state.error,
-    navigateTo,
-    navigateUp,
-    refresh,
-    pathSegments: getPathSegments(state.currentPath),
-  };
+  const value: BrowserContextValue = useMemo(
+    () => ({
+      currentPath: state.currentPath,
+      objects: state.objects,
+      isLoading: state.isLoading,
+      error: state.error,
+      navigateTo,
+      navigateUp,
+      refresh,
+      pathSegments: getPathSegments(state.currentPath),
+    }),
+    [state.currentPath, state.objects, state.isLoading, state.error, navigateTo, navigateUp, refresh]
+  );
 
   return (
     <BrowserContext.Provider value={value}>{children}</BrowserContext.Provider>

@@ -11,7 +11,20 @@ export async function getDownloadUrl(key: string): Promise<string> {
   if (!response) {
     throw new Error('Failed to get download URL: empty response');
   }
-  return response.url;
+
+  const url = response.url;
+  if (typeof url !== 'string' || !url.trim()) {
+    throw new Error('Failed to get download URL: missing or invalid url');
+  }
+
+  // Validate URL format
+  try {
+    new URL(url);
+  } catch {
+    throw new Error('Failed to get download URL: invalid url format');
+  }
+
+  return url;
 }
 
 export async function downloadFile(key: string): Promise<void> {

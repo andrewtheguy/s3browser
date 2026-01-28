@@ -27,8 +27,8 @@ export async function listObjects(prefix: string = '', continuationToken?: strin
   }
   const response = await apiGet<ListObjectsResponse>(url, signal);
 
-  if (!response) {
-    throw new Error('Failed to list objects: empty response');
+  if (!response || !Array.isArray(response.objects)) {
+    throw new Error('Failed to list objects: missing or invalid response');
   }
 
   // Convert lastModified strings to Date objects
