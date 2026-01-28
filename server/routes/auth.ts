@@ -63,7 +63,10 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       endpoint: endpoint || undefined,
     });
   } catch (error) {
-    console.error('Login error:', error);
+    const safeErrorInfo = error instanceof Error
+      ? { name: error.name, message: error.message.slice(0, 100) }
+      : { name: 'UnknownError' };
+    console.error('Login failed:', safeErrorInfo);
     res.status(500).json({ error: 'Failed to authenticate' });
   }
 });

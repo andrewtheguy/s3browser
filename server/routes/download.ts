@@ -1,7 +1,52 @@
 import { Router, Response } from 'express';
+import path from 'path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
+
+// Whitelist: alphanumeric, hyphen, underscore, period, forward slash
+const VALID_KEY_PATTERN = /^[a-zA-Z0-9\-_./]+$/;
+
+function validateKey(key: unknown, sessionId: string): { valid: false; error: string } | { valid: true; validatedKey: string } {
+  // Handle array case - reject if multiple values
+  if (Array.isArray(key)) {
+    return { valid: false, error: 'Multiple key values not allowed' };
+  }
+
+  // Ensure key is a string
+  if (!key || typeof key !== 'string') {
+    return { valid: false, error: 'Object key is required' };
+  }
+
+  // Reject backslashes
+  if (key.includes('\\')) {
+    return { valid: false, error: 'Invalid character in key: backslash not allowed' };
+  }
+
+  // Reject absolute paths
+  if (key.startsWith('/')) {
+    return { valid: false, error: 'Absolute paths not allowed' };
+  }
+
+  // Normalize path and check for directory traversal
+  const normalized = path.posix.normalize(key);
+  if (normalized.startsWith('..') || normalized.includes('/..') || normalized.includes('../')) {
+    return { valid: false, error: 'Directory traversal not allowed' };
+  }
+
+  // Validate against whitelist pattern
+  if (!VALID_KEY_PATTERN.test(normalized)) {
+    return { valid: false, error: 'Invalid characters in key' };
+  }
+
+  // Enforce user-scoped prefix
+  const expectedPrefix = `${sessionId}/`;
+  if (!normalized.startsWith(expectedPrefix)) {
+    return { valid: false, error: 'Access denied: key outside user scope' };
+  }
+
+  return { valid: true, validatedKey: normalized };
+}
 
 const router = Router();
 
@@ -10,19 +55,19 @@ router.use(authMiddleware);
 
 // GET /api/download/url?key=
 router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const key = req.query.key as string;
+  const session = req.session!;
+  const sessionId = req.sessionId!;
 
-  if (!key) {
-    res.status(400).json({ error: 'Object key is required' });
+  const keyValidation = validateKey(req.query.key, sessionId);
+  if (!keyValidation.valid) {
+    res.status(400).json({ error: keyValidation.error });
     return;
   }
-
-  const session = req.session!;
 
   try {
     const command = new GetObjectCommand({
       Bucket: session.credentials.bucket,
-      Key: key,
+      Key: keyValidation.validatedKey,
     });
 
     // Generate presigned URL with 1 hour expiry
