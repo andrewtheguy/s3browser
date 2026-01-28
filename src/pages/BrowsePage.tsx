@@ -22,7 +22,7 @@ export function BrowsePage() {
 
   // Memoize buildUrl to prevent unnecessary re-renders in BrowserProvider
   const buildUrl = useCallback(
-    (path: string) => buildBrowseUrl(bucket, path),
+    (path: string) => (bucket ? buildBrowseUrl(bucket, path) : '/'),
     [bucket]
   );
 
