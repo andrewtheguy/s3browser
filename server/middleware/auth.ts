@@ -175,6 +175,7 @@ export async function validateCredentials(credentials: S3Credentials): Promise<{
 // Express middleware types
 export interface AuthenticatedRequest extends Request {
   session?: SessionData;
+  sessionId?: string;
 }
 
 export function authMiddleware(
@@ -196,5 +197,6 @@ export function authMiddleware(
   }
 
   req.session = session;
+  req.sessionId = sessionId;
   next();
 }

@@ -25,8 +25,14 @@ export async function getDownloadUrl({
 export async function downloadObject(params: DownloadObjectParams): Promise<void> {
   const url = await getDownloadUrl(params);
 
-  // Extract filename from key
-  const filename = params.key.split('/').pop() || 'download';
+  // Extract filename from key and decode URL-encoded characters
+  const rawFilename = params.key.split('/').pop() || 'download';
+  let filename: string;
+  try {
+    filename = decodeURIComponent(rawFilename);
+  } catch {
+    filename = rawFilename;
+  }
 
   // Create a temporary link and trigger download
   const link = document.createElement('a');
