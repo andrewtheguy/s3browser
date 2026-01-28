@@ -14,7 +14,7 @@ import indexCss from '../dist/assets/index.css' with { type: 'text' };
 // Parse CLI arguments
 const { values } = parseArgs({
   options: {
-    port: { type: 'string', short: 'p' },
+    bind: { type: 'string', short: 'b' },
     help: { type: 'boolean', short: 'h' },
   },
   strict: false,
@@ -24,13 +24,56 @@ if (values.help) {
   console.log(`Usage: s3browser [options]
 
 Options:
-  -p, --port <port>  Port to listen on (default: 3001)
-  -h, --help         Show this help message
+  -b, --bind <[host]:port>  Address to bind to (default: :3001)
+  -h, --help                Show this help message
 
-Environment variables:
-  PORT               Port to listen on (overridden by --port)`);
+Examples:
+  s3browser                    Listen on all interfaces, port 3001
+  s3browser -b :8080           Listen on all interfaces, port 8080
+  s3browser -b 127.0.0.1:3000  Listen on IPv4 localhost only
+  s3browser -b [::1]:3000      Listen on IPv6 localhost only`);
   process.exit(0);
 }
+
+// Parse bind address
+// Formats: :8080, 8080, 127.0.0.1:8080, [::1]:8080
+// Empty host (`:8080` or `8080`) binds to all interfaces (v4+v6)
+function parseBindAddress(bind: string | undefined): { host: string | undefined; port: number } {
+  const defaultPort = 3001;
+
+  if (!bind) {
+    return { host: undefined, port: defaultPort };
+  }
+
+  // Just port: 8080
+  if (/^\d+$/.test(bind)) {
+    return { host: undefined, port: parseInt(bind, 10) };
+  }
+
+  // :port format - all interfaces
+  if (/^:\d+$/.test(bind)) {
+    return { host: undefined, port: parseInt(bind.slice(1), 10) };
+  }
+
+  // IPv6 with brackets: [::1]:8080
+  const ipv6Match = bind.match(/^\[([^\]]+)\]:(\d+)$/);
+  if (ipv6Match) {
+    return { host: ipv6Match[1], port: parseInt(ipv6Match[2], 10) };
+  }
+
+  // IPv4 or hostname: 127.0.0.1:8080, localhost:8080
+  const lastColon = bind.lastIndexOf(':');
+  if (lastColon > 0) {
+    return {
+      host: bind.slice(0, lastColon),
+      port: parseInt(bind.slice(lastColon + 1), 10) || defaultPort
+    };
+  }
+
+  return { host: undefined, port: defaultPort };
+}
+
+const { host: HOST, port: PORT } = parseBindAddress(values.bind);
 
 // Asset map for serving
 const embeddedAssets: Record<string, { content: string; mime: string }> = {
@@ -40,7 +83,6 @@ const embeddedAssets: Record<string, { content: string; mime: string }> = {
 };
 
 const app = express();
-const PORT = values.port || process.env.PORT || 3001;
 
 // Middleware
 app.use(express.json());
@@ -91,9 +133,14 @@ app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`S3 Browser running at http://localhost:${PORT}`);
-});
+const server = HOST
+  ? app.listen(PORT, HOST, () => {
+      const displayHost = HOST.includes(':') ? `[${HOST}]` : HOST;
+      console.log(`S3 Browser running at http://${displayHost}:${PORT}`);
+    })
+  : app.listen(PORT, () => {
+      console.log(`S3 Browser running at http://localhost:${PORT}`);
+    });
 
 // Graceful shutdown
 let isShuttingDown = false;

@@ -58,8 +58,9 @@ This creates an `s3browser` executable that can be run from anywhere without dep
 
 ```bash
 ./s3browser
-./s3browser --port 8080
-./s3browser -p 8080
+./s3browser -b :8080
+./s3browser --bind 127.0.0.1:3000
+./s3browser --bind [::1]:3000
 ```
 
 Run `./s3browser --help` for all options.
