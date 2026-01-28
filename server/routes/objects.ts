@@ -28,9 +28,10 @@ function extractFileName(key: string): string {
   return segments[segments.length - 1] || cleanKey;
 }
 
-// GET /api/objects?prefix=
+// GET /api/objects?prefix=&continuationToken=
 router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const prefix = (req.query.prefix as string) || '';
+  const continuationToken = (req.query.continuationToken as string) || undefined;
   const session = req.session!;
 
   try {
@@ -39,6 +40,7 @@ router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> 
       Prefix: prefix,
       Delimiter: '/',
       MaxKeys: 1000,
+      ContinuationToken: continuationToken,
     });
 
     const response = await session.client.send(command);
