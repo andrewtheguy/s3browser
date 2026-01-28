@@ -9,12 +9,8 @@ import {
   Alert,
   MenuItem,
   CircularProgress,
-  Collapse,
-  IconButton,
 } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useS3Client } from '../../hooks';
 import { AWS_REGIONS, type LoginCredentials } from '../../types';
 
@@ -23,7 +19,6 @@ const AUTO_DETECT_VALUE = '__auto__';
 export function LoginForm() {
   const { connect, error } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [formData, setFormData] = useState({
     region: AUTO_DETECT_VALUE,
     accessKeyId: '',
@@ -157,35 +152,16 @@ export function LoginForm() {
               autoComplete="off"
             />
 
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                mt: 1,
-                cursor: 'pointer',
-              }}
-              onClick={() => setShowAdvanced(!showAdvanced)}
-            >
-              <Typography variant="body2" color="text.secondary">
-                Advanced options
-              </Typography>
-              <IconButton size="small">
-                {showAdvanced ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              </IconButton>
-            </Box>
-
-            <Collapse in={showAdvanced}>
-              <TextField
-                fullWidth
-                label="Custom Endpoint (optional)"
-                value={formData.endpoint}
-                onChange={handleChange('endpoint')}
-                margin="normal"
-                autoComplete="off"
-                placeholder="https://s3.example.com"
-                helperText="For S3-compatible services (MinIO, DigitalOcean Spaces, etc.)"
-              />
-            </Collapse>
+            <TextField
+              fullWidth
+              label="Custom Endpoint (optional)"
+              value={formData.endpoint}
+              onChange={handleChange('endpoint')}
+              margin="normal"
+              autoComplete="off"
+              placeholder="http://localhost:9000"
+              helperText="For S3-compatible services (MinIO, DigitalOcean Spaces, etc.)"
+            />
 
             <Button
               type="submit"
