@@ -4,12 +4,13 @@ import {
   DeleteObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
+import { authMiddleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and a bucket to be selected
 router.use(authMiddleware);
+router.use(requireBucket);
 
 interface S3Object {
   key: string;

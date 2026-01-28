@@ -32,8 +32,8 @@ function isValidSavedConnection(c: unknown): c is SavedConnection {
     return false;
   }
 
-  // bucket: non-empty string
-  if (typeof obj.bucket !== 'string' || obj.bucket.length === 0) {
+  // bucket: optional, but if present must be string
+  if (obj.bucket !== undefined && typeof obj.bucket !== 'string') {
     return false;
   }
 

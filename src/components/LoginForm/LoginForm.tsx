@@ -68,7 +68,7 @@ export function LoginForm() {
       const credentials: LoginCredentials = {
         accessKeyId: formData.accessKeyId,
         secretAccessKey: formData.secretAccessKey,
-        bucket: formData.bucket,
+        bucket: formData.bucket || undefined,
         region: autoDetectRegion ? undefined : formData.region || undefined,
         endpoint: formData.endpoint || undefined,
       };
@@ -80,10 +80,15 @@ export function LoginForm() {
           name: formData.connectionName.trim(),
           endpoint: formData.endpoint,
           accessKeyId: formData.accessKeyId,
-          bucket: formData.bucket,
+          bucket: formData.bucket || undefined,
           region: autoDetectRegion ? undefined : formData.region || undefined,
           autoDetectRegion,
         });
+      }
+      // Reset touch states on successful form submission
+      if (success) {
+        setEndpointTouched(false);
+        setNameTouched(false);
       }
     } finally {
       setIsLoading(false);
@@ -121,7 +126,7 @@ export function LoginForm() {
         connectionName: connection.name,
         endpoint: connection.endpoint,
         accessKeyId: connection.accessKeyId,
-        bucket: connection.bucket,
+        bucket: connection.bucket || '',
         region: connection.region || '',
         secretAccessKey: '', // Never auto-fill secret
       });
@@ -149,11 +154,11 @@ export function LoginForm() {
     }
   };
 
+  // Bucket is now optional - if not provided, user will select from list
   const isFormValid =
-    (autoDetectRegion || formData.region) &&
+    (autoDetectRegion || formData.bucket || formData.region) &&
     formData.accessKeyId &&
     formData.secretAccessKey &&
-    formData.bucket &&
     endpointValid &&
     nameValid;
 
@@ -218,7 +223,7 @@ export function LoginForm() {
                   <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
                     <ListItemText
                       primary={connection.name}
-                      secondary={`${connection.bucket} @ ${connection.endpoint}`}
+                      secondary={connection.bucket ? `${connection.bucket} @ ${connection.endpoint}` : connection.endpoint}
                       primaryTypographyProps={{ noWrap: true }}
                       secondaryTypographyProps={{ noWrap: true, fontSize: '0.75rem' }}
                       sx={{ flex: 1, minWidth: 0, mr: 1 }}
@@ -299,8 +304,8 @@ export function LoginForm() {
               value={formData.bucket}
               onChange={handleChange('bucket')}
               margin="normal"
-              required
               autoComplete="off"
+              helperText="Leave empty to list available buckets after login"
             />
 
             <FormControlLabel

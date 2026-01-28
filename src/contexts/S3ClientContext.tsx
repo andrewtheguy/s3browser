@@ -6,11 +6,11 @@ import {
   type ReactNode,
 } from 'react';
 import type { S3ClientContextValue } from '../types';
-import { login, logout, getAuthStatus, type LoginCredentials } from '../services/api';
+import { login, logout, getAuthStatus, selectBucket as apiSelectBucket, type LoginCredentials } from '../services/api';
 
 interface SessionInfo {
   region: string;
-  bucket: string;
+  bucket: string | null;
 }
 
 interface S3ClientState {
@@ -23,7 +23,9 @@ type S3ClientAction =
   | { type: 'CONNECT_START' }
   | { type: 'CONNECT_SUCCESS'; session: SessionInfo }
   | { type: 'CONNECT_ERROR'; error: string }
-  | { type: 'DISCONNECT' };
+  | { type: 'DISCONNECT' }
+  | { type: 'BUCKET_SELECTED'; bucket: string }
+  | { type: 'BUCKET_SELECT_ERROR'; error: string };
 
 function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
   switch (action.type) {
@@ -46,6 +48,17 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         session: null,
         isConnected: false,
         error: null,
+      };
+    case 'BUCKET_SELECTED':
+      return {
+        ...state,
+        session: state.session ? { ...state.session, bucket: action.bucket } : null,
+        error: null,
+      };
+    case 'BUCKET_SELECT_ERROR':
+      return {
+        ...state,
+        error: action.error,
       };
     default:
       return state;
@@ -89,6 +102,18 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'DISCONNECT' });
   }, []);
 
+  const selectBucket = useCallback(async (bucket: string): Promise<boolean> => {
+    try {
+      await apiSelectBucket(bucket);
+      dispatch({ type: 'BUCKET_SELECTED', bucket });
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to select bucket';
+      dispatch({ type: 'BUCKET_SELECT_ERROR', error: message });
+      return false;
+    }
+  }, []);
+
   // Check session status on mount
   useEffect(() => {
     const abortController = new AbortController();
@@ -96,10 +121,10 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const status = await getAuthStatus(abortController.signal);
-        if (!abortController.signal.aborted && status.authenticated && status.region && status.bucket) {
+        if (!abortController.signal.aborted && status.authenticated && status.region) {
           dispatch({
             type: 'CONNECT_SUCCESS',
-            session: { region: status.region, bucket: status.bucket },
+            session: { region: status.region, bucket: status.bucket || null },
           });
         }
       } catch (error) {
@@ -117,19 +142,23 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const requiresBucketSelection = state.isConnected && !state.session?.bucket;
+
   const value: S3ClientContextValue = {
     credentials: state.session
       ? {
           accessKeyId: '', // Not exposed to frontend
           secretAccessKey: '', // Not exposed to frontend
           region: state.session.region,
-          bucket: state.session.bucket,
+          bucket: state.session.bucket || undefined,
         }
       : null,
     isConnected: state.isConnected,
+    requiresBucketSelection,
     error: state.error,
     connect,
     disconnect,
+    selectBucket,
   };
 
   return (

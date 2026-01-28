@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { S3Client, HeadBucketCommand, GetBucketLocationCommand } from '@aws-sdk/client-s3';
+import { S3Client, HeadBucketCommand, GetBucketLocationCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 
 export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
-  bucket: string;
+  bucket?: string;  // Optional - can be selected after login
   endpoint?: string;
 }
 
@@ -14,8 +14,13 @@ export interface LoginInput {
   accessKeyId: string;
   secretAccessKey: string;
   region?: string;
-  bucket: string;
+  bucket?: string;  // Optional - can be selected after login
   endpoint?: string;
+}
+
+export interface BucketInfo {
+  name: string;
+  creationDate?: string;
 }
 
 interface SessionData {
@@ -199,4 +204,60 @@ export function authMiddleware(
   req.session = session;
   req.sessionId = sessionId;
   next();
+}
+
+// Middleware that requires a bucket to be selected (use after authMiddleware)
+export function requireBucket(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  if (!req.session?.credentials.bucket) {
+    res.status(400).json({ error: 'No bucket selected. Please select a bucket first.' });
+    return;
+  }
+  next();
+}
+
+// List buckets for the authenticated user
+export async function listUserBuckets(client: S3Client): Promise<BucketInfo[]> {
+  const command = new ListBucketsCommand({});
+  const response = await client.send(command);
+
+  return (response.Buckets || []).map(bucket => ({
+    name: bucket.Name || '',
+    creationDate: bucket.CreationDate?.toISOString(),
+  })).filter(b => b.name);
+}
+
+// Update session bucket after selection
+export function updateSessionBucket(sessionId: string, bucket: string): boolean {
+  const session = sessions.get(sessionId);
+  if (!session) return false;
+
+  session.credentials.bucket = bucket;
+  return true;
+}
+
+// Validate a specific bucket for an existing session
+export async function validateBucket(
+  client: S3Client,
+  bucket: string
+): Promise<{ valid: boolean; error?: string }> {
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: bucket }));
+    return { valid: true };
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      if (error.name === 'NotFound') {
+        return { valid: false, error: 'Bucket not found' };
+      }
+      if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
+        // Access denied might still mean the bucket exists - allow it
+        return { valid: true };
+      }
+      return { valid: false, error: error.message };
+    }
+    return { valid: false, error: 'Unknown error' };
+  }
 }

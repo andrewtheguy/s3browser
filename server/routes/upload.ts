@@ -9,7 +9,7 @@ import {
   AbortMultipartUploadCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
+import { authMiddleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 import { UPLOAD_CONFIG } from '../config/upload.js';
 
 // Whitelist: alphanumeric, hyphen, underscore, period, forward slash
@@ -87,8 +87,9 @@ export function cleanupUploadTracker(): void {
   uploadTracker.clear();
 }
 
-// All routes require authentication
+// All routes require authentication and a bucket to be selected
 router.use(authMiddleware);
+router.use(requireBucket);
 
 // POST /api/upload (legacy proxy-based upload)
 router.post(
