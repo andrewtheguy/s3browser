@@ -210,10 +210,13 @@ export async function completeUpload(
   key: string,
   parts: CompletedPart[]
 ): Promise<{ success: boolean; key: string }> {
+  // Sort parts by partNumber in ascending order (S3 requires deterministic ordering)
+  const sortedParts = [...parts].sort((a, b) => a.partNumber - b.partNumber);
+
   const response = await apiPost<{ success: boolean; key: string }>('/upload/complete', {
     uploadId,
     key,
-    parts,
+    parts: sortedParts,
   });
   if (!response) {
     throw new Error('Failed to complete multipart upload');
