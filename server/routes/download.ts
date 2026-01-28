@@ -28,9 +28,9 @@ function validateKey(key: unknown, sessionId: string): { valid: false; error: st
     return { valid: false, error: 'Absolute paths not allowed' };
   }
 
-  // Normalize path and check for directory traversal
+  // Normalize path and check for directory traversal or invalid results
   const normalized = path.posix.normalize(key);
-  if (normalized.startsWith('..') || normalized.includes('/..') || normalized.includes('../')) {
+  if (normalized.startsWith('..') || normalized === '.' || normalized === '') {
     return { valid: false, error: 'Directory traversal not allowed' };
   }
 
