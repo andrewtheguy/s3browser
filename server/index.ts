@@ -35,15 +35,36 @@ app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
 // Graceful shutdown
-function shutdown() {
-  cleanupUploadTracker();
-  process.exit(0);
+async function shutdown() {
+  console.log('Shutting down gracefully...');
+
+  // Force exit after 10 seconds if graceful shutdown hangs
+  const forceExitTimeout = setTimeout(() => {
+    console.error('Forced exit after timeout');
+    process.exit(1);
+  }, 10000);
+  forceExitTimeout.unref();
+
+  try {
+    cleanupUploadTracker();
+  } catch (err) {
+    console.error('Error during upload tracker cleanup:', err);
+  }
+
+  server.close((err) => {
+    if (err) {
+      console.error('Error closing server:', err);
+      process.exit(1);
+    }
+    console.log('Server closed');
+    process.exit(0);
+  });
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => void shutdown());
+process.on('SIGTERM', () => void shutdown());
