@@ -277,9 +277,34 @@ async function uploadPartWithRetry(
 
       lastError = error instanceof Error ? error : new Error(String(error));
 
-      // Wait before retry (exponential backoff)
+      // Wait before retry (exponential backoff) with abort awareness
       if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        const delayMs = Math.pow(2, attempt) * 1000;
+
+        // Check if already aborted before sleeping
+        if (abortSignal?.aborted) {
+          throw new DOMException('Upload aborted', 'AbortError');
+        }
+
+        // Abort-aware delay
+        await new Promise<void>((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            cleanup();
+            resolve();
+          }, delayMs);
+
+          const abortHandler = () => {
+            clearTimeout(timeoutId);
+            cleanup();
+            reject(new DOMException('Upload aborted', 'AbortError'));
+          };
+
+          const cleanup = () => {
+            abortSignal?.removeEventListener('abort', abortHandler);
+          };
+
+          abortSignal?.addEventListener('abort', abortHandler);
+        });
       }
     }
   }
@@ -369,7 +394,7 @@ export async function uploadFileMultipart({
   // Concurrent upload with pool
   const concurrency = UPLOAD_CONFIG.CONCURRENCY;
   let index = 0;
-  const errors: Error[] = [];
+  const errors: Array<{ partNumber: number; error: Error }> = [];
 
   const uploadNext = async (): Promise<void> => {
     while (index < pendingParts.length) {
@@ -419,7 +444,10 @@ export async function uploadFileMultipart({
         if (error instanceof DOMException && error.name === 'AbortError') {
           return;
         }
-        errors.push(error instanceof Error ? error : new Error(String(error)));
+        errors.push({
+          partNumber,
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
       }
     }
   };
@@ -438,7 +466,10 @@ export async function uploadFileMultipart({
 
   // Check for errors
   if (errors.length > 0) {
-    throw new Error(`Failed to upload ${errors.length} parts: ${errors[0].message}`);
+    const failedParts = errors.map((e) => `part ${e.partNumber}: ${e.error.message}`);
+    throw new Error(
+      `Failed to upload ${errors.length} part(s):\n${failedParts.join('\n')}`
+    );
   }
 
   // Complete the upload
