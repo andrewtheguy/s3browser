@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Box,
   Breadcrumbs,
@@ -21,8 +23,14 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
+  const navigate = useNavigate();
   const { credentials, disconnect } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
+
+  const handleDisconnect = useCallback(async () => {
+    await disconnect();
+    void navigate('/');
+  }, [disconnect, navigate]);
 
   const handleBreadcrumbClick = (index: number) => {
     if (index === -1) {
@@ -71,7 +79,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
             Upload
           </Button>
           <Tooltip title="Disconnect">
-            <IconButton onClick={disconnect} color="error">
+            <IconButton onClick={handleDisconnect} color="error">
               <LogoutIcon />
             </IconButton>
           </Tooltip>

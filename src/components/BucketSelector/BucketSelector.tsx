@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Box,
   Card,
@@ -19,9 +20,11 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useS3Client } from '../../hooks';
 import { listBuckets } from '../../services/api';
+import { buildBrowseUrl } from '../../utils/urlEncoding';
 import type { BucketInfo } from '../../types';
 
 export function BucketSelector() {
+  const navigate = useNavigate();
   const { selectBucket, disconnect, error: contextError } = useS3Client();
   const [buckets, setBuckets] = useState<BucketInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -65,7 +68,10 @@ export function BucketSelector() {
 
     try {
       const success = await selectBucket(bucketName);
-      if (!success) {
+      if (success) {
+        // Navigate to the browse page for this bucket
+        void navigate(buildBrowseUrl(bucketName, ''));
+      } else {
         setError('Failed to select bucket');
       }
     } catch (err) {
