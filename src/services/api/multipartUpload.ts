@@ -62,6 +62,7 @@ export async function initiateUpload(
  * Upload a single part through the server proxy
  */
 export function uploadPart(
+  endpoint = `/api/upload/part`,
   uploadId: string,
   key: string,
   partNumber: number,
@@ -69,6 +70,13 @@ export function uploadPart(
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
 ): Promise<string> {
+  const params = new URLSearchParams({
+    uploadId,
+    key,
+    partNumber: String(partNumber),
+  });
+  const url = `${endpoint}?${params.toString()}`;
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
@@ -125,12 +133,7 @@ export function uploadPart(
       reject(new DOMException('Upload aborted', 'AbortError'));
     });
 
-    const params = new URLSearchParams({
-      uploadId,
-      key,
-      partNumber: String(partNumber),
-    });
-    xhr.open('POST', `/api/upload/part?${params.toString()}`);
+    xhr.open('POST', url);
     xhr.withCredentials = true;
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.send(chunk);
@@ -141,11 +144,15 @@ export function uploadPart(
  * Upload a small file through the server proxy
  */
 export function uploadSingleFile(
+  endpoint = `/api/upload/single`,
   key: string,
   file: File,
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
 ): Promise<void> {
+  const params = new URLSearchParams({ key });
+  const url = `${endpoint}?${params.toString()}`;
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
@@ -193,8 +200,7 @@ export function uploadSingleFile(
       reject(new DOMException('Upload aborted', 'AbortError'));
     });
 
-    const params = new URLSearchParams({ key });
-    xhr.open('POST', `/api/upload/single?${params.toString()}`);
+    xhr.open('POST', url);
     xhr.withCredentials = true;
     xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
     xhr.send(file);
@@ -258,7 +264,7 @@ async function uploadPartWithRetry(
         throw new DOMException('Upload aborted', 'AbortError');
       }
 
-      const etag = await uploadPart(uploadId, key, partNumber, chunk, onProgress, abortSignal);
+      const etag = await uploadPart(undefined, uploadId, key, partNumber, chunk, onProgress, abortSignal);
       return etag;
     } catch (error) {
       // Don't retry abort errors

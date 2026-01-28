@@ -80,6 +80,7 @@ export function useUpload() {
 
       // Upload through server proxy
       await uploadSingleFile(
+        undefined,
         key,
         file,
         (loaded, total) => {
