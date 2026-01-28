@@ -101,7 +101,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     success: true,
     region: detectedRegion,
     bucket: bucket || null,
-    endpoint: endpoint || undefined,
+    endpoint: endpoint || null,
     requiresBucketSelection: !bucket,
   });
 });

@@ -436,7 +436,12 @@ export async function uploadFileMultipart({
         completedPartNumbers.add(partNumber);
 
         if (onPartComplete) {
-          void onPartComplete(partNumber, etag, completedParts.length, totalParts);
+          try {
+            await onPartComplete(partNumber, etag, completedParts.length, totalParts);
+          } catch (err) {
+            // Log but don't fail the upload - persistence is for resume capability
+            console.error('onPartComplete callback failed:', err);
+          }
         }
 
         if (onProgress) {
