@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import {
   validateCredentials,
+  validateCredentialsOnly,
   createSession,
   deleteSession,
   getSession,
@@ -52,13 +53,25 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     endpoint: endpoint || undefined,
   };
 
-  // Only validate credentials with bucket if bucket is provided
-  if (bucket) {
-    const validation = await validateCredentials(credentials);
-    if (!validation.valid) {
-      res.status(401).json({ error: validation.error || 'Invalid credentials or bucket not found' });
-      return;
+  // Always validate credentials before creating session
+  let validation;
+  try {
+    if (bucket) {
+      // Validate credentials with bucket access
+      validation = await validateCredentials(credentials);
+    } else {
+      // Validate credentials only (no bucket) using STS or ListBuckets
+      validation = await validateCredentialsOnly(accessKeyId, secretAccessKey, detectedRegion, endpoint);
     }
+  } catch (error) {
+    console.error('Credential validation failed:', error);
+    res.status(500).json({ error: 'Failed to validate credentials' });
+    return;
+  }
+
+  if (!validation.valid) {
+    res.status(401).json({ error: validation.error || 'Invalid credentials' });
+    return;
   }
 
   const sessionId = createSession(credentials);
@@ -154,7 +167,15 @@ router.post('/select-bucket', authMiddleware, async (req: AuthenticatedRequest, 
   }
 
   // Validate that the bucket exists and is accessible
-  const validation = await validateBucket(session.client, bucket);
+  let validation;
+  try {
+    validation = await validateBucket(session.client, bucket);
+  } catch (error) {
+    console.error('Failed to validate bucket:', { bucket, error });
+    res.status(500).json({ error: 'Failed to validate bucket' });
+    return;
+  }
+
   if (!validation.valid) {
     res.status(400).json({ error: validation.error || 'Invalid bucket' });
     return;

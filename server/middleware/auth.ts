@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { S3Client, HeadBucketCommand, GetBucketLocationCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
+import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import crypto from 'crypto';
 
 export interface S3Credentials {
@@ -170,6 +171,74 @@ export async function validateCredentials(credentials: S3Credentials): Promise<{
       // Network/connection errors
       if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
         return { valid: false, error: `Cannot connect to endpoint: ${error.message}` };
+      }
+      return { valid: false, error: error.message };
+    }
+    return { valid: false, error: 'Unknown error' };
+  }
+}
+
+// Validate credentials without requiring a bucket (uses STS GetCallerIdentity)
+export async function validateCredentialsOnly(
+  accessKeyId: string,
+  secretAccessKey: string,
+  region: string,
+  endpoint?: string
+): Promise<{ valid: boolean; error?: string }> {
+  const normalizedEndpoint = normalizeEndpoint(endpoint);
+
+  console.log('Validating credentials (no bucket):', 'endpoint:', normalizedEndpoint || 'AWS');
+
+  // For custom endpoints, use S3 ListBuckets as STS may not be available
+  if (normalizedEndpoint) {
+    const s3Client = new S3Client({
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+      endpoint: normalizedEndpoint,
+      forcePathStyle: true,
+    });
+
+    try {
+      await s3Client.send(new ListBucketsCommand({}));
+      return { valid: true };
+    } catch (error: unknown) {
+      console.error('Credential validation error (ListBuckets):', error);
+
+      if (error instanceof Error) {
+        if (error.name === 'InvalidAccessKeyId' || error.name === 'SignatureDoesNotMatch') {
+          return { valid: false, error: 'Invalid credentials' };
+        }
+        if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
+          // Credentials are valid but user lacks ListBuckets permission - that's OK
+          return { valid: true };
+        }
+        if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+          return { valid: false, error: `Cannot connect to endpoint: ${error.message}` };
+        }
+        return { valid: false, error: error.message };
+      }
+      return { valid: false, error: 'Unknown error' };
+    }
+  }
+
+  // For AWS, use STS GetCallerIdentity (lightweight, always allowed for valid creds)
+  const stsClient = new STSClient({
+    region,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+
+  try {
+    await stsClient.send(new GetCallerIdentityCommand({}));
+    return { valid: true };
+  } catch (error: unknown) {
+    console.error('Credential validation error (STS):', error);
+
+    if (error instanceof Error) {
+      if (error.name === 'InvalidClientTokenId' || error.name === 'SignatureDoesNotMatch') {
+        return { valid: false, error: 'Invalid credentials' };
+      }
+      if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+        return { valid: false, error: `Cannot connect to AWS: ${error.message}` };
       }
       return { valid: false, error: error.message };
     }
