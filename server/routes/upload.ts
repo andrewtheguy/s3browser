@@ -15,7 +15,7 @@ import { UPLOAD_CONFIG } from '../config/upload.js';
 // Whitelist: alphanumeric, hyphen, underscore, period, forward slash
 const VALID_KEY_PATTERN = /^[a-zA-Z0-9\-_./]+$/;
 
-function validateAndSanitizeKey(key: string, sessionId: string): { valid: false; error: string } | { valid: true; sanitizedKey: string } {
+function validateAndSanitizeKey(key: string): { valid: false; error: string } | { valid: true; sanitizedKey: string } {
   // Reject empty keys
   if (!key || typeof key !== 'string') {
     return { valid: false, error: 'Object key is required' };
@@ -42,10 +42,7 @@ function validateAndSanitizeKey(key: string, sessionId: string): { valid: false;
     return { valid: false, error: 'Invalid characters in key' };
   }
 
-  // Scope key to session namespace to prevent cross-user writes
-  const sanitizedKey = `${sessionId}/${normalized}`;
-
-  return { valid: true, sanitizedKey };
+  return { valid: true, sanitizedKey: normalized };
 }
 
 const router = Router();
@@ -101,9 +98,8 @@ router.post(
     }
 
     const session = req.session!;
-    const sessionId = req.sessionId!;
 
-    const keyValidation = validateAndSanitizeKey(key, sessionId);
+    const keyValidation = validateAndSanitizeKey(key);
     if (!keyValidation.valid) {
       res.status(400).json({ error: keyValidation.error });
       return;
@@ -134,14 +130,13 @@ router.post(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const key = req.query.key as string;
     const session = req.session!;
-    const sessionId = req.sessionId!;
 
     if (!key || typeof key !== 'string') {
       res.status(400).json({ error: 'Key query parameter is required' });
       return;
     }
 
-    const keyValidation = validateAndSanitizeKey(key, sessionId);
+    const keyValidation = validateAndSanitizeKey(key);
     if (!keyValidation.valid) {
       res.status(400).json({ error: keyValidation.error });
       return;
@@ -236,7 +231,7 @@ router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promi
     return;
   }
 
-  const keyValidation = validateAndSanitizeKey(key, sessionId);
+  const keyValidation = validateAndSanitizeKey(key);
   if (!keyValidation.valid) {
     res.status(400).json({ error: keyValidation.error });
     return;
@@ -363,7 +358,7 @@ router.post('/abort', async (req: AuthenticatedRequest, res: Response): Promise<
   if (tracked) {
     sanitizedKey = tracked.sanitizedKey;
   } else {
-    const keyValidation = validateAndSanitizeKey(key, sessionId);
+    const keyValidation = validateAndSanitizeKey(key);
     if (!keyValidation.valid) {
       res.status(400).json({ error: keyValidation.error });
       return;

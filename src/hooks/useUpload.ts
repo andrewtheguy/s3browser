@@ -260,22 +260,29 @@ export function useUpload() {
                 ).catch(() => null)
               : null;
 
-            await uploadMultipartFile(
+            const result = await uploadMultipartFile(
               uploadItem,
               abortController,
               existingUpload?.uploadId,
               existingUpload?.completedParts,
               existingUpload?.id
             );
+
+            updateUpload(uploadItem.id, {
+              status: 'completed',
+              percentage: 100,
+              canResume: false,
+              completedParts: result.completedParts.length,
+            });
           } else {
             await uploadSingleFileWithProxy(uploadItem, abortController);
-          }
 
-          updateUpload(uploadItem.id, {
-            status: 'completed',
-            percentage: 100,
-            canResume: false,
-          });
+            updateUpload(uploadItem.id, {
+              status: 'completed',
+              percentage: 100,
+              canResume: false,
+            });
+          }
         } catch (err) {
           // Ignore abort errors
           if (err instanceof DOMException && err.name === 'AbortError') {
@@ -366,7 +373,7 @@ export function useUpload() {
       });
 
       try {
-        await uploadMultipartFile(
+        const result = await uploadMultipartFile(
           uploadItem,
           abortController,
           persisted.uploadId,
@@ -378,6 +385,7 @@ export function useUpload() {
           status: 'completed',
           percentage: 100,
           canResume: false,
+          completedParts: result.completedParts.length,
         });
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
@@ -417,16 +425,23 @@ export function useUpload() {
         const useMultipart = uploadItem.file.size >= UPLOAD_CONFIG.MULTIPART_THRESHOLD;
 
         if (useMultipart) {
-          await uploadMultipartFile(uploadItem, abortController);
+          const result = await uploadMultipartFile(uploadItem, abortController);
+
+          updateUpload(id, {
+            status: 'completed',
+            percentage: 100,
+            canResume: false,
+            completedParts: result.completedParts.length,
+          });
         } else {
           await uploadSingleFileWithProxy(uploadItem, abortController);
-        }
 
-        updateUpload(id, {
-          status: 'completed',
-          percentage: 100,
-          canResume: false,
-        });
+          updateUpload(id, {
+            status: 'completed',
+            percentage: 100,
+            canResume: false,
+          });
+        }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
           return;
