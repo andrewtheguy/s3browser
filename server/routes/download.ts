@@ -50,12 +50,23 @@ router.use(authMiddleware);
 // GET /api/download/url?key=
 router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   // Defensive check: authMiddleware should populate these, but verify to avoid runtime errors
-  if (!req.session) {
+  const session = req.session;
+  if (!session) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }
 
-  const session = req.session;
+  // Verify session has expected shape with credentials and client
+  if (!session.credentials || !session.client) {
+    res.status(401).json({ error: 'Invalid session state' });
+    return;
+  }
+
+  // Verify bucket is defined in credentials
+  if (!session.credentials.bucket) {
+    res.status(400).json({ error: 'No bucket configured for this session' });
+    return;
+  }
 
   const keyValidation = validateKey(req.query.key);
   if (!keyValidation.valid) {
@@ -63,14 +74,33 @@ router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<voi
     return;
   }
 
+  // Parse TTL from query parameter, default to 1 hour (3600 seconds)
+  const DEFAULT_TTL = 3600;
+  const MAX_TTL = 604800; // 7 days maximum
+  const MIN_TTL = 60; // 1 minute minimum
+  let ttl = DEFAULT_TTL;
+
+  if (req.query.ttl !== undefined) {
+    const parsedTtl = parseInt(req.query.ttl as string, 10);
+    if (isNaN(parsedTtl) || parsedTtl < MIN_TTL || parsedTtl > MAX_TTL) {
+      res.status(400).json({ error: `TTL must be between ${MIN_TTL} and ${MAX_TTL} seconds` });
+      return;
+    }
+    ttl = parsedTtl;
+  }
+
   const command = new GetObjectCommand({
     Bucket: session.credentials.bucket,
     Key: keyValidation.validatedKey,
   });
 
-  // Generate presigned URL with 1 hour expiry
-  const url = await getSignedUrl(session.client, command, { expiresIn: 3600 });
-  res.json({ url });
+  try {
+    const url = await getSignedUrl(session.client, command, { expiresIn: ttl });
+    res.json({ url });
+  } catch (error) {
+    console.error('Failed to generate presigned URL:', error);
+    res.status(500).json({ error: 'Failed to generate presigned URL' });
+  }
 });
 
 export default router;
