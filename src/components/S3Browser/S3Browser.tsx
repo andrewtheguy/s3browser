@@ -172,8 +172,8 @@ export function S3Browser() {
             onChange={(e) => setNewFolderName(e.target.value)}
             margin="normal"
             disabled={isCreatingFolder}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && newFolderName.trim()) {
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newFolderName.trim() && !isCreatingFolder) {
                 void handleCreateFolderConfirm();
               }
             }}
