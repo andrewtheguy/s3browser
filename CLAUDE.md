@@ -1,1 +1,1 @@
-run npm run lint after changes
+run bun run lint after changes

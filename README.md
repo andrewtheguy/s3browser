@@ -16,19 +16,18 @@ A web-based file browser for AWS S3 and S3-compatible storage services (MinIO, D
 
 - **Frontend**: React, TypeScript, Material-UI
 - **Backend**: Express, AWS SDK v3
-- **Build**: Vite
+- **Build**: Vite, Bun
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
+- [Bun](https://bun.sh/) 1.0+
 
 ### Installation
 
 ```bash
-npm install
+bun install
 ```
 
 ### Development
@@ -36,11 +35,7 @@ npm install
 Start both the frontend and backend in development mode:
 
 ```bash
-# Terminal 1: Start the backend server
-npm run server
-
-# Terminal 2: Start the frontend dev server
-npm run dev
+bun run dev
 ```
 
 The frontend runs on `http://localhost:5173` and proxies API requests to the backend on `http://localhost:3001`.
@@ -48,8 +43,24 @@ The frontend runs on `http://localhost:5173` and proxies API requests to the bac
 ### Production Build
 
 ```bash
-npm run build
+bun run build
 ```
+
+### Standalone Executable
+
+Build a self-contained macOS executable with embedded frontend assets:
+
+```bash
+bun run build:standalone
+```
+
+This creates an `s3browser` executable (~60MB) that can be run from anywhere without dependencies:
+
+```bash
+./s3browser
+```
+
+The server starts at `http://localhost:3001`. Set the `PORT` environment variable to use a different port.
 
 ## Configuration
 

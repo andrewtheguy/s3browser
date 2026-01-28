@@ -26,3 +26,14 @@ dist-ssr
 *.sln
 *.sw?
 dist-server/
+
+# Standalone build artifacts
+s3browser
+server/standalone.generated.ts
+
+# npm lock file (using bun.lockb instead)
+package-lock.json
+
+# Bun build temp files
+*.bun-build
+.*.bun-build
