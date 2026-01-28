@@ -1,6 +1,6 @@
 # S3 Browser
 
-A web-based file browser for AWS S3 and S3-compatible storage services (MinIO, DigitalOcean Spaces, etc.).
+A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, DigitalOcean Spaces, etc.).
 
 ## Features
 
