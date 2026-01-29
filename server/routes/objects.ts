@@ -133,8 +133,8 @@ router.post('/batch-delete', async (req: AuthenticatedRequest, res: Response): P
     return;
   }
 
-  // Filter out folder keys (ending with /)
-  const fileKeys = keys.filter((key) => typeof key === 'string' && !key.endsWith('/'));
+  // Filter out folder keys (ending with /) and empty/whitespace-only strings
+  const fileKeys = keys.filter((key) => typeof key === 'string' && key.trim().length > 0 && !key.endsWith('/'));
 
   if (fileKeys.length === 0) {
     res.status(400).json({ error: 'No valid file keys provided' });

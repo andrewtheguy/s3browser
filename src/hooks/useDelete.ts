@@ -31,6 +31,10 @@ export function useDelete() {
 
   const removeMany = useCallback(
     async (keys: string[]): Promise<{ deleted: string[]; errors: Array<{ key: string; message: string }> }> => {
+      if (keys.length === 0) {
+        return { deleted: [], errors: [] };
+      }
+
       if (!isConnected) {
         throw new Error('Not connected to S3');
       }

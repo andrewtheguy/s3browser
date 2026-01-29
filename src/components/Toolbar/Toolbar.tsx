@@ -23,9 +23,10 @@ interface ToolbarProps {
   onCreateFolderClick: () => void;
   selectedCount?: number;
   onBatchDelete?: () => void;
+  isDeleting?: boolean;
 }
 
-export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0, onBatchDelete }: ToolbarProps) {
+export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0, onBatchDelete, isDeleting = false }: ToolbarProps) {
   const navigate = useNavigate();
   const { credentials, disconnect } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
@@ -81,8 +82,9 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
               color="error"
               startIcon={<DeleteIcon />}
               onClick={onBatchDelete}
+              disabled={isDeleting}
             >
-              Delete ({selectedCount})
+              {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
             </Button>
           )}
           <Button

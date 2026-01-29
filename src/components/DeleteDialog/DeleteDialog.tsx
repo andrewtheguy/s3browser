@@ -37,16 +37,14 @@ export function DeleteDialog({
   const singleItem = items[0];
 
   const title = isSingleItem
-    ? `Delete ${singleItem.isFolder ? 'Folder' : 'File'}`
+    ? 'Delete File'
     : `Delete ${items.length} Files`;
 
   const message = isSingleItem
     ? (
         <>
           Are you sure you want to delete{' '}
-          <strong>{singleItem.name}</strong>
-          {singleItem.isFolder ? ' and all its contents' : ''}? This action cannot be
-          undone.
+          <strong>{singleItem.name}</strong>? This action cannot be undone.
         </>
       )
     : (

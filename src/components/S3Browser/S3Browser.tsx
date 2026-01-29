@@ -112,10 +112,7 @@ export function S3Browser() {
     try {
       if (itemsToDelete.length === 1) {
         await remove(itemsToDelete[0].key);
-        showSnackbar(
-          `${itemsToDelete[0].isFolder ? 'Folder' : 'File'} deleted successfully`,
-          'success'
-        );
+        showSnackbar('File deleted successfully', 'success');
       } else {
         const keys = itemsToDelete.map((item) => item.key);
         const result = await removeMany(keys);
@@ -187,6 +184,7 @@ export function S3Browser() {
           onCreateFolderClick={handleCreateFolderClick}
           selectedCount={selectedKeys.size}
           onBatchDelete={handleBatchDeleteRequest}
+          isDeleting={isDeleting}
         />
         <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
           <FileList

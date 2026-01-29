@@ -30,7 +30,7 @@ export function FileList({ onDeleteRequest, selectedKeys, onSelectItem, onSelect
 
   const selectableItems = objects.filter((item) => !item.isFolder);
   const selectableCount = selectableItems.length;
-  const selectedCount = selectedKeys.size;
+  const selectedCount = selectableItems.filter((item) => selectedKeys.has(item.key)).length;
   const isAllSelected = selectableCount > 0 && selectedCount === selectableCount;
   const isIndeterminate = selectedCount > 0 && selectedCount < selectableCount;
   const { download } = useDownload();
