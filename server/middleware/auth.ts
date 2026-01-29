@@ -209,9 +209,10 @@ export async function validateCredentialsOnly(
           return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
         }
         // Check for signature errors - indicates auth/config issues
+        const msg = (error?.message ?? '').toLowerCase();
         const isSignatureError = error.name === 'SignatureDoesNotMatch' ||
-          error.message.toLowerCase().includes('signature') ||
-          error.message.toLowerCase().includes('credential');
+          msg.includes('signature') ||
+          msg.includes('credential');
         if (error.name === 'InvalidAccessKeyId' || isSignatureError) {
           return { valid: false, error: error.message || 'Invalid credentials or signature' };
         }

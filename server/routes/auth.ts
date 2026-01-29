@@ -155,7 +155,10 @@ router.get('/buckets', authMiddleware, async (req: AuthenticatedRequest, res: Re
 
     if (error instanceof Error) {
       // Check for signature/auth errors first - these are config issues, not permission issues
-      const isSignatureError = error.message?.toLowerCase().includes('signature') ||
+      const signatureErrorNames = ['SignatureDoesNotMatch', 'InvalidAccessKeyId', 'ExpiredToken', 'AccessDenied', 'InvalidToken'];
+      const isSignatureError =
+        signatureErrorNames.some(n => error?.name === n || error?.name?.toLowerCase() === n.toLowerCase()) ||
+        error.message?.toLowerCase().includes('signature') ||
         error.message?.toLowerCase().includes('credential');
 
       if (isSignatureError) {

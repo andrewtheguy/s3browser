@@ -128,7 +128,7 @@ router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise
     // Filter out the folder marker itself
     const otherObjects = contents.filter((obj) => obj.Key !== key);
 
-    if (otherObjects.length > 0 || listResponse.CommonPrefixes?.length) {
+    if (otherObjects.length > 0) {
       res.status(400).json({ error: 'Cannot delete folder: folder is not empty' });
       return;
     }
