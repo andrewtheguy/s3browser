@@ -148,6 +148,16 @@ const server = HOST
       console.log(`S3 Browser running at http://localhost:${PORT}`);
     });
 
+// Handle server errors (e.g., port in use)
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Error: Port ${PORT} is already in use`);
+    process.exit(1);
+  }
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
 // Graceful shutdown
 let isShuttingDown = false;
 
