@@ -16,7 +16,7 @@ import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
 import { DeleteDialog } from '../DeleteDialog';
 import { useBrowserContext } from '../../contexts';
-import { useDelete, useUpload } from '../../hooks';
+import { useDelete, useUpload, usePresignedUrl } from '../../hooks';
 import type { S3Object } from '../../types';
 
 interface SnackbarState {
@@ -29,6 +29,7 @@ export function S3Browser() {
   const { refresh, currentPath, objects } = useBrowserContext();
   const { remove, removeMany, isDeleting } = useDelete();
   const { createNewFolder } = useUpload();
+  const { copyPresignedUrl } = usePresignedUrl();
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -111,8 +112,9 @@ export function S3Browser() {
 
     try {
       if (itemsToDelete.length === 1) {
-        await remove(itemsToDelete[0].key);
-        showSnackbar('File deleted successfully', 'success');
+        const item = itemsToDelete[0];
+        await remove(item.key);
+        showSnackbar(item.isFolder ? 'Folder deleted successfully' : 'File deleted successfully', 'success');
       } else {
         const keys = itemsToDelete.map((item) => item.key);
         const result = await removeMany(keys);
@@ -169,6 +171,15 @@ export function S3Browser() {
     setNewFolderName('');
   }, []);
 
+  const handleCopyUrl = useCallback(async (key: string) => {
+    const success = await copyPresignedUrl(key);
+    if (success) {
+      showSnackbar('URL copied to clipboard', 'success');
+    } else {
+      showSnackbar('Failed to copy URL', 'error');
+    }
+  }, [copyPresignedUrl, showSnackbar]);
+
   return (
     <Box
       sx={{
@@ -189,6 +200,7 @@ export function S3Browser() {
         <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
           <FileList
             onDeleteRequest={handleDeleteRequest}
+            onCopyUrl={handleCopyUrl}
             selectedKeys={selectedKeys}
             onSelectItem={handleSelectItem}
             onSelectAll={handleSelectAll}

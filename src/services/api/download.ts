@@ -27,6 +27,29 @@ export async function getDownloadUrl(key: string): Promise<string> {
   return url;
 }
 
+export async function getPresignedUrl(key: string, ttl: number = 86400): Promise<string> {
+  const response = await apiGet<DownloadUrlResponse>(
+    `/download/url?key=${encodeURIComponent(key)}&ttl=${ttl}`
+  );
+  if (!response) {
+    throw new Error('Failed to get presigned URL: empty response');
+  }
+
+  const url = response.url;
+  if (typeof url !== 'string' || !url.trim()) {
+    throw new Error('Failed to get presigned URL: missing or invalid url');
+  }
+
+  // Validate URL format
+  try {
+    new URL(url);
+  } catch {
+    throw new Error('Failed to get presigned URL: invalid url format');
+  }
+
+  return url;
+}
+
 export async function downloadFile(key: string): Promise<void> {
   const url = await getDownloadUrl(key);
 

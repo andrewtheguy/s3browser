@@ -20,12 +20,13 @@ import type { S3Object } from '../../types';
 
 interface FileListProps {
   onDeleteRequest: (item: S3Object) => void;
+  onCopyUrl: (key: string) => void;
   selectedKeys: Set<string>;
   onSelectItem: (key: string, checked: boolean) => void;
   onSelectAll: (checked: boolean) => void;
 }
 
-export function FileList({ onDeleteRequest, selectedKeys, onSelectItem, onSelectAll }: FileListProps) {
+export function FileList({ onDeleteRequest, onCopyUrl, selectedKeys, onSelectItem, onSelectAll }: FileListProps) {
   const { objects, isLoading, error, navigateTo } = useBrowserContext();
 
   const selectableItems = objects.filter((item) => !item.isFolder);
@@ -146,6 +147,7 @@ export function FileList({ onDeleteRequest, selectedKeys, onSelectItem, onSelect
               item={item}
               onNavigate={navigateTo}
               onDownload={handleDownload}
+              onCopyUrl={onCopyUrl}
               onDelete={onDeleteRequest}
               isSelected={selectedKeys.has(item.key)}
               onSelect={onSelectItem}

@@ -208,10 +208,15 @@ export async function validateCredentialsOnly(
         if (error.name === 'ExpiredToken' || error.name === 'ExpiredTokenException' || error.message.includes('ExpiredToken')) {
           return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
         }
-        if (error.name === 'InvalidAccessKeyId' || error.name === 'SignatureDoesNotMatch') {
-          return { valid: false, error: 'Invalid credentials' };
+        // Check for signature errors - indicates auth/config issues
+        const isSignatureError = error.name === 'SignatureDoesNotMatch' ||
+          error.message.toLowerCase().includes('signature') ||
+          error.message.toLowerCase().includes('credential');
+        if (error.name === 'InvalidAccessKeyId' || isSignatureError) {
+          return { valid: false, error: error.message || 'Invalid credentials or signature' };
         }
         if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
+          // Only treat as permission issue if not a signature error
           // Credentials are valid but user lacks ListBuckets permission - that's OK
           return { valid: true };
         }
@@ -242,8 +247,12 @@ export async function validateCredentialsOnly(
       if (error.name === 'ExpiredToken' || error.name === 'ExpiredTokenException' || error.message.includes('ExpiredToken')) {
         return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
       }
-      if (error.name === 'InvalidClientTokenId' || error.name === 'SignatureDoesNotMatch') {
-        return { valid: false, error: 'Invalid credentials' };
+      // Check for signature errors - indicates auth/config issues
+      const isSignatureError = error.name === 'SignatureDoesNotMatch' ||
+        error.message.toLowerCase().includes('signature') ||
+        error.message.toLowerCase().includes('credential');
+      if (error.name === 'InvalidClientTokenId' || isSignatureError) {
+        return { valid: false, error: error.message || 'Invalid credentials or signature' };
       }
       if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
         return { valid: false, error: `Cannot connect to AWS: ${error.message}` };
@@ -268,8 +277,12 @@ export async function validateCredentialsOnly(
             if (s3Error.name === 'ExpiredToken' || s3Error.name === 'ExpiredTokenException' || s3Error.message.includes('ExpiredToken')) {
               return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
             }
-            if (s3Error.name === 'InvalidAccessKeyId' || s3Error.name === 'SignatureDoesNotMatch') {
-              return { valid: false, error: 'Invalid credentials' };
+            // Check for signature errors - indicates auth/config issues
+            const isS3SignatureError = s3Error.name === 'SignatureDoesNotMatch' ||
+              s3Error.message.toLowerCase().includes('signature') ||
+              s3Error.message.toLowerCase().includes('credential');
+            if (s3Error.name === 'InvalidAccessKeyId' || isS3SignatureError) {
+              return { valid: false, error: s3Error.message || 'Invalid credentials or signature' };
             }
             if (s3Error.name === 'AccessDenied' || s3Error.name === 'Forbidden') {
               // Both STS and S3 ListBuckets denied - credentials likely valid but restricted
