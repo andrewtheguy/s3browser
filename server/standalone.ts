@@ -64,10 +64,16 @@ function parseBindAddress(bind: string | undefined): { host: string | undefined;
   // IPv4 or hostname: 127.0.0.1:8080, localhost:8080
   const lastColon = bind.lastIndexOf(':');
   if (lastColon > 0) {
+    const port = parseInt(bind.slice(lastColon + 1), 10);
     return {
       host: bind.slice(0, lastColon),
-      port: parseInt(bind.slice(lastColon + 1), 10) || defaultPort
+      port: Number.isNaN(port) ? defaultPort : port
     };
+  }
+
+  // Hostname only (no colon): localhost, 127.0.0.1
+  if (bind.indexOf(':') === -1) {
+    return { host: bind, port: defaultPort };
   }
 
   return { host: undefined, port: defaultPort };
