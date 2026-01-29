@@ -24,12 +24,12 @@ if (values.help) {
   console.log(`Usage: s3browser [options]
 
 Options:
-  -b, --bind <[host]:port>  Address to bind to (default: :3001)
+  -b, --bind <[host]:port>  Address to bind to (default: :8080)
   -h, --help                Show this help message
 
 Examples:
-  s3browser                    Listen on all interfaces, port 3001
-  s3browser -b :8080           Listen on all interfaces, port 8080
+  s3browser                    Listen on all interfaces, port 8080
+  s3browser -b :3000           Listen on all interfaces, port 3000
   s3browser -b 127.0.0.1:3000  Listen on IPv4 localhost only
   s3browser -b [::1]:3000      Listen on IPv6 localhost only`);
   process.exit(0);
@@ -39,7 +39,7 @@ Examples:
 // Formats: :8080, 8080, 127.0.0.1:8080, [::1]:8080
 // Empty host (`:8080` or `8080`) binds to all interfaces (v4+v6)
 function parseBindAddress(bind: string | undefined): { host: string | undefined; port: number } {
-  const defaultPort = 3001;
+  const defaultPort = 8170;
 
   if (!bind) {
     return { host: undefined, port: defaultPort };
