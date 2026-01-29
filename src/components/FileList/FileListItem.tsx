@@ -1,4 +1,4 @@
-import { TableRow, TableCell, IconButton, Tooltip, Box, Typography } from '@mui/material';
+import { TableRow, TableCell, IconButton, Tooltip, Box, Typography, Checkbox } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import ImageIcon from '@mui/icons-material/Image';
@@ -21,6 +21,8 @@ interface FileListItemProps {
   onNavigate: (path: string) => void;
   onDownload: (key: string) => void;
   onDelete: (item: S3Object) => void;
+  isSelected?: boolean;
+  onSelect?: (key: string, checked: boolean) => void;
 }
 
 const iconMap: Record<FileIconType, React.ElementType> = {
@@ -56,6 +58,8 @@ export function FileListItem({
   onNavigate,
   onDownload,
   onDelete,
+  isSelected = false,
+  onSelect,
 }: FileListItemProps) {
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
@@ -77,10 +81,19 @@ export function FileListItem({
     onDelete(item);
   };
 
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onSelect?.(item.key, e.target.checked);
+  };
+
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <TableRow
       hover
       onClick={handleClick}
+      selected={isSelected}
       sx={{
         cursor: item.isFolder ? 'pointer' : 'default',
         '&:hover': {
@@ -88,6 +101,16 @@ export function FileListItem({
         },
       }}
     >
+      <TableCell sx={{ width: 48, padding: '0 8px' }}>
+        {!item.isFolder && onSelect ? (
+          <Checkbox
+            size="small"
+            checked={isSelected}
+            onChange={handleCheckboxChange}
+            onClick={handleCheckboxClick}
+          />
+        ) : null}
+      </TableCell>
       <TableCell sx={{ width: 48 }}>
         <IconComponent sx={{ color: iconColor, fontSize: 24 }} />
       </TableCell>
@@ -129,13 +152,6 @@ export function FileListItem({
               </IconButton>
             </Tooltip>
           </Box>
-        )}
-        {item.isFolder && (
-          <Tooltip title="Delete folder">
-            <IconButton size="small" onClick={handleDelete} color="error">
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
         )}
       </TableCell>
     </TableRow>

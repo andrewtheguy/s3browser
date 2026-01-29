@@ -48,6 +48,21 @@ export async function deleteObject(key: string): Promise<void> {
   await apiDelete(`/objects/${encodeURIComponent(key)}`);
 }
 
+export interface BatchDeleteResponse {
+  deleted: string[];
+  errors: Array<{ key: string; message: string }>;
+}
+
+export async function deleteObjects(keys: string[], signal?: AbortSignal): Promise<BatchDeleteResponse> {
+  const response = await apiPost<BatchDeleteResponse>('/objects/batch-delete', { keys }, signal);
+
+  if (!response) {
+    throw new Error('Failed to delete objects: missing response');
+  }
+
+  return response;
+}
+
 export async function createFolder(path: string): Promise<void> {
   await apiPost('/objects/folder', { path });
 }

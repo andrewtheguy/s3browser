@@ -11,7 +11,7 @@ import type { S3Object } from '../../types';
 
 interface DeleteDialogProps {
   open: boolean;
-  item: S3Object | null;
+  items: S3Object[];
   isDeleting: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -19,12 +19,12 @@ interface DeleteDialogProps {
 
 export function DeleteDialog({
   open,
-  item,
+  items,
   isDeleting,
   onConfirm,
   onCancel,
 }: DeleteDialogProps) {
-  if (!item) return null;
+  if (items.length === 0) return null;
 
   const handleClose = (_event: object, _reason: 'backdropClick' | 'escapeKeyDown') => {
     if (isDeleting) {
@@ -32,6 +32,26 @@ export function DeleteDialog({
     }
     onCancel();
   };
+
+  const isSingleItem = items.length === 1;
+  const singleItem = items[0];
+
+  const title = isSingleItem
+    ? 'Delete File'
+    : `Delete ${items.length} Files`;
+
+  const message = isSingleItem
+    ? (
+        <>
+          Are you sure you want to delete{' '}
+          <strong>{singleItem.name}</strong>? This action cannot be undone.
+        </>
+      )
+    : (
+        <>
+          Are you sure you want to delete <strong>{items.length} files</strong>? This action cannot be undone.
+        </>
+      );
 
   return (
     <Dialog
@@ -41,16 +61,9 @@ export function DeleteDialog({
       maxWidth="xs"
       fullWidth
     >
-      <DialogTitle>
-        Delete {item.isFolder ? 'Folder' : 'File'}
-      </DialogTitle>
+      <DialogTitle>{title}</DialogTitle>
       <DialogContent>
-        <DialogContentText>
-          Are you sure you want to delete{' '}
-          <strong>{item.name}</strong>
-          {item.isFolder ? ' and all its contents' : ''}? This action cannot be
-          undone.
-        </DialogContentText>
+        <DialogContentText>{message}</DialogContentText>
       </DialogContent>
       <DialogActions>
         <Button onClick={onCancel} disabled={isDeleting}>
