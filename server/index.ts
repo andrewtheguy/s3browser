@@ -63,6 +63,10 @@ function shutdown() {
     console.error('Error during upload tracker cleanup:', err);
   }
 
+  if (!server.listening) {
+    process.exit(0);
+  }
+
   server.close((err) => {
     if (err) {
       console.error('Error closing server:', err);
