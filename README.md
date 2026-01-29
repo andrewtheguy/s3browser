@@ -14,14 +14,16 @@ A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, D
 
 ## Quick Install (Linux & macOS)
 
+Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authenticated.
+
 ```bash
-curl -sSL https://raw.githubusercontent.com/andrewtheguy/s3browser/main/install.sh | bash
+gh api repos/andrewtheguy/s3browser/contents/install.sh --jq '.content' | base64 -d | bash
 ```
 
 To install a specific version:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/andrewtheguy/s3browser/main/install.sh | bash -s v1.0.0
+gh api repos/andrewtheguy/s3browser/contents/install.sh --jq '.content' | base64 -d | bash -s v1.0.0
 ```
 
 ## Tech Stack

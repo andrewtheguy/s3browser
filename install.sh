@@ -5,6 +5,8 @@
 #
 # Usage: ./install.sh [RELEASE_TAG]
 # Or set RELEASE_TAG environment variable
+#
+# Requires: gh CLI (https://cli.github.com/) for private repo authentication
 
 set -e
 
@@ -30,22 +32,24 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Fetch the latest release tag
-get_latest_release_tag() {
-    local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
-    local release_json
-
-    if command -v curl >/dev/null 2>&1; then
-        release_json=$(curl -s "$api_url")
-    elif command -v wget >/dev/null 2>&1; then
-        release_json=$(wget -qO- "$api_url")
-    else
-        print_error "Neither curl nor wget is available. Please install one of them."
+# Check for gh CLI
+check_gh_cli() {
+    if ! command -v gh >/dev/null 2>&1; then
+        print_error "GitHub CLI (gh) is required but not installed."
+        print_error "Install it from: https://cli.github.com/"
         exit 1
     fi
 
+    if ! gh auth status >/dev/null 2>&1; then
+        print_error "GitHub CLI is not authenticated. Run 'gh auth login' first."
+        exit 1
+    fi
+}
+
+# Fetch the latest release tag using gh CLI
+get_latest_release_tag() {
     local tag
-    tag=$(echo "$release_json" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
+    tag=$(gh release view --repo "${REPO_OWNER}/${REPO_NAME}" --json tagName -q '.tagName' 2>/dev/null)
 
     if [ -z "$tag" ]; then
         print_error "Could not find a latest release on GitHub"
@@ -55,19 +59,10 @@ get_latest_release_tag() {
     echo "$tag"
 }
 
-# Fetch full release info from GitHub API
+# Fetch full release info from GitHub API using gh CLI
 get_release_info() {
     local tag="$1"
-    local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${tag}"
-
-    if command -v curl >/dev/null 2>&1; then
-        curl -s "$api_url"
-    elif command -v wget >/dev/null 2>&1; then
-        wget -qO- "$api_url"
-    else
-        print_error "Neither curl nor wget is available."
-        return 1
-    fi
+    gh api "repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${tag}" 2>/dev/null
 }
 
 # Extract SHA-256 checksum from release JSON for a specific binary
@@ -189,27 +184,26 @@ get_binary_name() {
     INSTALL_NAME="s3browser"
 }
 
-# Download binary
+# Download binary using gh CLI
 download_binary() {
-    local base_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${RELEASE_TAG}"
-    local url="${base_url}/${BINARY_NAME}"
     local output_path="$1"
+    local output_dir
+    output_dir=$(dirname "$output_path")
 
-    print_info "Downloading ${BINARY_NAME} from ${url}"
+    print_info "Downloading ${BINARY_NAME} from release ${RELEASE_TAG}"
 
-    if command -v curl >/dev/null 2>&1; then
-        if ! curl -L -o "$output_path" "$url"; then
-            print_error "Failed to download binary"
-            exit 1
-        fi
-    elif command -v wget >/dev/null 2>&1; then
-        if ! wget -O "$output_path" "$url"; then
-            print_error "Failed to download binary"
-            exit 1
-        fi
-    else
-        print_error "Neither curl nor wget is available. Please install one of them."
+    if ! gh release download "${RELEASE_TAG}" \
+        --repo "${REPO_OWNER}/${REPO_NAME}" \
+        --pattern "${BINARY_NAME}" \
+        --dir "$output_dir" \
+        --clobber; then
+        print_error "Failed to download binary"
         exit 1
+    fi
+
+    # gh downloads to output_dir/BINARY_NAME, move if needed
+    if [ "$output_dir/${BINARY_NAME}" != "$output_path" ]; then
+        mv "$output_dir/${BINARY_NAME}" "$output_path"
     fi
 
     # Verify checksum if available
@@ -419,6 +413,7 @@ install() {
 
 # Main execution
 main() {
+    check_gh_cli
     parse_args "$@"
 
     if [ "$DOWNLOAD_ONLY" = true ]; then
