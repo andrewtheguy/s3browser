@@ -1,11 +1,11 @@
 # S3 Browser
 
-A web-based file browser for AWS S3 and S3-compatible storage services (MinIO, DigitalOcean Spaces, etc.).
+A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, DigitalOcean Spaces, etc.).
 
 ## Features
 
 - Browse S3 buckets with folder navigation
-- Upload files (max 100MB per file)
+- Upload files up to 5GB with multipart upload and resume support
 - Download files via presigned URLs
 - Create folders
 - Delete files and folders
@@ -16,19 +16,18 @@ A web-based file browser for AWS S3 and S3-compatible storage services (MinIO, D
 
 - **Frontend**: React, TypeScript, Material-UI
 - **Backend**: Express, AWS SDK v3
-- **Build**: Vite
+- **Build**: Vite (frontend bundler), Bun (runtime, package manager, standalone compiler)
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
+- [Bun](https://bun.sh/) 1.0+
 
 ### Installation
 
 ```bash
-npm install
+bun install
 ```
 
 ### Development
@@ -36,11 +35,7 @@ npm install
 Start both the frontend and backend in development mode:
 
 ```bash
-# Terminal 1: Start the backend server
-npm run server
-
-# Terminal 2: Start the frontend dev server
-npm run dev
+bun run dev
 ```
 
 The frontend runs on `http://localhost:5173` and proxies API requests to the backend on `http://localhost:3001`.
@@ -48,8 +43,27 @@ The frontend runs on `http://localhost:5173` and proxies API requests to the bac
 ### Production Build
 
 ```bash
-npm run build
+bun run build
 ```
+
+### Standalone Executable
+
+Build a self-contained executable with embedded frontend assets:
+
+```bash
+bun run build:standalone
+```
+
+This creates an `s3browser` executable that can be run from anywhere without dependencies. By default, it builds for the current platform (macOS, Linux, or Windows).
+
+```bash
+./s3browser
+./s3browser -b :8080
+./s3browser --bind 127.0.0.1:3000
+./s3browser --bind [::1]:3000
+```
+
+Run `./s3browser --help` for all options.
 
 ## Configuration
 
@@ -70,9 +84,8 @@ For MinIO, DigitalOcean Spaces, or other S3-compatible services:
 
 ## Limitations
 
-- Maximum file size: 100MB
+- Maximum file size: 5GB
 - Session expires after 4 hours
-- Files are uploaded to memory before being sent to S3 (not suitable for very large files)
 
 ## Security
 

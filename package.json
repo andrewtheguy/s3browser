@@ -4,15 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
     "dev:client": "vite",
-    "dev:server": "tsx watch server/index.ts",
-    "build": "npm run build:client && npm run build:server",
+    "dev:server": "bun --watch server/index.ts",
+    "build": "bun run build:client && bun run build:server",
     "build:client": "tsc -b tsconfig.app.json && vite build",
     "build:server": "tsc -p tsconfig.server.json",
-    "start": "node dist-server/index.js",
+    "start": "bun dist-server/index.js",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:standalone": "bun run scripts/build-standalone.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.978.0",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@types/bun": "^1.2.13",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.1",
     "@types/multer": "^1.4.12",
@@ -44,7 +46,6 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "tsx": "^4.19.4",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4"

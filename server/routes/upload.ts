@@ -10,8 +10,16 @@ import {
 import { authMiddleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 import { UPLOAD_CONFIG } from '../config/upload.js';
 
-// Whitelist: alphanumeric, hyphen, underscore, period, forward slash
-const VALID_KEY_PATTERN = /^[a-zA-Z0-9\-_./]+$/;
+// Check for control characters (0x00-0x1f, 0x7f) or backslashes
+function hasUnsafeChars(str: string): boolean {
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f || str[i] === '\\') {
+      return true;
+    }
+  }
+  return false;
+}
 
 function validateAndSanitizeKey(key: string): { valid: false; error: string } | { valid: true; sanitizedKey: string } {
   // Reject empty keys
@@ -19,9 +27,9 @@ function validateAndSanitizeKey(key: string): { valid: false; error: string } | 
     return { valid: false, error: 'Object key is required' };
   }
 
-  // Reject backslashes
-  if (key.includes('\\')) {
-    return { valid: false, error: 'Invalid character in key: backslash not allowed' };
+  // Reject control characters and backslashes
+  if (hasUnsafeChars(key)) {
+    return { valid: false, error: 'Invalid character in key: control characters and backslashes not allowed' };
   }
 
   // Reject absolute paths
@@ -33,11 +41,6 @@ function validateAndSanitizeKey(key: string): { valid: false; error: string } | 
   const normalized = path.posix.normalize(key);
   if (normalized.startsWith('..') || normalized === '.' || normalized === '') {
     return { valid: false, error: 'Directory traversal not allowed' };
-  }
-
-  // Validate against whitelist pattern
-  if (!VALID_KEY_PATTERN.test(normalized)) {
-    return { valid: false, error: 'Invalid characters in key' };
   }
 
   return { valid: true, sanitizedKey: normalized };
