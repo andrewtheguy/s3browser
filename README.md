@@ -8,9 +8,21 @@ A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, D
 - Upload files up to 5GB with multipart upload and resume support
 - Download files via presigned URLs
 - Create folders
-- Delete files and folders
+- Delete files
 - Auto-detect bucket region or specify manually
 - Support for custom S3-compatible endpoints
+
+## Quick Install (Linux & macOS)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/andrewtheguy/s3browser/main/install.sh | bash
+```
+
+To install a specific version:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/andrewtheguy/s3browser/main/install.sh | bash -s v1.0.0
+```
 
 ## Tech Stack
 
