@@ -54,7 +54,13 @@ export interface BatchDeleteResponse {
 }
 
 export async function deleteObjects(keys: string[], signal?: AbortSignal): Promise<BatchDeleteResponse> {
-  return apiPost<BatchDeleteResponse>('/objects/batch-delete', { keys }, signal);
+  const response = await apiPost<BatchDeleteResponse>('/objects/batch-delete', { keys }, signal);
+
+  if (!response) {
+    throw new Error('Failed to delete objects: missing response');
+  }
+
+  return response;
 }
 
 export async function createFolder(path: string): Promise<void> {
