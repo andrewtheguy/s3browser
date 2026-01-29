@@ -10,6 +10,7 @@ import {
   Typography,
   Skeleton,
   Alert,
+  Checkbox,
 } from '@mui/material';
 import FolderOffIcon from '@mui/icons-material/FolderOff';
 import { useBrowserContext } from '../../contexts';
@@ -19,10 +20,19 @@ import type { S3Object } from '../../types';
 
 interface FileListProps {
   onDeleteRequest: (item: S3Object) => void;
+  selectedKeys: Set<string>;
+  onSelectItem: (key: string, checked: boolean) => void;
+  onSelectAll: (checked: boolean) => void;
 }
 
-export function FileList({ onDeleteRequest }: FileListProps) {
+export function FileList({ onDeleteRequest, selectedKeys, onSelectItem, onSelectAll }: FileListProps) {
   const { objects, isLoading, error, navigateTo } = useBrowserContext();
+
+  const selectableItems = objects.filter((item) => !item.isFolder);
+  const selectableCount = selectableItems.length;
+  const selectedCount = selectedKeys.size;
+  const isAllSelected = selectableCount > 0 && selectedCount === selectableCount;
+  const isIndeterminate = selectedCount > 0 && selectedCount < selectableCount;
   const { download } = useDownload();
 
   const handleDownload = async (key: string) => {
@@ -47,6 +57,7 @@ export function FileList({ onDeleteRequest }: FileListProps) {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell sx={{ width: 48, padding: '0 8px' }} />
               <TableCell sx={{ width: 48 }} />
               <TableCell>Name</TableCell>
               <TableCell sx={{ width: 100 }}>Size</TableCell>
@@ -57,6 +68,9 @@ export function FileList({ onDeleteRequest }: FileListProps) {
           <TableBody>
             {Array.from({ length: 5 }).map((_, index) => (
               <TableRow key={index}>
+                <TableCell sx={{ padding: '0 8px' }}>
+                  <Skeleton variant="rectangular" width={20} height={20} />
+                </TableCell>
                 <TableCell>
                   <Skeleton variant="circular" width={24} height={24} />
                 </TableCell>
@@ -106,6 +120,16 @@ export function FileList({ onDeleteRequest }: FileListProps) {
       <Table>
         <TableHead>
           <TableRow>
+            <TableCell sx={{ width: 48, padding: '0 8px' }}>
+              {selectableCount > 0 && (
+                <Checkbox
+                  size="small"
+                  checked={isAllSelected}
+                  indeterminate={isIndeterminate}
+                  onChange={(e) => onSelectAll(e.target.checked)}
+                />
+              )}
+            </TableCell>
             <TableCell sx={{ width: 48 }} />
             <TableCell>Name</TableCell>
             <TableCell sx={{ width: 100 }}>Size</TableCell>
@@ -123,6 +147,8 @@ export function FileList({ onDeleteRequest }: FileListProps) {
               onNavigate={navigateTo}
               onDownload={handleDownload}
               onDelete={onDeleteRequest}
+              isSelected={selectedKeys.has(item.key)}
+              onSelect={onSelectItem}
             />
           ))}
         </TableBody>

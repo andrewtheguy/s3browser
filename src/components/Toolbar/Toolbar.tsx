@@ -15,14 +15,17 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LogoutIcon from '@mui/icons-material/Logout';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 
 interface ToolbarProps {
   onUploadClick: () => void;
   onCreateFolderClick: () => void;
+  selectedCount?: number;
+  onBatchDelete?: () => void;
 }
 
-export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
+export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0, onBatchDelete }: ToolbarProps) {
   const navigate = useNavigate();
   const { credentials, disconnect } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
@@ -72,6 +75,16 @@ export function Toolbar({ onUploadClick, onCreateFolderClick }: ToolbarProps) {
               <RefreshIcon />
             </IconButton>
           </Tooltip>
+          {selectedCount > 0 && onBatchDelete && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={onBatchDelete}
+            >
+              Delete ({selectedCount})
+            </Button>
+          )}
           <Button
             variant="outlined"
             startIcon={<CreateNewFolderIcon />}

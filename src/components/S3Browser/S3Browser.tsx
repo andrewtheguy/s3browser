@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -26,13 +26,14 @@ interface SnackbarState {
 }
 
 export function S3Browser() {
-  const { refresh, currentPath } = useBrowserContext();
-  const { remove, isDeleting } = useDelete();
+  const { refresh, currentPath, objects } = useBrowserContext();
+  const { remove, removeMany, isDeleting } = useDelete();
   const { createNewFolder } = useUpload();
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<S3Object | null>(null);
+  const [itemsToDelete, setItemsToDelete] = useState<S3Object[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -66,33 +67,81 @@ export function S3Browser() {
     showSnackbar('Files uploaded successfully', 'success');
   }, [refresh, showSnackbar]);
 
+  // Clear selection when path changes
+  useEffect(() => {
+    setSelectedKeys(new Set());
+  }, [currentPath]);
+
+  const handleSelectItem = useCallback((key: string, checked: boolean) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(key);
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback((checked: boolean) => {
+    if (checked) {
+      const fileKeys = objects.filter((item) => !item.isFolder).map((item) => item.key);
+      setSelectedKeys(new Set(fileKeys));
+    } else {
+      setSelectedKeys(new Set());
+    }
+  }, [objects]);
+
   const handleDeleteRequest = useCallback((item: S3Object) => {
-    setItemToDelete(item);
+    setItemsToDelete([item]);
     setDeleteDialogOpen(true);
   }, []);
 
+  const handleBatchDeleteRequest = useCallback(() => {
+    const items = objects.filter((item) => selectedKeys.has(item.key));
+    if (items.length > 0) {
+      setItemsToDelete(items);
+      setDeleteDialogOpen(true);
+    }
+  }, [objects, selectedKeys]);
+
   const handleDeleteConfirm = useCallback(async () => {
-    if (!itemToDelete) return;
+    if (itemsToDelete.length === 0) return;
 
     try {
-      await remove(itemToDelete.key);
-      showSnackbar(
-        `${itemToDelete.isFolder ? 'Folder' : 'File'} deleted successfully`,
-        'success'
-      );
+      if (itemsToDelete.length === 1) {
+        await remove(itemsToDelete[0].key);
+        showSnackbar(
+          `${itemsToDelete[0].isFolder ? 'Folder' : 'File'} deleted successfully`,
+          'success'
+        );
+      } else {
+        const keys = itemsToDelete.map((item) => item.key);
+        const result = await removeMany(keys);
+        if (result.errors.length > 0) {
+          showSnackbar(
+            `Deleted ${result.deleted.length} files, ${result.errors.length} failed`,
+            'warning'
+          );
+        } else {
+          showSnackbar(`${result.deleted.length} files deleted successfully`, 'success');
+        }
+      }
+      setSelectedKeys(new Set());
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Delete failed';
       showSnackbar(message, 'error');
     } finally {
       setDeleteDialogOpen(false);
-      setItemToDelete(null);
+      setItemsToDelete([]);
     }
-  }, [itemToDelete, remove, refresh, showSnackbar]);
+  }, [itemsToDelete, remove, removeMany, refresh, showSnackbar]);
 
   const handleDeleteCancel = useCallback(() => {
     setDeleteDialogOpen(false);
-    setItemToDelete(null);
+    setItemsToDelete([]);
   }, []);
 
   const handleCreateFolderClick = useCallback(() => {
@@ -136,9 +185,16 @@ export function S3Browser() {
         <Toolbar
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}
+          selectedCount={selectedKeys.size}
+          onBatchDelete={handleBatchDeleteRequest}
         />
         <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-          <FileList onDeleteRequest={handleDeleteRequest} />
+          <FileList
+            onDeleteRequest={handleDeleteRequest}
+            selectedKeys={selectedKeys}
+            onSelectItem={handleSelectItem}
+            onSelectAll={handleSelectAll}
+          />
         </Box>
       </Paper>
 
@@ -150,7 +206,7 @@ export function S3Browser() {
 
       <DeleteDialog
         open={deleteDialogOpen}
-        item={itemToDelete}
+        items={itemsToDelete}
         isDeleting={isDeleting}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
