@@ -197,7 +197,14 @@ export function S3Browser() {
           onBatchDelete={handleBatchDeleteRequest}
           isDeleting={isDeleting}
         />
-        <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+        <Box
+          sx={{
+            flexGrow: 1,
+            overflowY: 'scroll',
+            overflowX: 'hidden',
+            scrollbarGutter: 'stable',
+          }}
+        >
           <FileList
             onDeleteRequest={handleDeleteRequest}
             onCopyUrl={handleCopyUrl}

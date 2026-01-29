@@ -150,19 +150,19 @@ export function FileListItem({
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           {!item.isFolder && (
             <>
-              <Tooltip title="Copy presigned URL (24h)">
+              <Tooltip title="Copy presigned URL (24h)" placement="left">
                 <IconButton size="small" onClick={handleCopyUrl}>
                   <LinkIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Download">
+              <Tooltip title="Download" placement="left">
                 <IconButton size="small" onClick={handleDownload}>
                   <DownloadIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
             </>
           )}
-          <Tooltip title={item.isFolder ? "Delete folder (must be empty)" : "Delete"}>
+          <Tooltip title={item.isFolder ? "Delete folder (must be empty)" : "Delete"} placement="left">
             <IconButton size="small" onClick={handleDelete} color="error">
               <DeleteIcon fontSize="small" />
             </IconButton>

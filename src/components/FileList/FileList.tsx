@@ -118,7 +118,7 @@ export function FileList({ onDeleteRequest, onCopyUrl, selectedKeys, onSelectIte
 
   return (
     <TableContainer component={Paper} elevation={0}>
-      <Table>
+      <Table sx={{ tableLayout: 'fixed' }}>
         <TableHead>
           <TableRow>
             <TableCell sx={{ width: 48, padding: '0 8px' }}>
