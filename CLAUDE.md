@@ -1,2 +1,2 @@
 use bun instead of npm
-run bun run lint after changes
+run bun run lint after javascript related changes
