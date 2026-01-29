@@ -59,20 +59,20 @@ get_latest_release_tag() {
     echo "$tag"
 }
 
-# Fetch full release info from GitHub API using gh CLI
-get_release_info() {
-    local tag="$1"
-    gh api "repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${tag}" 2>/dev/null
-}
-
-# Extract SHA-256 checksum from release JSON for a specific binary
+# Extract SHA-256 checksum for a specific binary from release
 get_expected_checksum() {
-    local release_json="$1"
+    local tag="$1"
     local binary_name="$2"
 
-    # Extract sha256 hash for matching asset (GitHub includes digest in asset metadata)
-    echo "$release_json" | grep -A40 "\"name\": \"${binary_name}\"" | \
-        grep '"digest"' | head -1 | grep -o 'sha256:[a-f0-9]*' | cut -d: -f2
+    # Use gh api with jq to extract the digest for the matching asset
+    local digest
+    digest=$(gh api "repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${tag}" \
+        --jq ".assets[] | select(.name == \"${binary_name}\") | .digest" 2>/dev/null)
+
+    # Extract just the hash from "sha256:..."
+    if [ -n "$digest" ]; then
+        echo "$digest" | sed 's/^sha256://'
+    fi
 }
 
 # Compute SHA-256 checksum of a file (cross-platform)
@@ -387,16 +387,9 @@ install() {
     print_info "Platform detected: ${OS}-${ARCH}"
     print_info "Binary name: ${BINARY_NAME}"
 
-    # Fetch release info for checksum verification
-    print_info "Fetching release information..."
-    RELEASE_JSON=$(get_release_info "$RELEASE_TAG")
-
-    if [ -z "$RELEASE_JSON" ] || echo "$RELEASE_JSON" | grep -q '"message": "Not Found"'; then
-        print_error "Could not fetch release info from GitHub."
-        exit 1
-    fi
-
-    EXPECTED_CHECKSUM=$(get_expected_checksum "$RELEASE_JSON" "$BINARY_NAME")
+    # Fetch checksum for verification
+    print_info "Fetching checksum..."
+    EXPECTED_CHECKSUM=$(get_expected_checksum "$RELEASE_TAG" "$BINARY_NAME")
     if [ -n "$EXPECTED_CHECKSUM" ]; then
         print_info "Expected checksum: ${EXPECTED_CHECKSUM:0:16}..."
     fi
