@@ -53,8 +53,8 @@ export interface BatchDeleteResponse {
   errors: Array<{ key: string; message: string }>;
 }
 
-export async function deleteObjects(keys: string[]): Promise<BatchDeleteResponse> {
-  return apiPost<BatchDeleteResponse>('/objects/batch-delete', { keys });
+export async function deleteObjects(keys: string[], signal?: AbortSignal): Promise<BatchDeleteResponse> {
+  return apiPost<BatchDeleteResponse>('/objects/batch-delete', { keys }, signal);
 }
 
 export async function createFolder(path: string): Promise<void> {

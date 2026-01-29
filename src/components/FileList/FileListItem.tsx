@@ -82,7 +82,6 @@ export function FileListItem({
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.stopPropagation();
     onSelect?.(item.key, e.target.checked);
   };
 

@@ -160,11 +160,15 @@ router.post('/batch-delete', async (req: AuthenticatedRequest, res: Response): P
   const response = await session.client.send(command);
 
   const result: BatchDeleteResponse = {
-    deleted: response.Deleted?.map((d) => d.Key!).filter(Boolean) ?? [],
-    errors: response.Errors?.map((e) => ({
-      key: e.Key ?? '',
-      message: e.Message ?? 'Unknown error',
-    })) ?? [],
+    deleted: response.Deleted
+      ?.filter((d): d is { Key: string } => typeof d.Key === 'string')
+      .map((d) => d.Key) ?? [],
+    errors: response.Errors
+      ?.filter((e): e is { Key: string; Message?: string } => typeof e.Key === 'string')
+      .map((e) => ({
+        key: e.Key,
+        message: e.Message ?? 'Unknown error',
+      })) ?? [],
   };
 
   res.json(result);
