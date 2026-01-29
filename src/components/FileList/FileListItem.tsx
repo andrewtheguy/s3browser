@@ -11,6 +11,7 @@ import FolderZipIcon from '@mui/icons-material/FolderZip';
 import CodeIcon from '@mui/icons-material/Code';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import DownloadIcon from '@mui/icons-material/Download';
+import LinkIcon from '@mui/icons-material/Link';
 import DeleteIcon from '@mui/icons-material/Delete';
 import type { S3Object } from '../../types';
 import { formatFileSize, formatDate } from '../../utils/formatters';
@@ -20,6 +21,7 @@ interface FileListItemProps {
   item: S3Object;
   onNavigate: (path: string) => void;
   onDownload: (key: string) => void;
+  onCopyUrl: (key: string) => void;
   onDelete: (item: S3Object) => void;
   isSelected?: boolean;
   onSelect?: (key: string, checked: boolean) => void;
@@ -57,6 +59,7 @@ export function FileListItem({
   item,
   onNavigate,
   onDownload,
+  onCopyUrl,
   onDelete,
   isSelected = false,
   onSelect,
@@ -79,6 +82,11 @@ export function FileListItem({
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     onDelete(item);
+  };
+
+  const handleCopyUrl = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onCopyUrl(item.key);
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,20 +147,27 @@ export function FileListItem({
         </Typography>
       </TableCell>
       <TableCell sx={{ width: 100 }} align="right">
-        {!item.isFolder && (
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Tooltip title="Download">
-              <IconButton size="small" onClick={handleDownload}>
-                <DownloadIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete">
-              <IconButton size="small" onClick={handleDelete} color="error">
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        )}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          {!item.isFolder && (
+            <>
+              <Tooltip title="Copy presigned URL (24h)" placement="top-start">
+                <IconButton size="small" onClick={handleCopyUrl}>
+                  <LinkIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Download" placement="top-start">
+                <IconButton size="small" onClick={handleDownload}>
+                  <DownloadIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+          <Tooltip title={item.isFolder ? "Delete folder (must be empty)" : "Delete"} placement="top-start">
+            <IconButton size="small" onClick={handleDelete} color="error">
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </TableCell>
     </TableRow>
   );

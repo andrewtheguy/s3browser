@@ -154,6 +154,21 @@ router.get('/buckets', authMiddleware, async (req: AuthenticatedRequest, res: Re
     console.error('Failed to list buckets:', error);
 
     if (error instanceof Error) {
+      // Check for signature/auth errors first - these are config issues, not permission issues
+      const signatureErrorNames = ['SignatureDoesNotMatch', 'InvalidAccessKeyId', 'ExpiredToken', 'AccessDenied', 'InvalidToken'];
+      const isSignatureError =
+        signatureErrorNames.some(n => error?.name === n || error?.name?.toLowerCase() === n.toLowerCase()) ||
+        error.message?.toLowerCase().includes('signature') ||
+        error.message?.toLowerCase().includes('credential');
+
+      if (isSignatureError) {
+        res.status(401).json({
+          error: 'Authentication failed',
+          message: error.message || 'Invalid signature or credentials. Check your access key, secret key, region, and endpoint.',
+        });
+        return;
+      }
+
       if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
         res.status(403).json({
           error: 'Access denied',

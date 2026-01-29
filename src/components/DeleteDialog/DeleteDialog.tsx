@@ -35,18 +35,26 @@ export function DeleteDialog({
 
   const isSingleItem = items.length === 1;
   const singleItem = items[0];
+  const isFolder = isSingleItem && singleItem.isFolder;
 
   const title = isSingleItem
-    ? 'Delete File'
+    ? isFolder ? 'Delete Folder' : 'Delete File'
     : `Delete ${items.length} Files`;
 
   const message = isSingleItem
-    ? (
-        <>
-          Are you sure you want to delete{' '}
-          <strong>{singleItem.name}</strong>? This action cannot be undone.
-        </>
-      )
+    ? isFolder
+      ? (
+          <>
+            Are you sure you want to delete the folder{' '}
+            <strong>{singleItem.name}</strong>? The folder must be empty.
+          </>
+        )
+      : (
+          <>
+            Are you sure you want to delete{' '}
+            <strong>{singleItem.name}</strong>? This action cannot be undone.
+          </>
+        )
     : (
         <>
           Are you sure you want to delete <strong>{items.length} files</strong>? This action cannot be undone.
