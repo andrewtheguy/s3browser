@@ -22,6 +22,7 @@ import {
   deleteConnectionById,
   decryptConnectionSecretKey,
   getConnectionById,
+  setSessionActiveConnection,
 } from '../db/index.js';
 
 interface UserLoginRequestBody {
@@ -423,6 +424,7 @@ router.get('/connections', userAuthMiddleware, (req: AuthenticatedRequest, res: 
 // DELETE /api/auth/connections/:id - Delete a saved connection by ID
 router.delete('/connections/:id', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
   const session = req.session!;
+  const sessionId = req.sessionId!;
   const connectionId = parseInt(req.params.id as string, 10);
 
   if (isNaN(connectionId) || connectionId <= 0) {
@@ -434,6 +436,13 @@ router.delete('/connections/:id', userAuthMiddleware, (req: AuthenticatedRequest
   if (!deleted) {
     res.status(404).json({ error: 'Connection not found' });
     return;
+  }
+
+  // If the deleted connection was the active one, clear the session's S3 state
+  if (session.activeConnectionId === connectionId) {
+    setSessionActiveConnection(sessionId, null);
+    session.credentials = null;
+    session.client = null;
   }
 
   res.json({ success: true });

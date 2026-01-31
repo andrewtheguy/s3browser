@@ -30,7 +30,7 @@ interface ToolbarProps {
 
 export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0, onBatchDelete, isDeleting = false }: ToolbarProps) {
   const navigate = useNavigate();
-  const { connectionId } = useParams<{ connectionId: string }>();
+  const { connectionId } = useParams<{ connectionId?: string }>();
   const { credentials, disconnect, activeConnectionId } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
 
@@ -43,6 +43,10 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
       void navigate('/');
     }
   }, [disconnect, navigate]);
+
+  const handleManageConnections = useCallback(() => {
+    void navigate('/');
+  }, [navigate]);
 
   const handleChangeBucket = useCallback(() => {
     const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
@@ -118,7 +122,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
             Upload
           </Button>
           <Tooltip title="Manage Connections">
-            <IconButton onClick={() => void navigate('/')}>
+            <IconButton onClick={handleManageConnections}>
               <SettingsIcon />
             </IconButton>
           </Tooltip>

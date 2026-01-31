@@ -278,8 +278,13 @@ export function getSession(sessionId: string): SessionWithConnection | undefined
     // Decrypt the secret access key
     try {
       row.connection_secret_access_key = decrypt(row.connection_secret_access_key);
-    } catch {
-      console.error('Failed to decrypt S3 credentials for session');
+    } catch (err) {
+      console.error('Failed to decrypt S3 credentials for session:', {
+        sessionId: row.id,
+        connectionId: row.active_connection_id,
+        userId: row.user_id,
+        error: err,
+      });
       return undefined;
     }
   }
@@ -287,7 +292,7 @@ export function getSession(sessionId: string): SessionWithConnection | undefined
   return row;
 }
 
-export function setSessionActiveConnection(sessionId: string, connectionId: number): void {
+export function setSessionActiveConnection(sessionId: string, connectionId: number | null): void {
   const database = getDb();
   const stmt = database.prepare(`
     UPDATE sessions SET active_connection_id = ? WHERE id = ?
