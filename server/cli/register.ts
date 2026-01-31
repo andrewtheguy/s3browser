@@ -113,42 +113,44 @@ Minimum password length: ${MIN_PASSWORD_LENGTH} characters.
     process.exit(1);
   }
 
-  // Check if user already exists
   try {
-    const existingUser = getUserByUsername(username);
-    if (existingUser) {
-      console.error(`Error: User '${username}' already exists`);
+    // Check if user already exists
+    try {
+      const existingUser = getUserByUsername(username);
+      if (existingUser) {
+        console.error(`Error: User '${username}' already exists`);
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error('Error: Failed to check existing user:', error instanceof Error ? error.message : error);
       process.exit(1);
     }
-  } catch (error) {
-    console.error('Error: Failed to check existing user:', error instanceof Error ? error.message : error);
-    process.exit(1);
-  }
 
-  // Prompt for password
-  const password = await promptPassword('Enter password: ');
+    // Prompt for password
+    const password = await promptPassword('Enter password: ');
 
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    console.error(`Error: Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
-    process.exit(1);
-  }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      console.error(`Error: Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+      process.exit(1);
+    }
 
-  // Confirm password
-  const confirmPassword = await promptPassword('Confirm password: ');
+    // Confirm password
+    const confirmPassword = await promptPassword('Confirm password: ');
 
-  if (password !== confirmPassword) {
-    console.error('Error: Passwords do not match');
-    process.exit(1);
-  }
+    if (password !== confirmPassword) {
+      console.error('Error: Passwords do not match');
+      process.exit(1);
+    }
 
-  // Hash password and create user
-  try {
-    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    const user = createUser(username, passwordHash);
-    console.log(`\nUser '${user.username}' created successfully!`);
-  } catch (error) {
-    console.error('Error: Failed to create user:', error instanceof Error ? error.message : error);
-    process.exit(1);
+    // Hash password and create user
+    try {
+      const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      const user = createUser(username, passwordHash);
+      console.log(`\nUser '${user.username}' created successfully!`);
+    } catch (error) {
+      console.error('Error: Failed to create user:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
   } finally {
     closeDb();
   }
