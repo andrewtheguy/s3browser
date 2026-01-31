@@ -43,18 +43,12 @@ export interface SessionData {
   createdAt: number;
 }
 
-// In-memory cache for sessions (to avoid db queries on every request)
-const sessionCache = new Map<string, { data: SessionData; cachedAt: number }>();
-const CACHE_TTL_MS = 30 * 1000; // 30 seconds
-
 // Clean up expired sessions periodically
 setInterval(() => {
   const deleted = cleanupExpiredSessions();
   if (deleted > 0) {
     console.log(`Cleaned up ${deleted} expired sessions`);
   }
-  // Also clean the cache
-  sessionCache.clear();
 }, 60 * 1000); // Check every minute
 
 export function generateSessionId(): string {
@@ -123,8 +117,6 @@ export function setS3CredentialsOnSession(
     credentials.bucket || null
   );
 
-  // Invalidate cache
-  sessionCache.delete(sessionId);
   return true;
 }
 
@@ -134,21 +126,12 @@ export function clearS3CredentialsOnSession(sessionId: string): boolean {
   if (!session) return false;
 
   clearSessionS3Credentials(sessionId);
-  // Invalidate cache
-  sessionCache.delete(sessionId);
   return true;
 }
 
 export function getSession(sessionId: string): SessionData | undefined {
-  // Check cache first
-  const cached = sessionCache.get(sessionId);
-  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-    return cached.data;
-  }
-
   const dbSession = getDbSession(sessionId);
   if (!dbSession) {
-    sessionCache.delete(sessionId);
     return undefined;
   }
 
@@ -167,22 +150,16 @@ export function getSession(sessionId: string): SessionData | undefined {
     client = createS3Client(credentials);
   }
 
-  const sessionData: SessionData = {
+  return {
     userId: dbSession.user_id,
     username: dbSession.username,
     credentials,
     client,
     createdAt: dbSession.created_at * 1000, // Convert to ms
   };
-
-  // Cache the session
-  sessionCache.set(sessionId, { data: sessionData, cachedAt: Date.now() });
-
-  return sessionData;
 }
 
 export function deleteSession(sessionId: string): boolean {
-  sessionCache.delete(sessionId);
   deleteDbSession(sessionId);
   return true;
 }
@@ -461,8 +438,6 @@ export function updateSessionBucket(sessionId: string, bucket: string): boolean 
   if (!session) return false;
 
   updateDbSessionBucket(sessionId, bucket);
-  // Invalidate cache
-  sessionCache.delete(sessionId);
   return true;
 }
 
