@@ -37,7 +37,10 @@ function isValidUrl(value: string): boolean {
 
 function isValidConnectionName(value: string): boolean {
   if (!value) return false;
-  return !value.includes(' ');
+  // Allow only letters, numbers, dashes, underscores, and dots
+  // Enforce length between 1 and 64 characters
+  if (value.length > 64) return false;
+  return /^[a-zA-Z0-9._-]+$/.test(value);
 }
 
 interface S3ConnectionFormProps {
@@ -56,7 +59,7 @@ export function S3ConnectionForm({
   onLogout,
 }: S3ConnectionFormProps) {
   const navigate = useNavigate();
-  const { connect, isUserLoggedIn, activeConnectionId, credentials, isConnected } = useS3Client();
+  const { connect, isUserLoggedIn, activeConnectionId, credentials: activeCredentials, isConnected } = useS3Client();
   const { connections, deleteConnection, isLoading: connectionsLoading } = useConnectionHistory(isUserLoggedIn);
 
   // Check if we can continue browsing (have an active connection)
@@ -208,15 +211,15 @@ export function S3ConnectionForm({
           color="primary"
           startIcon={<ArrowForwardIcon />}
           onClick={() => {
-            if (credentials?.bucket) {
-              void navigate(buildBrowseUrl(activeConnectionId, credentials.bucket, ''));
+            if (activeCredentials?.bucket) {
+              void navigate(buildBrowseUrl(activeConnectionId, activeCredentials.bucket, ''));
             } else {
               void navigate(buildSelectBucketUrl(activeConnectionId));
             }
           }}
           sx={{ mb: 2 }}
         >
-          Continue Browsing{credentials?.bucket ? ` (${credentials.bucket})` : ''}
+          Continue Browsing{activeCredentials?.bucket ? ` (${activeCredentials.bucket})` : ''}
         </Button>
       )}
 
