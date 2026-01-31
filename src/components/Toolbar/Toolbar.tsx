@@ -16,6 +16,7 @@ import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LogoutIcon from '@mui/icons-material/Logout';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 
 interface ToolbarProps {
@@ -28,7 +29,7 @@ interface ToolbarProps {
 
 export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0, onBatchDelete, isDeleting = false }: ToolbarProps) {
   const navigate = useNavigate();
-  const { credentials, disconnect } = useS3ClientContext();
+  const { credentials, disconnect, disconnectS3 } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
 
   const handleDisconnect = useCallback(async () => {
@@ -40,6 +41,16 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
       void navigate('/');
     }
   }, [disconnect, navigate]);
+
+  const handleChangeConnection = useCallback(async () => {
+    try {
+      await disconnectS3();
+    } catch (error) {
+      console.error('S3 disconnect failed:', error);
+    } finally {
+      void navigate('/');
+    }
+  }, [disconnectS3, navigate]);
 
   const handleBreadcrumbClick = (index: number) => {
     if (index === -1) {
@@ -65,7 +76,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
             label={`Bucket: ${credentials?.bucket ?? '—'}`}
             color="primary"
             variant="outlined"
-            onClick={() => void navigate('/')}
+            onClick={() => void navigate('/select-bucket')}
             sx={{ fontWeight: 500, cursor: 'pointer' }}
           />
         </Tooltip>
@@ -100,6 +111,13 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
             onClick={onUploadClick}
           >
             Upload
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<SwapHorizIcon />}
+            onClick={handleChangeConnection}
+          >
+            Change Connection
           </Button>
           <Tooltip title="Disconnect">
             <IconButton onClick={handleDisconnect} color="error">

@@ -6,7 +6,7 @@ import { BucketSelector } from '../components/BucketSelector';
 
 export function SelectBucketPage() {
   const navigate = useNavigate();
-  const { isConnected, isCheckingSession, credentials } = useS3ClientContext();
+  const { isConnected, isCheckingSession } = useS3ClientContext();
 
   useEffect(() => {
     // Redirect to home if not connected (S3 credentials not set)
@@ -14,13 +14,6 @@ export function SelectBucketPage() {
       void navigate('/', { replace: true });
     }
   }, [isConnected, isCheckingSession, navigate]);
-
-  useEffect(() => {
-    // If already has a bucket selected, redirect to browse
-    if (isConnected && credentials?.bucket) {
-      void navigate(`/browse/${encodeURIComponent(credentials.bucket)}`, { replace: true });
-    }
-  }, [isConnected, credentials?.bucket, navigate]);
 
   // Show loading while checking session
   if (isCheckingSession) {
@@ -40,11 +33,6 @@ export function SelectBucketPage() {
 
   // Don't render if not connected (will redirect)
   if (!isConnected) {
-    return null;
-  }
-
-  // Don't render if bucket already selected (will redirect)
-  if (credentials?.bucket) {
     return null;
   }
 
