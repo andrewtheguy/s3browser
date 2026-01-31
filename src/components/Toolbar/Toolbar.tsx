@@ -45,10 +45,16 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
   }, [disconnect, navigate]);
 
   const handleChangeBucket = useCallback(() => {
-    const connId = connectionId ? parseInt(connectionId, 10) : activeConnectionId;
-    if (connId) {
-      void navigate(buildSelectBucketUrl(connId));
+    const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
+    const connId = !isNaN(parsedId) && parsedId > 0 ? parsedId : activeConnectionId;
+
+    if (!connId || connId <= 0) {
+      console.error('Cannot change bucket: no valid connection ID available');
+      void navigate('/');
+      return;
     }
+
+    void navigate(buildSelectBucketUrl(connId));
   }, [connectionId, activeConnectionId, navigate]);
 
   const handleBreadcrumbClick = (index: number) => {

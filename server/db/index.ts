@@ -302,10 +302,11 @@ export function setSessionActiveBucket(sessionId: string, bucket: string): void 
   stmt.run(bucket, sessionId);
 }
 
-export function deleteSession(sessionId: string): void {
+export function deleteSession(sessionId: string): boolean {
   const database = getDb();
   const stmt = database.prepare('DELETE FROM sessions WHERE id = ?');
-  stmt.run(sessionId);
+  const result = stmt.run(sessionId);
+  return result.changes > 0;
 }
 
 export function cleanupExpiredSessions(): number {

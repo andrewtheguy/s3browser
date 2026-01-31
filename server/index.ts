@@ -83,23 +83,29 @@ function shutdown() {
     console.error('Error during upload tracker cleanup:', err);
   }
 
-  try {
-    closeDb();
-  } catch (err) {
-    console.error('Error closing database:', err);
-  }
-
   if (!server.listening) {
+    try {
+      closeDb();
+    } catch (err) {
+      console.error('Error closing database:', err);
+    }
     process.exit(0);
   }
 
   server.close((err) => {
     if (err) {
       console.error('Error closing server:', err);
-      process.exit(1);
+    } else {
+      console.log('Server closed');
     }
-    console.log('Server closed');
-    process.exit(0);
+
+    try {
+      closeDb();
+    } catch (dbErr) {
+      console.error('Error closing database:', dbErr);
+    }
+
+    process.exit(err ? 1 : 0);
   });
 }
 

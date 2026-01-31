@@ -1,10 +1,24 @@
-import { useParams } from 'react-router';
+import { useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router';
 import { BucketSelector } from '../components/BucketSelector';
 
 export function SelectBucketPage() {
-  const { connectionId } = useParams<{ connectionId: string }>();
+  const { connectionId: urlConnectionId } = useParams<{ connectionId: string }>();
+  const navigate = useNavigate();
 
-  // AuthGuard already handles all the authentication and connection checks
-  // Just pass the connectionId to the BucketSelector
-  return <BucketSelector connectionId={parseInt(connectionId!, 10)} />;
+  const parsedId = urlConnectionId ? parseInt(urlConnectionId, 10) : NaN;
+  const connectionId = !isNaN(parsedId) && parsedId > 0 ? parsedId : null;
+
+  useEffect(() => {
+    if (!connectionId) {
+      console.error('Invalid URL: missing or invalid connection ID');
+      void navigate('/', { replace: true });
+    }
+  }, [connectionId, navigate]);
+
+  if (!connectionId) {
+    return null;
+  }
+
+  return <BucketSelector connectionId={connectionId} />;
 }

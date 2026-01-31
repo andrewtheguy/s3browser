@@ -14,7 +14,8 @@ export function BrowsePage() {
   const selectingRef = useRef(false);
   const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const connectionId = urlConnectionId ? parseInt(urlConnectionId, 10) : null;
+  const parsedConnectionId = urlConnectionId ? parseInt(urlConnectionId, 10) : NaN;
+  const connectionId = !isNaN(parsedConnectionId) && parsedConnectionId > 0 ? parsedConnectionId : null;
 
   // Decode the URL path to S3 path (with trailing slash for folder-style prefix)
   const initialPath = useMemo(
@@ -61,6 +62,14 @@ export function BrowsePage() {
       void doSelectBucket(bucket);
     }
   }, [isConnected, bucket, credentials?.bucket, doSelectBucket]);
+
+  // Redirect if connection ID or bucket is invalid
+  useEffect(() => {
+    if (!connectionId || !bucket) {
+      console.error('Invalid URL: missing or invalid connection ID or bucket');
+      void navigate('/', { replace: true });
+    }
+  }, [connectionId, bucket, navigate]);
 
   // Cleanup timeout on unmount
   useEffect(() => {

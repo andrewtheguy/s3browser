@@ -153,8 +153,7 @@ export function getSession(sessionId: string): SessionData | undefined {
 }
 
 export function deleteSession(sessionId: string): boolean {
-  deleteDbSession(sessionId);
-  return true;
+  return deleteDbSession(sessionId);
 }
 
 export async function getBucketRegion(

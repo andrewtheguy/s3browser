@@ -265,8 +265,12 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
               variant="outlined"
               color="inherit"
               startIcon={<LogoutIcon />}
-              onClick={() => {
-                void disconnect();
+              onClick={async () => {
+                try {
+                  await disconnect();
+                } catch (err) {
+                  console.error('Failed to disconnect:', err);
+                }
                 void navigate('/');
               }}
               disabled={isSelecting}

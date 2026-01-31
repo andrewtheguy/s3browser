@@ -15,7 +15,7 @@ import { S3ConnectionForm } from '../S3ConnectionForm';
 
 function UserLoginForm({
   onSuccess,
-  error,
+  error: contextError,
   isLoading,
   setIsLoading,
 }: {
@@ -27,16 +27,24 @@ function UserLoginForm({
   const { userLogin } = useS3Client();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const error = localError || contextError;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setLocalError(null);
 
     try {
       const success = await userLogin({ username, password });
       if (success) {
         onSuccess();
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      console.error('Login error:', err);
+      setLocalError(message);
     } finally {
       setIsLoading(false);
     }
