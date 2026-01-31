@@ -402,27 +402,17 @@ export function authMiddleware(
   res: Response,
   next: NextFunction
 ): void {
-  const sessionId = req.cookies?.sessionId as string | undefined;
+  // Delegate to userAuthMiddleware for basic session validation
+  userAuthMiddleware(req, res, () => {
+    // userAuthMiddleware has validated the session and set req.session/req.sessionId
+    // Now check for S3 credentials
+    if (!req.session?.credentials || !req.session?.client) {
+      res.status(401).json({ error: 'S3 credentials not configured' });
+      return;
+    }
 
-  if (!sessionId) {
-    res.status(401).json({ error: 'Not authenticated' });
-    return;
-  }
-
-  const session = getSession(sessionId);
-  if (!session) {
-    res.status(401).json({ error: 'Session expired or invalid' });
-    return;
-  }
-
-  if (!session.credentials || !session.client) {
-    res.status(401).json({ error: 'S3 credentials not configured' });
-    return;
-  }
-
-  req.session = session;
-  req.sessionId = sessionId;
-  next();
+    next();
+  });
 }
 
 // Middleware that requires a bucket to be selected (use after authMiddleware)
