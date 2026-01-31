@@ -3,6 +3,21 @@ import { Navigate, useParams } from 'react-router';
 import { Box, CircularProgress } from '@mui/material';
 import { useS3ClientContext } from '../../contexts';
 
+export function CenteredLoader() {
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <CircularProgress />
+    </Box>
+  );
+}
+
 interface AuthGuardProps {
   children: ReactNode;
 }
@@ -39,18 +54,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   // Show loading state while checking session status
   if (isCheckingSession) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <CenteredLoader />;
   }
 
   // Not logged in at all - redirect to home
@@ -70,52 +74,18 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   // Not connected yet - show loading spinner while activating
   if (!isConnected) {
-    // Still activating connection
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <CenteredLoader />;
   }
 
   // Connection ID mismatch - activating is happening
   if (activeConnectionId !== connectionId) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <CenteredLoader />;
   }
 
   // Connected but no bucket in context yet - need to select bucket (for browse pages only)
   if (bucket && !credentials?.bucket) {
     // The BrowsePage will handle selecting the bucket from URL
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
+    return <CenteredLoader />;
   }
 
   // Check if URL bucket matches context bucket (for browse pages)
