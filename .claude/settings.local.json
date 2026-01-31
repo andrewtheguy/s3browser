@@ -6,7 +6,8 @@
       "Bash(npm install:*)",
       "mcp__github__get_file_contents",
       "Bash(npm run lint:*)",
-      "Bash(bun run lint:*)"
+      "Bash(bun run lint:*)",
+      "Bash(bun install:*)"
     ]
   }
 }

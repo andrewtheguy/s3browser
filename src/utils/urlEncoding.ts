@@ -34,14 +34,21 @@ export function decodeUrlToS3Path(urlPath: string, addTrailingSlash: boolean = f
 }
 
 /**
- * Build a browse URL for a given bucket and path
+ * Build a browse URL for a given connection, bucket and path
  */
-export function buildBrowseUrl(bucket: string, path: string): string {
+export function buildBrowseUrl(connectionId: number, bucket: string, path: string): string {
   const encodedPath = encodeS3PathForUrl(path);
   if (encodedPath) {
-    return `/browse/${encodeURIComponent(bucket)}/${encodedPath}/`;
+    return `/connection/${connectionId}/browse/${encodeURIComponent(bucket)}/${encodedPath}/`;
   }
-  return `/browse/${encodeURIComponent(bucket)}/`;
+  return `/connection/${connectionId}/browse/${encodeURIComponent(bucket)}/`;
+}
+
+/**
+ * Build a select-bucket URL for a given connection
+ */
+export function buildSelectBucketUrl(connectionId: number): string {
+  return `/connection/${connectionId}/select-bucket`;
 }
 
 /**

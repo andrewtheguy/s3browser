@@ -47,7 +47,13 @@ function extractFileName(key: string): string {
 router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const prefix = (req.query.prefix as string) || '';
   const continuationToken = (req.query.continuationToken as string) || undefined;
-  const session = req.session!;
+  const session = req.session;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   const command = new ListObjectsV2Command({
     Bucket: session.credentials.bucket,
@@ -112,7 +118,13 @@ router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise
     return;
   }
 
-  const session = req.session!;
+  const session = req.session;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   // If deleting a folder (key ends with /), check if it's empty first
   if (key.endsWith('/')) {
@@ -167,7 +179,13 @@ router.post('/batch-delete', async (req: AuthenticatedRequest, res: Response): P
     return;
   }
 
-  const session = req.session!;
+  const session = req.session;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   const command = new DeleteObjectsCommand({
     Bucket: session.credentials.bucket,
@@ -204,7 +222,14 @@ router.post('/folder', async (req: AuthenticatedRequest, res: Response): Promise
     return;
   }
 
-  const session = req.session!;
+  const session = req.session;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+
   const folderPath = path.endsWith('/') ? path : `${path}/`;
 
   const command = new PutObjectCommand({

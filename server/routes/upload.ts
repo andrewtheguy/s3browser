@@ -111,7 +111,13 @@ router.post(
   express.raw({ limit: '10mb', type: '*/*' }),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const key = req.query.key as string;
-    const session = req.session!;
+    const session = req.session;
+
+    // Defensive check (middleware guarantees these exist)
+    if (!session?.credentials?.bucket || !session?.client) {
+      res.status(500).json({ error: 'Internal server error' });
+      return;
+    }
 
     if (!key || typeof key !== 'string') {
       res.status(400).json({ error: 'Key query parameter is required' });
@@ -152,8 +158,14 @@ router.post(
     const uploadId = req.query.uploadId as string;
     const partNumber = req.query.partNumber as string;
     const key = req.query.key as string;
-    const session = req.session!;
-    const sessionId = req.sessionId!;
+    const session = req.session;
+    const sessionId = req.sessionId;
+
+    // Defensive check (middleware guarantees these exist)
+    if (!session?.credentials?.bucket || !session?.client || !sessionId) {
+      res.status(500).json({ error: 'Internal server error' });
+      return;
+    }
 
     if (!uploadId || typeof uploadId !== 'string') {
       res.status(400).json({ error: 'uploadId query parameter is required' });
@@ -214,8 +226,14 @@ router.post(
 router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as InitiateUploadBody;
   const { key, contentType, fileSize } = body;
-  const session = req.session!;
-  const sessionId = req.sessionId!;
+  const session = req.session;
+  const sessionId = req.sessionId;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client || !sessionId) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   if (!key || typeof key !== 'string') {
     res.status(400).json({ error: 'Key is required' });
@@ -287,8 +305,14 @@ router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promi
 router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as CompleteUploadBody;
   const { uploadId, key, parts } = body;
-  const session = req.session!;
-  const sessionId = req.sessionId!;
+  const session = req.session;
+  const sessionId = req.sessionId;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client || !sessionId) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   if (!uploadId || typeof uploadId !== 'string') {
     res.status(400).json({ error: 'uploadId is required' });
@@ -377,8 +401,14 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
 router.post('/abort', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as AbortUploadBody;
   const { uploadId, key } = body;
-  const session = req.session!;
-  const sessionId = req.sessionId!;
+  const session = req.session;
+  const sessionId = req.sessionId;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client || !sessionId) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   if (!uploadId || typeof uploadId !== 'string') {
     res.status(400).json({ error: 'uploadId is required' });
@@ -418,7 +448,8 @@ router.post('/abort', async (req: AuthenticatedRequest, res: Response): Promise<
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to abort multipart upload:', error);
-    res.status(500).json({ success: false, error: 'Failed to abort multipart upload' });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ success: false, error: 'Failed to abort multipart upload', details: message });
   } finally {
     // Clean up tracking regardless of success/failure
     uploadTracker.delete(trackingKey);

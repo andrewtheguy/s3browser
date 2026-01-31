@@ -45,21 +45,33 @@ export interface UploadProgress {
   persistenceId?: string;
 }
 
+export interface UserLoginCredentials {
+  username: string;
+  password: string;
+}
+
 export interface LoginCredentials {
   accessKeyId: string;
   secretAccessKey: string;
   region?: string;
   bucket?: string;  // Optional - can be selected after login
   endpoint?: string;
+  connectionName: string;
+  autoDetectRegion?: boolean;
 }
 
 export interface S3ClientContextValue {
   credentials: S3Credentials | null;
   isConnected: boolean;
+  isUserLoggedIn: boolean;
+  username: string | null;
+  activeConnectionId: number | null;
   isCheckingSession: boolean;
   requiresBucketSelection: boolean;
-  connect: (credentials: LoginCredentials) => Promise<boolean>;
+  userLogin: (credentials: UserLoginCredentials) => Promise<boolean>;
+  connect: (credentials: LoginCredentials) => Promise<{ success: boolean; connectionId?: number }>;
   disconnect: () => void | Promise<void>;
+  activateConnection: (connectionId: number, bucket?: string) => Promise<boolean>;
   selectBucket: (bucket: string) => Promise<boolean>;
   error: string | null;
 }

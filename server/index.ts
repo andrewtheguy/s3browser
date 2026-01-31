@@ -1,9 +1,19 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
+import { getDb, closeDb } from './db/index.js';
 import authRoutes from './routes/auth.js';
 import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
 import downloadRoutes from './routes/download.js';
+
+// Initialize database (validates encryption key and creates tables)
+try {
+  getDb();
+  console.log('Database initialized successfully');
+} catch (error) {
+  console.error('Failed to initialize database:', error instanceof Error ? error.message : error);
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -74,16 +84,28 @@ function shutdown() {
   }
 
   if (!server.listening) {
+    try {
+      closeDb();
+    } catch (err) {
+      console.error('Error closing database:', err);
+    }
     process.exit(0);
   }
 
   server.close((err) => {
     if (err) {
       console.error('Error closing server:', err);
-      process.exit(1);
+    } else {
+      console.log('Server closed');
     }
-    console.log('Server closed');
-    process.exit(0);
+
+    try {
+      closeDb();
+    } catch (dbErr) {
+      console.error('Error closing database:', dbErr);
+    }
+
+    process.exit(err ? 1 : 0);
   });
 }
 

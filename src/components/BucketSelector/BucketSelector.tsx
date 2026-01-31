@@ -18,12 +18,17 @@ import {
 import CloudIcon from '@mui/icons-material/Cloud';
 import LogoutIcon from '@mui/icons-material/Logout';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useS3Client } from '../../hooks';
 import { listBuckets } from '../../services/api';
 import { buildBrowseUrl } from '../../utils/urlEncoding';
 import type { BucketInfo } from '../../types';
 
-export function BucketSelector() {
+interface BucketSelectorProps {
+  connectionId: number;
+}
+
+export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const navigate = useNavigate();
   const { selectBucket, disconnect, error: contextError } = useS3Client();
   const [buckets, setBuckets] = useState<BucketInfo[]>([]);
@@ -74,12 +79,7 @@ export function BucketSelector() {
       const success = await selectBucket(bucketName);
       if (success) {
         // Navigate to the browse page for this bucket
-        try {
-          await navigate(buildBrowseUrl(bucketName, ''));
-        } catch (navErr) {
-          const navMessage = navErr instanceof Error ? navErr.message : 'Unknown error';
-          setError(`Failed to navigate to bucket: ${navMessage}`);
-        }
+        void navigate(buildBrowseUrl(connectionId, bucketName, ''));
       } else {
         setError('Failed to select bucket');
       }
@@ -249,16 +249,35 @@ export function BucketSelector() {
 
           <Divider sx={{ my: 3 }} />
 
-          <Button
-            fullWidth
-            variant="outlined"
-            color="inherit"
-            startIcon={<LogoutIcon />}
-            onClick={disconnect}
-            disabled={isSelecting}
-          >
-            Disconnect
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              fullWidth
+              variant="outlined"
+              color="primary"
+              startIcon={<SettingsIcon />}
+              onClick={() => void navigate('/')}
+              disabled={isSelecting}
+            >
+              Manage Connections
+            </Button>
+            <Button
+              fullWidth
+              variant="outlined"
+              color="inherit"
+              startIcon={<LogoutIcon />}
+              onClick={async () => {
+                try {
+                  await disconnect();
+                } catch (err) {
+                  console.error('Failed to disconnect:', err);
+                }
+                void navigate('/');
+              }}
+              disabled={isSelecting}
+            >
+              Sign Out
+            </Button>
+          </Box>
         </CardContent>
       </Card>
     </Box>
