@@ -68,8 +68,30 @@ function verifyEncryptionKey(database: Database): void {
   const row = database.prepare(`SELECT value FROM metadata WHERE key = 'key_check'`).get() as { value: string } | undefined;
 
   if (!row) {
-    // Metadata table exists but no key_check - this shouldn't happen normally
-    // Store the canary for future checks
+    // Metadata table exists but no key_check - check if there's existing encrypted data
+    // that could indicate a key mismatch
+    const connectionCount = database.prepare(`
+      SELECT COUNT(*) as count FROM sqlite_master
+      WHERE type='table' AND name='s3_connections'
+    `).get() as { count: number };
+
+    if (connectionCount.count > 0) {
+      const existingConnections = database.prepare(`
+        SELECT COUNT(*) as count FROM s3_connections WHERE secret_access_key IS NOT NULL
+      `).get() as { count: number };
+
+      if (existingConnections.count > 0) {
+        throw new Error(
+          'Encryption key verification failed: metadata table exists but key_check is missing, ' +
+          `and ${existingConnections.count} connection(s) with encrypted data exist in s3_connections table.\n` +
+          'This may indicate the encryption key has changed or the database is in an inconsistent state.\n' +
+          'To fix this, use the original encryption key, or delete ~/.s3browser/s3browser.db to start fresh ' +
+          '(this will delete all users and saved connections).'
+        );
+      }
+    }
+
+    // No existing encrypted data found, safe to store the canary for future checks
     const encryptedCanary = encrypt(KEY_CHECK_CANARY);
     database.prepare(`INSERT INTO metadata (key, value) VALUES ('key_check', ?)`).run(encryptedCanary);
     return;
@@ -345,12 +367,13 @@ export function deleteConnection(userId: number, name: string): boolean {
   return result.changes > 0;
 }
 
-export function updateConnectionLastUsed(connectionId: number): void {
+export function updateConnectionLastUsed(connectionId: number, userId: number): boolean {
   const database = getDb();
   const stmt = database.prepare(`
-    UPDATE s3_connections SET last_used_at = unixepoch() WHERE id = ?
+    UPDATE s3_connections SET last_used_at = unixepoch() WHERE id = ? AND user_id = ?
   `);
-  stmt.run(connectionId);
+  const result = stmt.run(connectionId, userId);
+  return result.changes > 0;
 }
 
 export function decryptConnectionSecretKey(connection: DbS3Connection): string {

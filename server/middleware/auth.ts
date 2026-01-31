@@ -114,7 +114,7 @@ export function activateConnectionOnSession(
   if (bucket) {
     setSessionActiveBucket(sessionId, bucket);
   }
-  updateConnectionLastUsed(connectionId);
+  updateConnectionLastUsed(connectionId, session.user_id);
 
   return true;
 }

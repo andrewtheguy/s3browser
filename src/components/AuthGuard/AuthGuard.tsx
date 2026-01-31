@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router';
 import { Box, CircularProgress } from '@mui/material';
 import { useS3ClientContext } from '../../contexts';
@@ -11,6 +11,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const { isConnected, isCheckingSession, credentials, activeConnectionId, activateConnection, isUserLoggedIn } = useS3ClientContext();
   const { connectionId: urlConnectionId, bucket } = useParams<{ connectionId: string; bucket?: string }>();
   const activatingRef = useRef(false);
+  const [activationError, setActivationError] = useState(false);
 
   const connectionId = urlConnectionId ? parseInt(urlConnectionId, 10) : null;
 
@@ -25,9 +26,14 @@ export function AuthGuard({ children }: AuthGuardProps) {
       !activatingRef.current
     ) {
       activatingRef.current = true;
-      void activateConnection(connectionId, bucket).finally(() => {
-        activatingRef.current = false;
-      });
+      activateConnection(connectionId, bucket)
+        .catch((error) => {
+          console.error('Failed to activate connection:', error);
+          setActivationError(true);
+        })
+        .finally(() => {
+          activatingRef.current = false;
+        });
     }
   }, [isUserLoggedIn, isCheckingSession, connectionId, activeConnectionId, activateConnection, bucket]);
 
@@ -57,7 +63,12 @@ export function AuthGuard({ children }: AuthGuardProps) {
     return <Navigate to="/" replace />;
   }
 
-  // Session check complete and not connected - redirect to home
+  // Connection activation failed - redirect to home
+  if (activationError) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Not connected yet - show loading spinner while activating
   if (!isConnected) {
     // Still activating connection
     return (
