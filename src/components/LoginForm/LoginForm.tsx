@@ -132,7 +132,7 @@ function S3CredentialsForm({
 }) {
   const navigate = useNavigate();
   const { connect, isUserLoggedIn } = useS3Client();
-  const { connections, saveConnection, deleteConnection, fetchAccessKey, isLoading: connectionsLoading } = useConnectionHistory(isUserLoggedIn);
+  const { connections, saveConnection, deleteConnection, isLoading: connectionsLoading } = useConnectionHistory(isUserLoggedIn);
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
   const [endpointTouched, setEndpointTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
@@ -171,6 +171,7 @@ function S3CredentialsForm({
             name: formData.connectionName.trim(),
             endpoint: formData.endpoint,
             accessKeyId: formData.accessKeyId,
+            secretAccessKey: formData.secretAccessKey,
             bucket: formData.bucket || undefined,
             region: autoDetectRegion ? undefined : formData.region || undefined,
             autoDetectRegion,
@@ -199,7 +200,7 @@ function S3CredentialsForm({
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
-  const handleConnectionChange = async (e: SelectChangeEvent<string>) => {
+  const handleConnectionChange = (e: SelectChangeEvent<string>) => {
     const name = e.target.value;
     if (name === 'new') {
       setSelectedConnectionName(null);
@@ -220,22 +221,13 @@ function S3CredentialsForm({
     const connection = connections.find((c) => c.name === name);
     if (connection) {
       setSelectedConnectionName(connection.name);
-
-      // Fetch the access key from server
-      let accessKeyId = '';
-      try {
-        accessKeyId = await fetchAccessKey(connection.name);
-      } catch (err) {
-        console.error('Failed to fetch access key:', err);
-      }
-
       setFormData({
         connectionName: connection.name,
         endpoint: connection.endpoint,
-        accessKeyId: accessKeyId,
+        accessKeyId: connection.accessKeyId,
         bucket: connection.bucket || '',
         region: connection.region || '',
-        secretAccessKey: '',
+        secretAccessKey: connection.secretAccessKey,
       });
       setAutoDetectRegion(connection.autoDetectRegion);
       setEndpointTouched(false);
@@ -392,7 +384,6 @@ function S3CredentialsForm({
           margin="normal"
           required
           autoComplete="off"
-          helperText={selectedConnectionName ? 'Enter your secret key (not saved for security)' : undefined}
         />
 
         <TextField

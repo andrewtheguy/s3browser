@@ -19,7 +19,7 @@ import {
   getConnectionsByUserId,
   saveConnection,
   deleteConnection,
-  decryptConnectionAccessKey,
+  decryptConnectionSecretKey,
 } from '../db/index.js';
 
 interface UserLoginRequestBody {
@@ -43,6 +43,7 @@ interface SaveConnectionRequestBody {
   name?: string;
   endpoint?: string;
   accessKeyId?: string;
+  secretAccessKey?: string;
   bucket?: string;
   region?: string;
   autoDetectRegion?: boolean;
@@ -279,24 +280,25 @@ router.get('/connections', userAuthMiddleware, (req: AuthenticatedRequest, res: 
 
   const connections = getConnectionsByUserId(session.userId);
 
-  // Return connections without decrypted access keys (for security)
-  const safeConnections = connections.map(conn => ({
+  const decryptedConnections = connections.map(conn => ({
     name: conn.name,
     endpoint: conn.endpoint,
+    accessKeyId: conn.access_key_id,
+    secretAccessKey: decryptConnectionSecretKey(conn),
     bucket: conn.bucket,
     region: conn.region,
     autoDetectRegion: conn.auto_detect_region === 1,
     lastUsedAt: conn.last_used_at * 1000, // Convert to ms
   }));
 
-  res.json({ connections: safeConnections });
+  res.json({ connections: decryptedConnections });
 });
 
 // POST /api/auth/connections - Save an S3 connection
 router.post('/connections', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
   const session = req.session!;
   const body = req.body as SaveConnectionRequestBody;
-  const { name, endpoint, accessKeyId, bucket, region, autoDetectRegion } = body;
+  const { name, endpoint, accessKeyId, secretAccessKey, bucket, region, autoDetectRegion } = body;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     res.status(400).json({ error: 'Connection name is required' });
@@ -318,12 +320,18 @@ router.post('/connections', userAuthMiddleware, (req: AuthenticatedRequest, res:
     return;
   }
 
+  if (!secretAccessKey || typeof secretAccessKey !== 'string') {
+    res.status(400).json({ error: 'Secret access key is required' });
+    return;
+  }
+
   try {
     saveConnection(
       session.userId,
       name.trim(),
       endpoint,
       accessKeyId,
+      secretAccessKey,
       bucket || null,
       region || null,
       autoDetectRegion !== false
@@ -353,33 +361,6 @@ router.delete('/connections/:name', userAuthMiddleware, (req: AuthenticatedReque
   }
 
   res.json({ success: true });
-});
-
-// GET /api/auth/connections/:name/accesskey - Get decrypted access key for a connection
-router.get('/connections/:name/accesskey', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
-  const session = req.session!;
-  const name = req.params.name as string;
-
-  if (!name) {
-    res.status(400).json({ error: 'Connection name is required' });
-    return;
-  }
-
-  const connections = getConnectionsByUserId(session.userId);
-  const connection = connections.find(c => c.name === name);
-
-  if (!connection) {
-    res.status(404).json({ error: 'Connection not found' });
-    return;
-  }
-
-  try {
-    const accessKeyId = decryptConnectionAccessKey(connection);
-    res.json({ accessKeyId });
-  } catch (error) {
-    console.error('Failed to decrypt access key:', error);
-    res.status(500).json({ error: 'Failed to retrieve access key' });
-  }
 });
 
 export default router;

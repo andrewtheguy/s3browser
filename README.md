@@ -144,9 +144,8 @@ For MinIO, DigitalOcean Spaces, or other S3-compatible services:
 After successfully connecting, you can save the connection profile:
 
 1. Enter a connection name (no spaces)
-2. The endpoint and access key ID are saved (encrypted)
-3. Secret keys are never saved - you'll need to enter them each time
-4. Select a saved connection from the dropdown to quickly fill in credentials
+2. All credentials are saved (secret access key encrypted with AES-256-GCM)
+3. Select a saved connection from the dropdown to quickly fill in credentials
 
 ## Data Storage
 
@@ -165,7 +164,7 @@ All data is stored in `~/.s3browser/`:
 ## Security
 
 - User passwords hashed with bcrypt (12 rounds)
-- S3 credentials encrypted with AES-256-GCM at rest
+- S3 secret access keys encrypted with AES-256-GCM at rest
 - Encryption key required via environment variable or key file
 - Sessions stored in SQLite (persistent across restarts)
 - HTTP-only secure cookies for session management

@@ -37,6 +37,7 @@ export interface DbS3Connection {
   name: string;
   endpoint: string;
   access_key_id: string;
+  secret_access_key: string;
   bucket: string | null;
   region: string | null;
   auto_detect_region: number;
@@ -141,6 +142,7 @@ function initializeDatabase(): Database {
       name TEXT NOT NULL,
       endpoint TEXT NOT NULL,
       access_key_id TEXT NOT NULL,
+      secret_access_key TEXT NOT NULL,
       bucket TEXT,
       region TEXT,
       auto_detect_region INTEGER DEFAULT 1,
@@ -156,6 +158,13 @@ function initializeDatabase(): Database {
 
   // Verify encryption key matches what was used to initialize the database
   verifyEncryptionKey(database);
+
+  // Migration: add secret_access_key column if it doesn't exist
+  const columns = database.prepare(`PRAGMA table_info(s3_connections)`).all() as { name: string }[];
+  const hasSecretKey = columns.some(col => col.name === 'secret_access_key');
+  if (!hasSecretKey) {
+    database.exec(`ALTER TABLE s3_connections ADD COLUMN secret_access_key TEXT NOT NULL DEFAULT ''`);
+  }
 
   return database;
 }
@@ -306,26 +315,28 @@ export function saveConnection(
   name: string,
   endpoint: string,
   accessKeyId: string,
+  secretAccessKey: string,
   bucket: string | null,
   region: string | null,
   autoDetectRegion: boolean
 ): DbS3Connection {
   const database = getDb();
-  const encryptedAccessKeyId = encrypt(accessKeyId);
+  const encryptedSecretAccessKey = encrypt(secretAccessKey);
 
   const stmt = database.prepare(`
-    INSERT INTO s3_connections (user_id, name, endpoint, access_key_id, bucket, region, auto_detect_region, last_used_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+    INSERT INTO s3_connections (user_id, name, endpoint, access_key_id, secret_access_key, bucket, region, auto_detect_region, last_used_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
     ON CONFLICT(user_id, name) DO UPDATE SET
       endpoint = excluded.endpoint,
       access_key_id = excluded.access_key_id,
+      secret_access_key = excluded.secret_access_key,
       bucket = excluded.bucket,
       region = excluded.region,
       auto_detect_region = excluded.auto_detect_region,
       last_used_at = unixepoch()
     RETURNING *
   `);
-  return stmt.get(userId, name, endpoint, encryptedAccessKeyId, bucket, region, autoDetectRegion ? 1 : 0) as DbS3Connection;
+  return stmt.get(userId, name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0) as DbS3Connection;
 }
 
 export function deleteConnection(userId: number, name: string): boolean {
@@ -335,8 +346,8 @@ export function deleteConnection(userId: number, name: string): boolean {
   return result.changes > 0;
 }
 
-export function decryptConnectionAccessKey(connection: DbS3Connection): string {
-  return decrypt(connection.access_key_id);
+export function decryptConnectionSecretKey(connection: DbS3Connection): string {
+  return decrypt(connection.secret_access_key);
 }
 
 export { encrypt, decrypt } from './crypto.js';

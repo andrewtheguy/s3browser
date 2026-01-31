@@ -49,6 +49,8 @@ export interface SelectBucketResponse {
 export interface ServerSavedConnection {
   name: string;
   endpoint: string;
+  accessKeyId: string;
+  secretAccessKey: string;
   bucket: string | null;
   region: string | null;
   autoDetectRegion: boolean;
@@ -59,9 +61,6 @@ export interface ConnectionsResponse {
   connections: ServerSavedConnection[];
 }
 
-export interface AccessKeyResponse {
-  accessKeyId: string;
-}
 
 export async function userLogin(credentials: UserLoginCredentials): Promise<UserLoginResponse> {
   const response = await apiPost<UserLoginResponse>('/auth/user-login', credentials);
@@ -119,6 +118,7 @@ export async function saveConnectionToServer(connection: {
   name: string;
   endpoint: string;
   accessKeyId: string;
+  secretAccessKey: string;
   bucket?: string;
   region?: string;
   autoDetectRegion?: boolean;
@@ -130,10 +130,3 @@ export async function deleteConnectionFromServer(name: string): Promise<void> {
   await apiDelete(`/auth/connections/${encodeURIComponent(name)}`);
 }
 
-export async function getConnectionAccessKey(name: string): Promise<string> {
-  const response = await apiGet<AccessKeyResponse>(`/auth/connections/${encodeURIComponent(name)}/accesskey`);
-  if (!response) {
-    throw new Error('Failed to get access key: empty response');
-  }
-  return response.accessKeyId;
-}

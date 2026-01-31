@@ -4,15 +4,15 @@ import {
   getConnections,
   saveConnectionToServer,
   deleteConnectionFromServer,
-  getConnectionAccessKey,
   type ServerSavedConnection,
 } from '../services/api/auth';
 
-function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection {
+function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection & { secretAccessKey: string } {
   return {
     name: conn.name,
     endpoint: conn.endpoint,
-    accessKeyId: '', // Not returned from server for security
+    accessKeyId: conn.accessKeyId,
+    secretAccessKey: conn.secretAccessKey,
     bucket: conn.bucket || undefined,
     region: conn.region || undefined,
     autoDetectRegion: conn.autoDetectRegion,
@@ -21,7 +21,7 @@ function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection {
 }
 
 export function useConnectionHistory(isUserLoggedIn: boolean) {
-  const [connections, setConnections] = useState<SavedConnection[]>([]);
+  const [connections, setConnections] = useState<(SavedConnection & { secretAccessKey: string })[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +61,7 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
     };
   }, [isUserLoggedIn]);
 
-  const saveConnection = useCallback(async (connection: Omit<SavedConnection, 'lastUsedAt'>) => {
+  const saveConnection = useCallback(async (connection: Omit<SavedConnection, 'lastUsedAt'> & { secretAccessKey: string }) => {
     if (!connection.name || connection.name.includes(' ')) {
       return;
     }
@@ -71,6 +71,7 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
         name: connection.name,
         endpoint: connection.endpoint,
         accessKeyId: connection.accessKeyId,
+        secretAccessKey: connection.secretAccessKey,
         bucket: connection.bucket,
         region: connection.region,
         autoDetectRegion: connection.autoDetectRegion,
@@ -114,10 +115,6 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
     }
   }, []);
 
-  const fetchAccessKey = useCallback(async (name: string): Promise<string> => {
-    return await getConnectionAccessKey(name);
-  }, []);
-
   const refresh = useCallback(async () => {
     if (!isUserLoggedIn) return;
 
@@ -140,7 +137,6 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
     error,
     saveConnection,
     deleteConnection,
-    fetchAccessKey,
     refresh,
   };
 }
