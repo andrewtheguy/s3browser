@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import { parseArgs } from 'util';
+import { getDb, closeDb } from './db/index.js';
 import authRoutes from './routes/auth.js';
 import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
@@ -24,14 +25,22 @@ if (values.help) {
   console.log(`Usage: s3browser [options]
 
 Options:
-  -b, --bind <[host]:port>  Address to bind to (default: :8080)
+  -b, --bind <[host]:port>  Address to bind to (default: :8170)
   -h, --help                Show this help message
 
 Examples:
-  s3browser                    Listen on all interfaces, port 8080
+  s3browser                    Listen on all interfaces, port 8170
   s3browser -b :3000           Listen on all interfaces, port 3000
   s3browser -b 127.0.0.1:3000  Listen on IPv4 localhost only
-  s3browser -b [::1]:3000      Listen on IPv6 localhost only`);
+  s3browser -b [::1]:3000      Listen on IPv6 localhost only
+
+Encryption Key:
+  An encryption key is required for storing credentials securely.
+  Provide it via one of:
+    1. Environment variable: S3BROWSER_ENCRYPTION_KEY
+    2. Key file: ~/.s3browser/encryption.key
+
+  Generate a key with: openssl rand -hex 32`);
   process.exit(0);
 }
 
@@ -80,6 +89,15 @@ function parseBindAddress(bind: string | undefined): { host: string | undefined;
 }
 
 const { host: HOST, port: PORT } = parseBindAddress(values.bind);
+
+// Initialize database (validates encryption key and creates tables)
+try {
+  getDb();
+  console.log('Database initialized successfully');
+} catch (error) {
+  console.error('Failed to initialize database:', error instanceof Error ? error.message : error);
+  process.exit(1);
+}
 
 // Asset map for serving
 const embeddedAssets: Record<string, { content: string; mime: string }> = {
@@ -177,6 +195,12 @@ function shutdown() {
     cleanupUploadTracker();
   } catch (err) {
     console.error('Error during upload tracker cleanup:', err);
+  }
+
+  try {
+    closeDb();
+  } catch (err) {
+    console.error('Error closing database:', err);
   }
 
   if (!server.listening) {

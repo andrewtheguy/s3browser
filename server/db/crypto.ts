@@ -1,26 +1,61 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
+const KEY_FILE_PATH = join(homedir(), '.s3browser', 'encryption.key');
 
 let encryptionKey: Buffer | null = null;
+
+function loadKeyFromFile(): string | null {
+  if (!existsSync(KEY_FILE_PATH)) {
+    return null;
+  }
+
+  try {
+    const content = readFileSync(KEY_FILE_PATH, 'utf8').trim();
+    if (content.length >= 32) {
+      return content;
+    }
+    console.warn(`Warning: ${KEY_FILE_PATH} exists but contains less than 32 characters`);
+    return null;
+  } catch (err) {
+    console.warn(`Warning: Failed to read ${KEY_FILE_PATH}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
 
 function getEncryptionKey(): Buffer {
   if (encryptionKey) {
     return encryptionKey;
   }
 
-  const keyEnv = process.env.S3BROWSER_ENCRYPTION_KEY;
-  if (!keyEnv || keyEnv.length < 32) {
+  // First try environment variable
+  let keySource = process.env.S3BROWSER_ENCRYPTION_KEY;
+
+  // If not in env, try to load from file
+  if (!keySource || keySource.length < 32) {
+    const fileKey = loadKeyFromFile();
+    if (fileKey) {
+      keySource = fileKey;
+    }
+  }
+
+  if (!keySource || keySource.length < 32) {
     throw new Error(
-      'S3BROWSER_ENCRYPTION_KEY environment variable must be set with at least 32 characters'
+      `Encryption key not configured. Please either:\n` +
+      `  1. Set S3BROWSER_ENCRYPTION_KEY environment variable (32+ characters), or\n` +
+      `  2. Create ${KEY_FILE_PATH} with a 32+ character key\n` +
+      `\nGenerate a key with: openssl rand -hex 32`
     );
   }
 
   // Derive a 256-bit key using scrypt
   const salt = Buffer.from('s3browser-fixed-salt-v1', 'utf8');
-  encryptionKey = scryptSync(keyEnv, salt, 32);
+  encryptionKey = scryptSync(keySource, salt, 32);
   return encryptionKey;
 }
 
@@ -67,4 +102,8 @@ export function decrypt(ciphertext: string): string {
 
 export function validateEncryptionKey(): void {
   getEncryptionKey();
+}
+
+export function getKeyFilePath(): string {
+  return KEY_FILE_PATH;
 }
