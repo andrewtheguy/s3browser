@@ -12,6 +12,7 @@ import {
   getAuthStatus,
   selectBucket as apiSelectBucket,
   userLogin as apiUserLogin,
+  disconnectS3 as apiDisconnectS3,
   type LoginCredentials,
 } from '../services/api';
 
@@ -37,6 +38,7 @@ type S3ClientAction =
   | { type: 'CONNECT_SUCCESS'; session: SessionInfo }
   | { type: 'CONNECT_ERROR'; error: string }
   | { type: 'DISCONNECT' }
+  | { type: 'DISCONNECT_S3' }
   | { type: 'BUCKET_SELECTED'; bucket: string }
   | { type: 'BUCKET_SELECT_ERROR'; error: string }
   | { type: 'SESSION_CHECK_COMPLETE'; isUserLoggedIn?: boolean; username?: string };
@@ -86,6 +88,13 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         isUserLoggedIn: false,
         username: null,
         isCheckingSession: false,
+        error: null,
+      };
+    case 'DISCONNECT_S3':
+      return {
+        ...state,
+        session: null,
+        isConnected: false,
         error: null,
       };
     case 'BUCKET_SELECTED':
@@ -168,6 +177,15 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'DISCONNECT' });
   }, []);
 
+  const disconnectS3 = useCallback(async () => {
+    try {
+      await apiDisconnectS3();
+    } catch {
+      // Ignore errors
+    }
+    dispatch({ type: 'DISCONNECT_S3' });
+  }, []);
+
   const selectBucket = useCallback(async (bucket: string): Promise<boolean> => {
     try {
       await apiSelectBucket(bucket);
@@ -248,6 +266,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     userLogin,
     connect,
     disconnect,
+    disconnectS3,
     selectBucket,
   };
 

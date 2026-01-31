@@ -82,6 +82,10 @@ export async function logout(): Promise<void> {
   await apiPost('/auth/logout');
 }
 
+export async function disconnectS3(): Promise<void> {
+  await apiPost('/auth/disconnect-s3');
+}
+
 export async function getAuthStatus(signal?: AbortSignal): Promise<AuthStatus> {
   const response = await apiGet<AuthStatus>('/auth/status', signal);
   if (!response) {

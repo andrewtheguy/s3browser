@@ -14,6 +14,7 @@ import {
   validateBucket,
   verifyUserAndCreateSession,
   setS3CredentialsOnSession,
+  clearS3CredentialsOnSession,
 } from '../middleware/auth.js';
 import {
   getConnectionsByUserId,
@@ -164,6 +165,19 @@ router.post('/logout', (req: Request, res: Response): void => {
   }
 
   res.clearCookie('sessionId');
+  res.json({ success: true });
+});
+
+// POST /api/auth/disconnect-s3 - Clear S3 credentials but keep user logged in
+router.post('/disconnect-s3', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
+  const sessionId = req.sessionId!;
+
+  const cleared = clearS3CredentialsOnSession(sessionId);
+  if (!cleared) {
+    res.status(401).json({ error: 'Session expired or invalid' });
+    return;
+  }
+
   res.json({ success: true });
 });
 

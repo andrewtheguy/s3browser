@@ -1,15 +1,27 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { LoginForm } from '../components/LoginForm';
-import { BucketSelector } from '../components/BucketSelector';
 
 export function HomePage() {
-  const { isConnected } = useS3ClientContext();
+  const navigate = useNavigate();
+  const { isConnected, credentials, isCheckingSession } = useS3ClientContext();
 
-  if (!isConnected) {
-    return <LoginForm />;
-  }
+  useEffect(() => {
+    // If connected with a bucket selected, redirect to browse
+    if (!isCheckingSession && isConnected && credentials?.bucket) {
+      void navigate(`/browse/${encodeURIComponent(credentials.bucket)}`, { replace: true });
+    }
+  }, [isConnected, credentials?.bucket, isCheckingSession, navigate]);
 
-  // Show bucket selector when connected
-  // LoginForm handles redirect to browse page if bucket was provided at login
-  return <BucketSelector />;
+  useEffect(() => {
+    // If connected but no bucket, redirect to bucket selection
+    if (!isCheckingSession && isConnected && !credentials?.bucket) {
+      void navigate('/select-bucket', { replace: true });
+    }
+  }, [isConnected, credentials?.bucket, isCheckingSession, navigate]);
+
+  // Show LoginForm when not connected
+  // Will handle redirection above if already connected
+  return <LoginForm />;
 }

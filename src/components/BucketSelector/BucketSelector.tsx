@@ -25,7 +25,7 @@ import type { BucketInfo } from '../../types';
 
 export function BucketSelector() {
   const navigate = useNavigate();
-  const { selectBucket, disconnect, error: contextError } = useS3Client();
+  const { selectBucket, disconnectS3, error: contextError } = useS3Client();
   const [buckets, setBuckets] = useState<BucketInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSelecting, setIsSelecting] = useState(false);
@@ -254,7 +254,7 @@ export function BucketSelector() {
             variant="outlined"
             color="inherit"
             startIcon={<LogoutIcon />}
-            onClick={disconnect}
+            onClick={disconnectS3}
             disabled={isSelecting}
           >
             Disconnect

@@ -8,6 +8,7 @@ import {
   createSession as createDbSession,
   deleteSession as deleteDbSession,
   setSessionS3Credentials,
+  clearSessionS3Credentials,
   updateSessionBucket as updateDbSessionBucket,
   cleanupExpiredSessions,
   getUserByUsername,
@@ -122,6 +123,17 @@ export function setS3CredentialsOnSession(
     credentials.bucket || null
   );
 
+  // Invalidate cache
+  sessionCache.delete(sessionId);
+  return true;
+}
+
+// Clear S3 credentials on an existing session (keeps user logged in)
+export function clearS3CredentialsOnSession(sessionId: string): boolean {
+  const session = getDbSession(sessionId);
+  if (!session) return false;
+
+  clearSessionS3Credentials(sessionId);
   // Invalidate cache
   sessionCache.delete(sessionId);
   return true;

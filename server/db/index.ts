@@ -277,6 +277,20 @@ export function updateSessionBucket(sessionId: string, bucket: string): void {
   stmt.run(bucket, sessionId);
 }
 
+export function clearSessionS3Credentials(sessionId: string): void {
+  const database = getDb();
+  const stmt = database.prepare(`
+    UPDATE sessions
+    SET s3_access_key_id = NULL,
+        s3_secret_access_key = NULL,
+        s3_region = NULL,
+        s3_endpoint = NULL,
+        bucket = NULL
+    WHERE id = ?
+  `);
+  stmt.run(sessionId);
+}
+
 export function deleteSession(sessionId: string): void {
   const database = getDb();
   const stmt = database.prepare('DELETE FROM sessions WHERE id = ?');
