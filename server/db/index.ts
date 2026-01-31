@@ -154,17 +154,8 @@ function initializeDatabase(): Database {
       updated_at INTEGER DEFAULT (unixepoch())
     );
 
-    -- Sessions: replaces in-memory Map
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      active_connection_id INTEGER REFERENCES s3_connections(id) ON DELETE SET NULL,
-      active_bucket TEXT,
-      created_at INTEGER DEFAULT (unixepoch()),
-      expires_at INTEGER NOT NULL
-    );
-
     -- S3 connections: saved S3 connection profiles per user
+    -- (must be created before sessions due to foreign key dependency)
     CREATE TABLE IF NOT EXISTS s3_connections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -177,6 +168,16 @@ function initializeDatabase(): Database {
       auto_detect_region INTEGER DEFAULT 1,
       last_used_at INTEGER DEFAULT (unixepoch()),
       UNIQUE(user_id, name)
+    );
+
+    -- Sessions: replaces in-memory Map
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      active_connection_id INTEGER REFERENCES s3_connections(id) ON DELETE SET NULL,
+      active_bucket TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      expires_at INTEGER NOT NULL
     );
 
     -- Create indexes for better query performance
