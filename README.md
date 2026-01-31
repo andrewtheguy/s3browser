@@ -171,7 +171,7 @@ All data is stored in `~/.s3browser/`:
 - HTTP-only secure cookies for session management
 - Path traversal protection on all file operations
 - CLI-only user registration prevents unauthorized account creation
-- Database directory secured with 0700 permissions
+- Encryption key file should be secured with 0600 permissions
 
 ## License
 

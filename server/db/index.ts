@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { homedir } from 'os';
 import { join } from 'path';
-import { mkdirSync, chmodSync, existsSync } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
 import { randomBytes } from 'crypto';
 import { validateEncryptionKey, encrypt, decrypt } from './crypto.js';
 
@@ -99,20 +99,13 @@ function initializeDatabase(): Database {
   // Validate encryption key before database initialization
   validateEncryptionKey();
 
-  // Ensure the database directory exists with proper permissions
+  // Ensure the database directory exists
   if (!existsSync(DB_DIR)) {
-    mkdirSync(DB_DIR, { recursive: true, mode: 0o700 });
+    mkdirSync(DB_DIR, { recursive: true });
   }
 
   // Open database
   const database = new Database(DB_PATH);
-
-  // Set proper permissions on database file
-  try {
-    chmodSync(DB_PATH, 0o600);
-  } catch {
-    // File might not exist yet on first run
-  }
 
   // Enable WAL mode for better concurrency
   database.exec('PRAGMA journal_mode = WAL');
