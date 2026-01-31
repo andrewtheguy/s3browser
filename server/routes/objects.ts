@@ -47,17 +47,23 @@ function extractFileName(key: string): string {
 router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const prefix = (req.query.prefix as string) || '';
   const continuationToken = (req.query.continuationToken as string) || undefined;
-  const session = req.session!;
+  const session = req.session;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   const command = new ListObjectsV2Command({
-    Bucket: session.credentials!.bucket,
+    Bucket: session.credentials.bucket,
     Prefix: prefix,
     Delimiter: '/',
     MaxKeys: 1000,
     ContinuationToken: continuationToken,
   });
 
-  const response = await session.client!.send(command);
+  const response = await session.client.send(command);
   const objects: S3Object[] = [];
 
   // Add folders (CommonPrefixes)
@@ -112,17 +118,23 @@ router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise
     return;
   }
 
-  const session = req.session!;
+  const session = req.session;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   // If deleting a folder (key ends with /), check if it's empty first
   if (key.endsWith('/')) {
     const listCommand = new ListObjectsV2Command({
-      Bucket: session.credentials!.bucket,
+      Bucket: session.credentials.bucket,
       Prefix: key,
       MaxKeys: 2, // We only need to know if there's more than the folder marker
     });
 
-    const listResponse = await session.client!.send(listCommand);
+    const listResponse = await session.client.send(listCommand);
     const contents = listResponse.Contents || [];
 
     // Filter out the folder marker itself
@@ -135,11 +147,11 @@ router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise
   }
 
   const command = new DeleteObjectCommand({
-    Bucket: session.credentials!.bucket,
+    Bucket: session.credentials.bucket,
     Key: key,
   });
 
-  await session.client!.send(command);
+  await session.client.send(command);
   res.json({ success: true });
 });
 
@@ -167,17 +179,23 @@ router.post('/batch-delete', async (req: AuthenticatedRequest, res: Response): P
     return;
   }
 
-  const session = req.session!;
+  const session = req.session;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
 
   const command = new DeleteObjectsCommand({
-    Bucket: session.credentials!.bucket,
+    Bucket: session.credentials.bucket,
     Delete: {
       Objects: fileKeys.map((key) => ({ Key: key })),
       Quiet: false,
     },
   });
 
-  const response = await session.client!.send(command);
+  const response = await session.client.send(command);
 
   const result: BatchDeleteResponse = {
     deleted: response.Deleted
@@ -204,17 +222,24 @@ router.post('/folder', async (req: AuthenticatedRequest, res: Response): Promise
     return;
   }
 
-  const session = req.session!;
+  const session = req.session;
+
+  // Defensive check (middleware guarantees these exist)
+  if (!session?.credentials?.bucket || !session?.client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+
   const folderPath = path.endsWith('/') ? path : `${path}/`;
 
   const command = new PutObjectCommand({
-    Bucket: session.credentials!.bucket,
+    Bucket: session.credentials.bucket,
     Key: folderPath,
     Body: '',
     ContentType: 'application/x-directory',
   });
 
-  await session.client!.send(command);
+  await session.client.send(command);
   res.json({ success: true, key: folderPath });
 });
 

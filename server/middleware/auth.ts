@@ -347,6 +347,31 @@ export interface AuthenticatedRequest extends Request {
   sessionId?: string;
 }
 
+// Narrowed types for use after specific middleware
+// After userAuthMiddleware: session and sessionId are guaranteed
+export interface UserAuthenticatedRequest extends Request {
+  session: SessionData;
+  sessionId: string;
+}
+
+// After authMiddleware: credentials and client are also guaranteed
+export interface S3AuthenticatedRequest extends Request {
+  session: SessionData & {
+    credentials: S3Credentials;
+    client: S3Client;
+  };
+  sessionId: string;
+}
+
+// After requireBucket: bucket is also guaranteed
+export interface S3AuthenticatedRequestWithBucket extends Request {
+  session: SessionData & {
+    credentials: S3Credentials & { bucket: string };
+    client: S3Client;
+  };
+  sessionId: string;
+}
+
 // Middleware that requires user authentication (but not necessarily S3 credentials)
 export function userAuthMiddleware(
   req: AuthenticatedRequest,
