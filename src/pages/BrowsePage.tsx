@@ -6,13 +6,15 @@ import { S3Browser } from '../components/S3Browser';
 import { decodeUrlToS3Path, buildBrowseUrl } from '../utils/urlEncoding';
 
 export function BrowsePage() {
-  const { bucket, '*': splatPath } = useParams<{ bucket: string; '*': string }>();
-  const { isConnected, credentials, selectBucket } = useS3ClientContext();
+  const { connectionId: urlConnectionId, bucket, '*': splatPath } = useParams<{ connectionId: string; bucket: string; '*': string }>();
+  const { isConnected, credentials, selectBucket, activeConnectionId } = useS3ClientContext();
   const navigate = useNavigate();
   const [isSelectingBucket, setIsSelectingBucket] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectingRef = useRef(false);
   const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const connectionId = urlConnectionId ? parseInt(urlConnectionId, 10) : null;
 
   // Decode the URL path to S3 path (with trailing slash for folder-style prefix)
   const initialPath = useMemo(
@@ -22,8 +24,8 @@ export function BrowsePage() {
 
   // Memoize buildUrl to prevent unnecessary re-renders in BrowserProvider
   const buildUrl = useCallback(
-    (path: string) => (bucket ? buildBrowseUrl(bucket, path) : '/'),
-    [bucket]
+    (path: string) => (connectionId && bucket ? buildBrowseUrl(connectionId, bucket, path) : '/'),
+    [connectionId, bucket]
   );
 
   const doSelectBucket = useCallback(async (bucketName: string) => {
@@ -106,8 +108,8 @@ export function BrowsePage() {
     );
   }
 
-  // Wait until bucket is selected
-  if (!credentials?.bucket || credentials.bucket !== bucket) {
+  // Wait until bucket is selected and connection ID matches
+  if (!credentials?.bucket || credentials.bucket !== bucket || activeConnectionId !== connectionId) {
     return (
       <Box
         sx={{

@@ -17,10 +17,13 @@ export interface LoginCredentials {
   region?: string;
   bucket?: string;
   endpoint?: string;
+  connectionName: string;
+  autoDetectRegion?: boolean;
 }
 
 export interface LoginResponse {
   success: boolean;
+  connectionId: number;
   region: string;
   bucket: string | null;
   endpoint?: string;
@@ -31,6 +34,7 @@ export interface AuthStatus {
   authenticated: boolean;
   userLoggedIn: boolean;
   username?: string;
+  activeConnectionId?: number | null;
   region?: string;
   bucket?: string | null;
   endpoint?: string;
@@ -47,6 +51,7 @@ export interface SelectBucketResponse {
 }
 
 export interface ServerSavedConnection {
+  id: number;
   name: string;
   endpoint: string;
   accessKeyId: string;
@@ -82,10 +87,6 @@ export async function logout(): Promise<void> {
   await apiPost('/auth/logout');
 }
 
-export async function disconnectS3(): Promise<void> {
-  await apiPost('/auth/disconnect-s3');
-}
-
 export async function getAuthStatus(signal?: AbortSignal): Promise<AuthStatus> {
   const response = await apiGet<AuthStatus>('/auth/status', signal);
   if (!response) {
@@ -118,16 +119,29 @@ export async function getConnections(): Promise<ServerSavedConnection[]> {
   return response.connections;
 }
 
-export async function saveConnectionToServer(connection: {
-  name: string;
-  endpoint: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  bucket?: string;
-  region?: string;
-  autoDetectRegion?: boolean;
-}): Promise<void> {
-  await apiPost('/auth/connections', connection);
+export async function getConnection(connectionId: number): Promise<ServerSavedConnection> {
+  const response = await apiGet<ServerSavedConnection>(`/auth/connections/${connectionId}`);
+  if (!response) {
+    throw new Error('Failed to get connection: empty response');
+  }
+  return response;
+}
+
+export interface ActivateConnectionResponse {
+  success: boolean;
+  connectionId: number;
+  region: string;
+  bucket: string | null;
+  endpoint: string | null;
+  requiresBucketSelection: boolean;
+}
+
+export async function activateConnection(connectionId: number, bucket?: string): Promise<ActivateConnectionResponse> {
+  const response = await apiPost<ActivateConnectionResponse>(`/auth/activate-connection/${connectionId}`, { bucket });
+  if (!response) {
+    throw new Error('Failed to activate connection: empty response');
+  }
+  return response;
 }
 
 export async function deleteConnectionFromServer(name: string): Promise<void> {

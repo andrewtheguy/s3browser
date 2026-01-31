@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import {
   Box,
   Breadcrumbs,
@@ -16,8 +16,8 @@ import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LogoutIcon from '@mui/icons-material/Logout';
 import DeleteIcon from '@mui/icons-material/Delete';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
+import { buildSelectBucketUrl } from '../../utils/urlEncoding';
 
 interface ToolbarProps {
   onUploadClick: () => void;
@@ -29,7 +29,8 @@ interface ToolbarProps {
 
 export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0, onBatchDelete, isDeleting = false }: ToolbarProps) {
   const navigate = useNavigate();
-  const { credentials, disconnect, disconnectS3 } = useS3ClientContext();
+  const { connectionId } = useParams<{ connectionId: string }>();
+  const { credentials, disconnect, activeConnectionId } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
 
   const handleDisconnect = useCallback(async () => {
@@ -42,15 +43,12 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
     }
   }, [disconnect, navigate]);
 
-  const handleChangeConnection = useCallback(async () => {
-    try {
-      await disconnectS3();
-    } catch (error) {
-      console.error('S3 disconnect failed:', error);
-    } finally {
-      void navigate('/');
+  const handleChangeBucket = useCallback(() => {
+    const connId = connectionId ? parseInt(connectionId, 10) : activeConnectionId;
+    if (connId) {
+      void navigate(buildSelectBucketUrl(connId));
     }
-  }, [disconnectS3, navigate]);
+  }, [connectionId, activeConnectionId, navigate]);
 
   const handleBreadcrumbClick = (index: number) => {
     if (index === -1) {
@@ -76,7 +74,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
             label={`Bucket: ${credentials?.bucket ?? '—'}`}
             color="primary"
             variant="outlined"
-            onClick={() => void navigate('/select-bucket')}
+            onClick={handleChangeBucket}
             sx={{ fontWeight: 500, cursor: 'pointer' }}
           />
         </Tooltip>
@@ -112,14 +110,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
           >
             Upload
           </Button>
-          <Button
-            variant="outlined"
-            startIcon={<SwapHorizIcon />}
-            onClick={handleChangeConnection}
-          >
-            Change Connection
-          </Button>
-          <Tooltip title="Disconnect">
+          <Tooltip title="Sign Out">
             <IconButton onClick={handleDisconnect} color="error">
               <LogoutIcon />
             </IconButton>

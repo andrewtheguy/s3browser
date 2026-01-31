@@ -2,13 +2,13 @@ import { useState, useCallback, useEffect } from 'react';
 import type { SavedConnection } from '../types';
 import {
   getConnections,
-  saveConnectionToServer,
   deleteConnectionFromServer,
   type ServerSavedConnection,
 } from '../services/api/auth';
 
-function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection & { secretAccessKey: string } {
+function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection & { id: number; secretAccessKey: string } {
   return {
+    id: conn.id,
     name: conn.name,
     endpoint: conn.endpoint,
     accessKeyId: conn.accessKeyId,
@@ -21,7 +21,7 @@ function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection &
 }
 
 export function useConnectionHistory(isUserLoggedIn: boolean) {
-  const [connections, setConnections] = useState<(SavedConnection & { secretAccessKey: string })[]>([]);
+  const [connections, setConnections] = useState<(SavedConnection & { id: number; secretAccessKey: string })[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,44 +61,6 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
     };
   }, [isUserLoggedIn]);
 
-  const saveConnection = useCallback(async (connection: Omit<SavedConnection, 'lastUsedAt'> & { secretAccessKey: string }) => {
-    try {
-      await saveConnectionToServer({
-        name: connection.name,
-        endpoint: connection.endpoint,
-        accessKeyId: connection.accessKeyId,
-        secretAccessKey: connection.secretAccessKey,
-        bucket: connection.bucket,
-        region: connection.region,
-        autoDetectRegion: connection.autoDetectRegion,
-      });
-
-      // Update local state
-      setConnections((prev) => {
-        const existingIndex = prev.findIndex((c) => c.name === connection.name);
-        const newConnection: SavedConnection & { secretAccessKey: string } = {
-          ...connection,
-          lastUsedAt: Date.now(),
-        };
-
-        let updated: (SavedConnection & { secretAccessKey: string })[];
-        if (existingIndex >= 0) {
-          updated = [...prev];
-          updated[existingIndex] = newConnection;
-        } else {
-          updated = [newConnection, ...prev];
-        }
-
-        // Sort by lastUsedAt descending
-        updated.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-        return updated;
-      });
-    } catch (err) {
-      console.error('Failed to save connection:', err);
-      throw err;
-    }
-  }, []);
-
   const deleteConnection = useCallback(async (name: string) => {
     try {
       await deleteConnectionFromServer(name);
@@ -131,7 +93,6 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
     connections,
     isLoading,
     error,
-    saveConnection,
     deleteConnection,
     refresh,
   };

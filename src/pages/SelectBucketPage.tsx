@@ -1,40 +1,10 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router';
-import { Box, CircularProgress } from '@mui/material';
-import { useS3ClientContext } from '../contexts';
+import { useParams } from 'react-router';
 import { BucketSelector } from '../components/BucketSelector';
 
 export function SelectBucketPage() {
-  const navigate = useNavigate();
-  const { isConnected, isCheckingSession } = useS3ClientContext();
+  const { connectionId } = useParams<{ connectionId: string }>();
 
-  useEffect(() => {
-    // Redirect to home if not connected (S3 credentials not set)
-    if (!isCheckingSession && !isConnected) {
-      void navigate('/', { replace: true });
-    }
-  }, [isConnected, isCheckingSession, navigate]);
-
-  // Show loading while checking session
-  if (isCheckingSession) {
-    return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  // Don't render if not connected (will redirect)
-  if (!isConnected) {
-    return null;
-  }
-
-  return <BucketSelector />;
+  // AuthGuard already handles all the authentication and connection checks
+  // Just pass the connectionId to the BucketSelector
+  return <BucketSelector connectionId={parseInt(connectionId!, 10)} />;
 }

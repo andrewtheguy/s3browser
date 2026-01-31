@@ -23,9 +23,13 @@ import { listBuckets } from '../../services/api';
 import { buildBrowseUrl } from '../../utils/urlEncoding';
 import type { BucketInfo } from '../../types';
 
-export function BucketSelector() {
+interface BucketSelectorProps {
+  connectionId: number;
+}
+
+export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const navigate = useNavigate();
-  const { selectBucket, disconnectS3, error: contextError } = useS3Client();
+  const { selectBucket, disconnect, error: contextError } = useS3Client();
   const [buckets, setBuckets] = useState<BucketInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSelecting, setIsSelecting] = useState(false);
@@ -74,12 +78,7 @@ export function BucketSelector() {
       const success = await selectBucket(bucketName);
       if (success) {
         // Navigate to the browse page for this bucket
-        try {
-          await navigate(buildBrowseUrl(bucketName, ''));
-        } catch (navErr) {
-          const navMessage = navErr instanceof Error ? navErr.message : 'Unknown error';
-          setError(`Failed to navigate to bucket: ${navMessage}`);
-        }
+        void navigate(buildBrowseUrl(connectionId, bucketName, ''));
       } else {
         setError('Failed to select bucket');
       }
@@ -254,10 +253,13 @@ export function BucketSelector() {
             variant="outlined"
             color="inherit"
             startIcon={<LogoutIcon />}
-            onClick={disconnectS3}
+            onClick={() => {
+              void disconnect();
+              void navigate('/');
+            }}
             disabled={isSelecting}
           >
-            Disconnect
+            Sign Out
           </Button>
         </CardContent>
       </Card>

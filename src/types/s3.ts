@@ -56,6 +56,8 @@ export interface LoginCredentials {
   region?: string;
   bucket?: string;  // Optional - can be selected after login
   endpoint?: string;
+  connectionName: string;
+  autoDetectRegion?: boolean;
 }
 
 export interface S3ClientContextValue {
@@ -63,12 +65,13 @@ export interface S3ClientContextValue {
   isConnected: boolean;
   isUserLoggedIn: boolean;
   username: string | null;
+  activeConnectionId: number | null;
   isCheckingSession: boolean;
   requiresBucketSelection: boolean;
   userLogin: (credentials: UserLoginCredentials) => Promise<boolean>;
-  connect: (credentials: LoginCredentials) => Promise<boolean>;
+  connect: (credentials: LoginCredentials) => Promise<{ success: boolean; connectionId?: number }>;
   disconnect: () => void | Promise<void>;
-  disconnectS3: () => void | Promise<void>;
+  activateConnection: (connectionId: number, bucket?: string) => Promise<boolean>;
   selectBucket: (bucket: string) => Promise<boolean>;
   error: string | null;
 }

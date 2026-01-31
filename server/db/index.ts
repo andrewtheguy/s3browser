@@ -22,11 +22,8 @@ export interface DbUser {
 export interface DbSession {
   id: string;
   user_id: number;
-  s3_access_key_id: string | null;
-  s3_secret_access_key: string | null;
-  s3_region: string | null;
-  s3_endpoint: string | null;
-  bucket: string | null;
+  active_connection_id: number | null;
+  active_bucket: string | null;
   created_at: number;
   expires_at: number;
 }
@@ -126,11 +123,8 @@ function initializeDatabase(): Database {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      s3_access_key_id TEXT,
-      s3_secret_access_key TEXT,
-      s3_region TEXT,
-      s3_endpoint TEXT,
-      bucket TEXT,
+      active_connection_id INTEGER REFERENCES s3_connections(id) ON DELETE SET NULL,
+      active_bucket TEXT,
       created_at INTEGER DEFAULT (unixepoch()),
       expires_at INTEGER NOT NULL
     );
@@ -216,20 +210,38 @@ export function createSession(userId: number): string {
   return sessionId;
 }
 
-export function getSession(sessionId: string): (DbSession & { username: string }) | undefined {
+export interface SessionWithConnection extends DbSession {
+  username: string;
+  // Connection fields (null if no active connection)
+  connection_name: string | null;
+  connection_endpoint: string | null;
+  connection_access_key_id: string | null;
+  connection_secret_access_key: string | null;
+  connection_region: string | null;
+}
+
+export function getSession(sessionId: string): SessionWithConnection | undefined {
   const database = getDb();
   const stmt = database.prepare(`
-    SELECT s.*, u.username
+    SELECT
+      s.*,
+      u.username,
+      c.name as connection_name,
+      c.endpoint as connection_endpoint,
+      c.access_key_id as connection_access_key_id,
+      c.secret_access_key as connection_secret_access_key,
+      c.region as connection_region
     FROM sessions s
     JOIN users u ON s.user_id = u.id
+    LEFT JOIN s3_connections c ON s.active_connection_id = c.id
     WHERE s.id = ? AND s.expires_at > unixepoch()
   `);
-  const row = stmt.get(sessionId) as (DbSession & { username: string }) | undefined;
+  const row = stmt.get(sessionId) as SessionWithConnection | undefined;
 
-  if (row && row.s3_secret_access_key) {
+  if (row && row.connection_secret_access_key) {
     // Decrypt the secret access key
     try {
-      row.s3_secret_access_key = decrypt(row.s3_secret_access_key);
+      row.connection_secret_access_key = decrypt(row.connection_secret_access_key);
     } catch {
       console.error('Failed to decrypt S3 credentials for session');
       return undefined;
@@ -239,49 +251,20 @@ export function getSession(sessionId: string): (DbSession & { username: string }
   return row;
 }
 
-export function setSessionS3Credentials(
-  sessionId: string,
-  accessKeyId: string,
-  secretAccessKey: string,
-  region: string | null,
-  endpoint: string | null,
-  bucket: string | null
-): void {
+export function setSessionActiveConnection(sessionId: string, connectionId: number): void {
   const database = getDb();
-  const encryptedSecret = encrypt(secretAccessKey);
-
   const stmt = database.prepare(`
-    UPDATE sessions
-    SET s3_access_key_id = ?,
-        s3_secret_access_key = ?,
-        s3_region = ?,
-        s3_endpoint = ?,
-        bucket = ?
-    WHERE id = ?
+    UPDATE sessions SET active_connection_id = ? WHERE id = ?
   `);
-  stmt.run(accessKeyId, encryptedSecret, region, endpoint, bucket, sessionId);
+  stmt.run(connectionId, sessionId);
 }
 
-export function updateSessionBucket(sessionId: string, bucket: string): void {
+export function setSessionActiveBucket(sessionId: string, bucket: string): void {
   const database = getDb();
   const stmt = database.prepare(`
-    UPDATE sessions SET bucket = ? WHERE id = ?
+    UPDATE sessions SET active_bucket = ? WHERE id = ?
   `);
   stmt.run(bucket, sessionId);
-}
-
-export function clearSessionS3Credentials(sessionId: string): void {
-  const database = getDb();
-  const stmt = database.prepare(`
-    UPDATE sessions
-    SET s3_access_key_id = NULL,
-        s3_secret_access_key = NULL,
-        s3_region = NULL,
-        s3_endpoint = NULL,
-        bucket = NULL
-    WHERE id = ?
-  `);
-  stmt.run(sessionId);
 }
 
 export function deleteSession(sessionId: string): void {
@@ -306,6 +289,15 @@ export function getConnectionsByUserId(userId: number): DbS3Connection[] {
     ORDER BY last_used_at DESC
   `);
   return stmt.all(userId) as DbS3Connection[];
+}
+
+export function getConnectionById(connectionId: number, userId: number): DbS3Connection | undefined {
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT * FROM s3_connections
+    WHERE id = ? AND user_id = ?
+  `);
+  return stmt.get(connectionId, userId) as DbS3Connection | undefined;
 }
 
 export function getConnectionByName(userId: number, name: string): DbS3Connection | undefined {
@@ -351,6 +343,14 @@ export function deleteConnection(userId: number, name: string): boolean {
   const stmt = database.prepare('DELETE FROM s3_connections WHERE user_id = ? AND name = ?');
   const result = stmt.run(userId, name);
   return result.changes > 0;
+}
+
+export function updateConnectionLastUsed(connectionId: number): void {
+  const database = getDb();
+  const stmt = database.prepare(`
+    UPDATE s3_connections SET last_used_at = unixepoch() WHERE id = ?
+  `);
+  stmt.run(connectionId);
 }
 
 export function decryptConnectionSecretKey(connection: DbS3Connection): string {

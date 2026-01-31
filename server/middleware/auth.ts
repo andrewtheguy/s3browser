@@ -7,11 +7,12 @@ import {
   getSession as getDbSession,
   createSession as createDbSession,
   deleteSession as deleteDbSession,
-  setSessionS3Credentials,
-  clearSessionS3Credentials,
-  updateSessionBucket as updateDbSessionBucket,
+  setSessionActiveConnection,
+  setSessionActiveBucket,
   cleanupExpiredSessions,
   getUserByUsername,
+  getConnectionById,
+  updateConnectionLastUsed,
 } from '../db/index.js';
 
 export interface S3Credentials {
@@ -38,6 +39,7 @@ export interface BucketInfo {
 export interface SessionData {
   userId: number;
   username: string;
+  activeConnectionId: number | null;
   credentials: S3Credentials | null;
   client: S3Client | null;
   createdAt: number;
@@ -99,33 +101,21 @@ function createS3Client(credentials: S3Credentials): S3Client {
   });
 }
 
-// Set S3 credentials on an existing session
-export function setS3CredentialsOnSession(
+// Activate a connection on an existing session
+export function activateConnectionOnSession(
   sessionId: string,
-  credentials: S3Credentials
+  connectionId: number,
+  bucket?: string
 ): boolean {
   const session = getDbSession(sessionId);
   if (!session) return false;
 
-  const endpoint = normalizeEndpoint(credentials.endpoint);
-  setSessionS3Credentials(
-    sessionId,
-    credentials.accessKeyId,
-    credentials.secretAccessKey,
-    credentials.region,
-    endpoint || null,
-    credentials.bucket || null
-  );
+  setSessionActiveConnection(sessionId, connectionId);
+  if (bucket) {
+    setSessionActiveBucket(sessionId, bucket);
+  }
+  updateConnectionLastUsed(connectionId);
 
-  return true;
-}
-
-// Clear S3 credentials on an existing session (keeps user logged in)
-export function clearS3CredentialsOnSession(sessionId: string): boolean {
-  const session = getDbSession(sessionId);
-  if (!session) return false;
-
-  clearSessionS3Credentials(sessionId);
   return true;
 }
 
@@ -139,13 +129,15 @@ export function getSession(sessionId: string): SessionData | undefined {
   let credentials: S3Credentials | null = null;
   let client: S3Client | null = null;
 
-  if (dbSession.s3_access_key_id && dbSession.s3_secret_access_key) {
+  // If we have an active connection, use its credentials
+  if (dbSession.active_connection_id && dbSession.connection_access_key_id && dbSession.connection_secret_access_key) {
+    const endpoint = normalizeEndpoint(dbSession.connection_endpoint || undefined);
     credentials = {
-      accessKeyId: dbSession.s3_access_key_id,
-      secretAccessKey: dbSession.s3_secret_access_key,
-      region: dbSession.s3_region || 'us-east-1',
-      bucket: dbSession.bucket || undefined,
-      endpoint: dbSession.s3_endpoint || undefined,
+      accessKeyId: dbSession.connection_access_key_id,
+      secretAccessKey: dbSession.connection_secret_access_key,
+      region: dbSession.connection_region || 'us-east-1',
+      bucket: dbSession.active_bucket || undefined,
+      endpoint,
     };
     client = createS3Client(credentials);
   }
@@ -153,6 +145,7 @@ export function getSession(sessionId: string): SessionData | undefined {
   return {
     userId: dbSession.user_id,
     username: dbSession.username,
+    activeConnectionId: dbSession.active_connection_id,
     credentials,
     client,
     createdAt: dbSession.created_at * 1000, // Convert to ms
@@ -437,8 +430,13 @@ export function updateSessionBucket(sessionId: string, bucket: string): boolean 
   const session = getSession(sessionId);
   if (!session) return false;
 
-  updateDbSessionBucket(sessionId, bucket);
+  setSessionActiveBucket(sessionId, bucket);
   return true;
+}
+
+// Get connection by ID (for activation endpoint)
+export function getConnectionForSession(connectionId: number, userId: number) {
+  return getConnectionById(connectionId, userId);
 }
 
 // Validate a specific bucket for an existing session

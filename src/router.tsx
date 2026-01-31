@@ -15,11 +15,15 @@ export const router = createBrowserRouter([
         element: <HomePage />,
       },
       {
-        path: 'select-bucket',
-        element: <SelectBucketPage />,
+        path: 'connection/:connectionId/select-bucket',
+        element: (
+          <AuthGuard>
+            <SelectBucketPage />
+          </AuthGuard>
+        ),
       },
       {
-        path: 'browse/:bucket/*',
+        path: 'connection/:connectionId/browse/:bucket/*',
         element: (
           <AuthGuard>
             <BrowsePage />

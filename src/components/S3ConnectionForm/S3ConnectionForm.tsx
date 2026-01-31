@@ -21,7 +21,7 @@ import type { SelectChangeEvent } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useS3Client, useConnectionHistory } from '../../hooks';
-import { buildBrowseUrl } from '../../utils/urlEncoding';
+import { buildBrowseUrl, buildSelectBucketUrl } from '../../utils/urlEncoding';
 import type { LoginCredentials } from '../../types';
 
 function isValidUrl(value: string): boolean {
@@ -56,7 +56,7 @@ export function S3ConnectionForm({
 }: S3ConnectionFormProps) {
   const navigate = useNavigate();
   const { connect, isUserLoggedIn } = useS3Client();
-  const { connections, saveConnection, deleteConnection, isLoading: connectionsLoading } = useConnectionHistory(isUserLoggedIn);
+  const { connections, deleteConnection, isLoading: connectionsLoading } = useConnectionHistory(isUserLoggedIn);
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
   const [endpointTouched, setEndpointTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
@@ -86,30 +86,22 @@ export function S3ConnectionForm({
         bucket: formData.bucket || undefined,
         region: autoDetectRegion ? undefined : formData.region || undefined,
         endpoint: formData.endpoint || undefined,
+        connectionName: formData.connectionName.trim(),
+        autoDetectRegion,
       };
-      const success = await connect(credentials);
+      const result = await connect(credentials);
 
-      if (!success) {
+      if (!result.success || !result.connectionId) {
         return;
       }
-
-      await saveConnection({
-        name: formData.connectionName.trim(),
-        endpoint: formData.endpoint,
-        accessKeyId: formData.accessKeyId,
-        secretAccessKey: formData.secretAccessKey,
-        bucket: formData.bucket || undefined,
-        region: autoDetectRegion ? undefined : formData.region || undefined,
-        autoDetectRegion,
-      });
 
       setEndpointTouched(false);
       setNameTouched(false);
 
       if (formData.bucket) {
-        void navigate(buildBrowseUrl(formData.bucket, ''), { replace: true });
+        void navigate(buildBrowseUrl(result.connectionId, formData.bucket, ''), { replace: true });
       } else {
-        void navigate('/select-bucket', { replace: true });
+        void navigate(buildSelectBucketUrl(result.connectionId), { replace: true });
       }
     } finally {
       setIsLoading(false);
