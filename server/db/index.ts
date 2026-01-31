@@ -43,6 +43,58 @@ export interface DbS3Connection {
   last_used_at: number;
 }
 
+// Canary value used to verify encryption key consistency
+const KEY_CHECK_CANARY = 's3browser-key-check-v1';
+
+function verifyEncryptionKey(database: Database): void {
+  // Check if metadata table exists
+  const tableExists = database.prepare(`
+    SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'
+  `).get();
+
+  if (!tableExists) {
+    // First run - create table and store encrypted canary
+    database.exec(`
+      CREATE TABLE metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
+
+    const encryptedCanary = encrypt(KEY_CHECK_CANARY);
+    database.prepare(`INSERT INTO metadata (key, value) VALUES ('key_check', ?)`).run(encryptedCanary);
+    return;
+  }
+
+  // Existing database - verify the canary
+  const row = database.prepare(`SELECT value FROM metadata WHERE key = 'key_check'`).get() as { value: string } | undefined;
+
+  if (!row) {
+    // Metadata table exists but no key_check - this shouldn't happen normally
+    // Store the canary for future checks
+    const encryptedCanary = encrypt(KEY_CHECK_CANARY);
+    database.prepare(`INSERT INTO metadata (key, value) VALUES ('key_check', ?)`).run(encryptedCanary);
+    return;
+  }
+
+  // Try to decrypt and verify the canary
+  try {
+    const decrypted = decrypt(row.value);
+    if (decrypted !== KEY_CHECK_CANARY) {
+      throw new Error('Decrypted value does not match expected canary');
+    }
+  } catch {
+    throw new Error(
+      'Encryption key mismatch: The current encryption key does not match the one used to initialize the database.\n' +
+      'This can happen if:\n' +
+      '  - The S3BROWSER_ENCRYPTION_KEY environment variable changed\n' +
+      '  - The ~/.s3browser/encryption.key file was modified\n' +
+      '  - You are using a different key file or environment\n\n' +
+      'To fix this, use the original encryption key, or delete ~/.s3browser/s3browser.db to start fresh (this will delete all users and saved connections).'
+    );
+  }
+}
+
 function initializeDatabase(): Database {
   // Validate encryption key before database initialization
   validateEncryptionKey();
@@ -108,6 +160,9 @@ function initializeDatabase(): Database {
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_s3_connections_user_id ON s3_connections(user_id);
   `);
+
+  // Verify encryption key matches what was used to initialize the database
+  verifyEncryptionKey(database);
 
   return database;
 }
