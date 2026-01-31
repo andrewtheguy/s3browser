@@ -2,12 +2,22 @@ import { Request, Response, NextFunction } from 'express';
 import { S3Client, HeadBucketCommand, GetBucketLocationCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
+import {
+  getSession as getDbSession,
+  createSession as createDbSession,
+  deleteSession as deleteDbSession,
+  setSessionS3Credentials,
+  updateSessionBucket as updateDbSessionBucket,
+  cleanupExpiredSessions,
+  getUserByUsername,
+} from '../db/index.js';
 
 export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
-  bucket?: string;  // Optional - can be selected after login
+  bucket?: string;
   endpoint?: string;
 }
 
@@ -15,7 +25,7 @@ export interface LoginInput {
   accessKeyId: string;
   secretAccessKey: string;
   region?: string;
-  bucket?: string;  // Optional - can be selected after login
+  bucket?: string;
   endpoint?: string;
 }
 
@@ -24,26 +34,26 @@ export interface BucketInfo {
   creationDate?: string;
 }
 
-interface SessionData {
-  credentials: S3Credentials;
-  client: S3Client;
+export interface SessionData {
+  userId: number;
+  username: string;
+  credentials: S3Credentials | null;
+  client: S3Client | null;
   createdAt: number;
 }
 
-// In-memory session store
-const sessions = new Map<string, SessionData>();
-
-// Session expiry: 4 hours
-const SESSION_EXPIRY_MS = 4 * 60 * 60 * 1000;
+// In-memory cache for sessions (to avoid db queries on every request)
+const sessionCache = new Map<string, { data: SessionData; cachedAt: number }>();
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
 // Clean up expired sessions periodically
 setInterval(() => {
-  const now = Date.now();
-  for (const [sessionId, data] of sessions) {
-    if (now - data.createdAt > SESSION_EXPIRY_MS) {
-      sessions.delete(sessionId);
-    }
+  const deleted = cleanupExpiredSessions();
+  if (deleted > 0) {
+    console.log(`Cleaned up ${deleted} expired sessions`);
   }
+  // Also clean the cache
+  sessionCache.clear();
 }, 60 * 1000); // Check every minute
 
 export function generateSessionId(): string {
@@ -58,11 +68,30 @@ export function normalizeEndpoint(endpoint?: string): string | undefined {
   return `https://${endpoint}`;
 }
 
-export function createSession(credentials: S3Credentials): string {
-  const sessionId = generateSessionId();
+// Verify user credentials and create a session (no S3 credentials yet)
+export async function verifyUserAndCreateSession(
+  username: string,
+  password: string
+): Promise<{ sessionId: string; username: string } | null> {
+  const user = getUserByUsername(username);
+  if (!user) {
+    return null;
+  }
+
+  const passwordValid = await bcrypt.compare(password, user.password_hash);
+  if (!passwordValid) {
+    return null;
+  }
+
+  const sessionId = createDbSession(user.id);
+  return { sessionId, username: user.username };
+}
+
+// Create S3 client from credentials
+function createS3Client(credentials: S3Credentials): S3Client {
   const endpoint = normalizeEndpoint(credentials.endpoint);
 
-  const client = new S3Client({
+  return new S3Client({
     region: credentials.region,
     credentials: {
       accessKeyId: credentials.accessKeyId,
@@ -70,34 +99,80 @@ export function createSession(credentials: S3Credentials): string {
     },
     ...(endpoint && {
       endpoint,
-      forcePathStyle: true, // Required for most S3-compatible services
+      forcePathStyle: true,
     }),
   });
+}
 
-  sessions.set(sessionId, {
-    credentials: { ...credentials, endpoint },
-    client,
-    createdAt: Date.now(),
-  });
+// Set S3 credentials on an existing session
+export function setS3CredentialsOnSession(
+  sessionId: string,
+  credentials: S3Credentials
+): boolean {
+  const session = getDbSession(sessionId);
+  if (!session) return false;
 
-  return sessionId;
+  const endpoint = normalizeEndpoint(credentials.endpoint);
+  setSessionS3Credentials(
+    sessionId,
+    credentials.accessKeyId,
+    credentials.secretAccessKey,
+    credentials.region,
+    endpoint || null,
+    credentials.bucket || null
+  );
+
+  // Invalidate cache
+  sessionCache.delete(sessionId);
+  return true;
 }
 
 export function getSession(sessionId: string): SessionData | undefined {
-  const session = sessions.get(sessionId);
-  if (!session) return undefined;
+  // Check cache first
+  const cached = sessionCache.get(sessionId);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
 
-  // Check if expired
-  if (Date.now() - session.createdAt > SESSION_EXPIRY_MS) {
-    sessions.delete(sessionId);
+  const dbSession = getDbSession(sessionId);
+  if (!dbSession) {
+    sessionCache.delete(sessionId);
     return undefined;
   }
 
-  return session;
+  // Build session data
+  let credentials: S3Credentials | null = null;
+  let client: S3Client | null = null;
+
+  if (dbSession.s3_access_key_id && dbSession.s3_secret_access_key) {
+    credentials = {
+      accessKeyId: dbSession.s3_access_key_id,
+      secretAccessKey: dbSession.s3_secret_access_key,
+      region: dbSession.s3_region || 'us-east-1',
+      bucket: dbSession.bucket || undefined,
+      endpoint: dbSession.s3_endpoint || undefined,
+    };
+    client = createS3Client(credentials);
+  }
+
+  const sessionData: SessionData = {
+    userId: dbSession.user_id,
+    username: dbSession.username,
+    credentials,
+    client,
+    createdAt: dbSession.created_at * 1000, // Convert to ms
+  };
+
+  // Cache the session
+  sessionCache.set(sessionId, { data: sessionData, cachedAt: Date.now() });
+
+  return sessionData;
 }
 
 export function deleteSession(sessionId: string): boolean {
-  return sessions.delete(sessionId);
+  sessionCache.delete(sessionId);
+  deleteDbSession(sessionId);
+  return true;
 }
 
 export async function getBucketRegion(
@@ -112,7 +187,6 @@ export async function getBucketRegion(
   }
 
   // Use us-east-1 as the initial region to query bucket location
-  // GetBucketLocation works from any region but us-east-1 is the default
   const client = new S3Client({
     region: 'us-east-1',
     credentials: {
@@ -123,10 +197,8 @@ export async function getBucketRegion(
 
   try {
     const response = await client.send(new GetBucketLocationCommand({ Bucket: bucket }));
-    // LocationConstraint is null/empty for us-east-1 buckets
     return response.LocationConstraint || 'us-east-1';
   } catch (error) {
-    // If we can't get the location, default to us-east-1
     console.error('Failed to get bucket location:', error);
     throw new Error('Failed to detect bucket region. Please specify the region manually.');
   }
@@ -156,19 +228,15 @@ export async function validateCredentials(credentials: S3Credentials): Promise<{
     console.error('Credential validation error:', error);
 
     if (error instanceof Error) {
-      // Bucket not found
       if (error.name === 'NotFound') {
         return { valid: false, error: 'Bucket not found' };
       }
-      // Access denied - credentials might still be valid
       if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
         return { valid: true };
       }
-      // Invalid credentials
       if (error.name === 'InvalidAccessKeyId' || error.name === 'SignatureDoesNotMatch') {
         return { valid: false, error: 'Invalid credentials' };
       }
-      // Network/connection errors
       if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
         return { valid: false, error: `Cannot connect to endpoint: ${error.message}` };
       }
@@ -178,7 +246,6 @@ export async function validateCredentials(credentials: S3Credentials): Promise<{
   }
 }
 
-// Validate credentials without requiring a bucket (uses STS GetCallerIdentity)
 export async function validateCredentialsOnly(
   accessKeyId: string,
   secretAccessKey: string,
@@ -208,7 +275,6 @@ export async function validateCredentialsOnly(
         if (error.name === 'ExpiredToken' || error.name === 'ExpiredTokenException' || error.message.includes('ExpiredToken')) {
           return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
         }
-        // Check for signature errors - indicates auth/config issues
         const msg = (error?.message ?? '').toLowerCase();
         const isSignatureError = error.name === 'SignatureDoesNotMatch' ||
           msg.includes('signature') ||
@@ -217,8 +283,6 @@ export async function validateCredentialsOnly(
           return { valid: false, error: error.message || 'Invalid credentials or signature' };
         }
         if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
-          // Only treat as permission issue if not a signature error
-          // Credentials are valid but user lacks ListBuckets permission - that's OK
           return { valid: true };
         }
         if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
@@ -230,9 +294,7 @@ export async function validateCredentialsOnly(
     }
   }
 
-  // For AWS, try STS GetCallerIdentity first (lightweight check).
-  // Note: SCPs or explicit deny policies can block sts:GetCallerIdentity even for valid credentials,
-  // causing false negatives. If STS is denied, we fall back to S3 ListBuckets.
+  // For AWS, try STS GetCallerIdentity first
   const stsClient = new STSClient({
     region,
     credentials: { accessKeyId, secretAccessKey },
@@ -248,7 +310,6 @@ export async function validateCredentialsOnly(
       if (error.name === 'ExpiredToken' || error.name === 'ExpiredTokenException' || error.message.includes('ExpiredToken')) {
         return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
       }
-      // Check for signature errors - indicates auth/config issues
       const isSignatureError = error.name === 'SignatureDoesNotMatch' ||
         error.message.toLowerCase().includes('signature') ||
         error.message.toLowerCase().includes('credential');
@@ -259,7 +320,7 @@ export async function validateCredentialsOnly(
         return { valid: false, error: `Cannot connect to AWS: ${error.message}` };
       }
 
-      // STS might be blocked by SCP or explicit deny - fall back to S3 ListBuckets
+      // STS might be blocked - fall back to S3 ListBuckets
       if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
         console.log('STS GetCallerIdentity denied (possibly by SCP), falling back to S3 ListBuckets');
 
@@ -278,7 +339,6 @@ export async function validateCredentialsOnly(
             if (s3Error.name === 'ExpiredToken' || s3Error.name === 'ExpiredTokenException' || s3Error.message.includes('ExpiredToken')) {
               return { valid: false, error: 'Temporary credentials have expired - please refresh credentials' };
             }
-            // Check for signature errors - indicates auth/config issues
             const isS3SignatureError = s3Error.name === 'SignatureDoesNotMatch' ||
               s3Error.message.toLowerCase().includes('signature') ||
               s3Error.message.toLowerCase().includes('credential');
@@ -286,12 +346,9 @@ export async function validateCredentialsOnly(
               return { valid: false, error: s3Error.message || 'Invalid credentials or signature' };
             }
             if (s3Error.name === 'AccessDenied' || s3Error.name === 'Forbidden') {
-              // Both STS and S3 ListBuckets denied - credentials likely valid but restricted
-              // Allow login and let bucket-specific operations determine access
               return { valid: true };
             }
           }
-          // Return S3 fallback error since that's what actually failed
           const s3ErrorMessage = s3Error instanceof Error ? s3Error.message : String(s3Error);
           return { valid: false, error: `STS blocked by policy and S3 check failed: ${s3ErrorMessage}` };
         }
@@ -309,7 +366,8 @@ export interface AuthenticatedRequest extends Request {
   sessionId?: string;
 }
 
-export function authMiddleware(
+// Middleware that requires user authentication (but not necessarily S3 credentials)
+export function userAuthMiddleware(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -332,13 +390,42 @@ export function authMiddleware(
   next();
 }
 
+// Middleware that requires both user auth AND S3 credentials
+export function authMiddleware(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  const sessionId = req.cookies?.sessionId as string | undefined;
+
+  if (!sessionId) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+
+  const session = getSession(sessionId);
+  if (!session) {
+    res.status(401).json({ error: 'Session expired or invalid' });
+    return;
+  }
+
+  if (!session.credentials || !session.client) {
+    res.status(401).json({ error: 'S3 credentials not configured' });
+    return;
+  }
+
+  req.session = session;
+  req.sessionId = sessionId;
+  next();
+}
+
 // Middleware that requires a bucket to be selected (use after authMiddleware)
 export function requireBucket(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): void {
-  if (!req.session?.credentials.bucket) {
+  if (!req.session?.credentials?.bucket) {
     res.status(400).json({ error: 'No bucket selected. Please select a bucket first.' });
     return;
   }
@@ -358,10 +445,12 @@ export async function listUserBuckets(client: S3Client): Promise<BucketInfo[]> {
 
 // Update session bucket after selection
 export function updateSessionBucket(sessionId: string, bucket: string): boolean {
-  const session = sessions.get(sessionId);
+  const session = getSession(sessionId);
   if (!session) return false;
 
-  session.credentials.bucket = bucket;
+  updateDbSessionBucket(sessionId, bucket);
+  // Invalidate cache
+  sessionCache.delete(sessionId);
   return true;
 }
 
@@ -379,7 +468,6 @@ export async function validateBucket(
         return { valid: false, error: 'Bucket not found' };
       }
       if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
-        // Access denied might still mean the bucket exists - allow it
         return { valid: true };
       }
       return { valid: false, error: error.message };

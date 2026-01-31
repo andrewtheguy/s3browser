@@ -1,142 +1,146 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { SavedConnection } from '../types';
+import {
+  getConnections,
+  saveConnectionToServer,
+  deleteConnectionFromServer,
+  getConnectionAccessKey,
+  type ServerSavedConnection,
+} from '../services/api/auth';
 
-const STORAGE_KEY = 's3browser_connections';
-const MAX_CONNECTIONS = 10;
-
-function isValidUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
+function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection {
+  return {
+    name: conn.name,
+    endpoint: conn.endpoint,
+    accessKeyId: '', // Not returned from server for security
+    bucket: conn.bucket || undefined,
+    region: conn.region || undefined,
+    autoDetectRegion: conn.autoDetectRegion,
+    lastUsedAt: conn.lastUsedAt,
+  };
 }
 
-function isValidSavedConnection(c: unknown): c is SavedConnection {
-  if (typeof c !== 'object' || c === null) return false;
-  const obj = c as Record<string, unknown>;
+export function useConnectionHistory(isUserLoggedIn: boolean) {
+  const [connections, setConnections] = useState<SavedConnection[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // name: non-empty string without spaces
-  if (typeof obj.name !== 'string' || obj.name.length === 0 || obj.name.includes(' ')) {
-    return false;
-  }
-
-  // endpoint: non-empty string and valid URL
-  if (typeof obj.endpoint !== 'string' || !isValidUrl(obj.endpoint)) {
-    return false;
-  }
-
-  // accessKeyId: non-empty string
-  if (typeof obj.accessKeyId !== 'string' || obj.accessKeyId.length === 0) {
-    return false;
-  }
-
-  // bucket: optional, but if present must be string
-  if (obj.bucket !== undefined && typeof obj.bucket !== 'string') {
-    return false;
-  }
-
-  // region: optional, but if present must be string
-  if (obj.region !== undefined && typeof obj.region !== 'string') {
-    return false;
-  }
-
-  // autoDetectRegion: boolean
-  if (typeof obj.autoDetectRegion !== 'boolean') {
-    return false;
-  }
-
-  // lastUsedAt: number
-  if (typeof obj.lastUsedAt !== 'number') {
-    return false;
-  }
-
-  return true;
-}
-
-function loadConnections(): SavedConnection[] {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (!data) return [];
-    const parsed: unknown = JSON.parse(data);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidSavedConnection);
-  } catch {
-    return [];
-  }
-}
-
-function persistConnections(connections: SavedConnection[]): void {
-  let toSave = [...connections];
-
-  while (toSave.length > 0) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  // Fetch connections when user logs in
+  useEffect(() => {
+    if (!isUserLoggedIn) {
+      setConnections([]);
       return;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-        console.error(
-          `localStorage quota exceeded for key "${STORAGE_KEY}" with ${toSave.length} connections, trimming oldest entry`,
-          error
-        );
-        // Remove oldest entry (last in array since sorted by lastUsedAt descending) and retry
-        toSave = toSave.slice(0, -1);
-      } else {
-        console.error(
-          `Failed to persist connections to localStorage key "${STORAGE_KEY}"`,
-          error
-        );
-        return;
+    }
+
+    let cancelled = false;
+
+    async function fetchConnections() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const serverConnections = await getConnections();
+        if (!cancelled) {
+          setConnections(serverConnections.map(serverToSavedConnection));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch connections');
+          console.error('Failed to fetch connections:', err);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
-  }
-}
 
-export function useConnectionHistory() {
-  const [connections, setConnections] = useState<SavedConnection[]>(loadConnections);
+    void fetchConnections();
 
-  const saveConnection = useCallback((connection: Omit<SavedConnection, 'lastUsedAt'>) => {
+    return () => {
+      cancelled = true;
+    };
+  }, [isUserLoggedIn]);
+
+  const saveConnection = useCallback(async (connection: Omit<SavedConnection, 'lastUsedAt'>) => {
     if (!connection.name || connection.name.includes(' ')) {
-      return; // Don't save if name is empty or has spaces
+      return;
     }
 
-    setConnections((prev) => {
-      const existingIndex = prev.findIndex((c) => c.name === connection.name);
+    try {
+      await saveConnectionToServer({
+        name: connection.name,
+        endpoint: connection.endpoint,
+        accessKeyId: connection.accessKeyId,
+        bucket: connection.bucket,
+        region: connection.region,
+        autoDetectRegion: connection.autoDetectRegion,
+      });
 
-      const newConnection: SavedConnection = {
-        ...connection,
-        lastUsedAt: Date.now(),
-      };
+      // Update local state
+      setConnections((prev) => {
+        const existingIndex = prev.findIndex((c) => c.name === connection.name);
+        const newConnection: SavedConnection = {
+          ...connection,
+          lastUsedAt: Date.now(),
+        };
 
-      let updated: SavedConnection[];
-      if (existingIndex >= 0) {
-        updated = [...prev];
-        updated[existingIndex] = newConnection;
-      } else {
-        updated = [newConnection, ...prev];
-      }
+        let updated: SavedConnection[];
+        if (existingIndex >= 0) {
+          updated = [...prev];
+          updated[existingIndex] = newConnection;
+        } else {
+          updated = [newConnection, ...prev];
+        }
 
-      // Sort by lastUsedAt descending and limit to MAX_CONNECTIONS
-      updated.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-      updated = updated.slice(0, MAX_CONNECTIONS);
-
-      persistConnections(updated);
-      return updated;
-    });
+        // Sort by lastUsedAt descending
+        updated.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+        return updated;
+      });
+    } catch (err) {
+      console.error('Failed to save connection:', err);
+      throw err;
+    }
   }, []);
 
-  const deleteConnection = useCallback((name: string) => {
-    setConnections((prev) => {
-      const updated = prev.filter((c) => c.name !== name);
-      persistConnections(updated);
-      return updated;
-    });
+  const deleteConnection = useCallback(async (name: string) => {
+    try {
+      await deleteConnectionFromServer(name);
+
+      // Update local state
+      setConnections((prev) => prev.filter((c) => c.name !== name));
+    } catch (err) {
+      console.error('Failed to delete connection:', err);
+      throw err;
+    }
   }, []);
+
+  const fetchAccessKey = useCallback(async (name: string): Promise<string> => {
+    return await getConnectionAccessKey(name);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!isUserLoggedIn) return;
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      const serverConnections = await getConnections();
+      setConnections(serverConnections.map(serverToSavedConnection));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch connections');
+      console.error('Failed to fetch connections:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isUserLoggedIn]);
 
   return {
     connections,
+    isLoading,
+    error,
     saveConnection,
     deleteConnection,
+    fetchAccessKey,
+    refresh,
   };
 }

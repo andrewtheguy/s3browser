@@ -5,8 +5,15 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import type { S3ClientContextValue } from '../types';
-import { login, logout, getAuthStatus, selectBucket as apiSelectBucket, type LoginCredentials } from '../services/api';
+import type { S3ClientContextValue, UserLoginCredentials } from '../types';
+import {
+  login,
+  logout,
+  getAuthStatus,
+  selectBucket as apiSelectBucket,
+  userLogin as apiUserLogin,
+  type LoginCredentials,
+} from '../services/api';
 
 interface SessionInfo {
   region: string;
@@ -16,25 +23,49 @@ interface SessionInfo {
 interface S3ClientState {
   session: SessionInfo | null;
   isConnected: boolean;
+  isUserLoggedIn: boolean;
+  username: string | null;
   isCheckingSession: boolean;
   error: string | null;
 }
 
 type S3ClientAction =
+  | { type: 'USER_LOGIN_START' }
+  | { type: 'USER_LOGIN_SUCCESS'; username: string }
+  | { type: 'USER_LOGIN_ERROR'; error: string }
   | { type: 'CONNECT_START' }
   | { type: 'CONNECT_SUCCESS'; session: SessionInfo }
   | { type: 'CONNECT_ERROR'; error: string }
   | { type: 'DISCONNECT' }
   | { type: 'BUCKET_SELECTED'; bucket: string }
   | { type: 'BUCKET_SELECT_ERROR'; error: string }
-  | { type: 'SESSION_CHECK_COMPLETE' };
+  | { type: 'SESSION_CHECK_COMPLETE'; isUserLoggedIn?: boolean; username?: string };
 
 function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
   switch (action.type) {
+    case 'USER_LOGIN_START':
+      return { ...state, error: null };
+    case 'USER_LOGIN_SUCCESS':
+      return {
+        ...state,
+        isUserLoggedIn: true,
+        username: action.username,
+        isCheckingSession: false,
+        error: null,
+      };
+    case 'USER_LOGIN_ERROR':
+      return {
+        ...state,
+        isUserLoggedIn: false,
+        username: null,
+        isCheckingSession: false,
+        error: action.error,
+      };
     case 'CONNECT_START':
       return { ...state, error: null };
     case 'CONNECT_SUCCESS':
       return {
+        ...state,
         session: action.session,
         isConnected: true,
         isCheckingSession: false,
@@ -42,6 +73,7 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
       };
     case 'CONNECT_ERROR':
       return {
+        ...state,
         session: null,
         isConnected: false,
         isCheckingSession: false,
@@ -51,6 +83,8 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
       return {
         session: null,
         isConnected: false,
+        isUserLoggedIn: false,
+        username: null,
         isCheckingSession: false,
         error: null,
       };
@@ -69,6 +103,8 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
       return {
         ...state,
         isCheckingSession: false,
+        isUserLoggedIn: action.isUserLoggedIn ?? state.isUserLoggedIn,
+        username: action.username ?? state.username,
       };
     default:
       return state;
@@ -78,6 +114,8 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
 const initialState: S3ClientState = {
   session: null,
   isConnected: false,
+  isUserLoggedIn: false,
+  username: null,
   isCheckingSession: true,
   error: null,
 };
@@ -86,6 +124,23 @@ export const S3ClientContext = createContext<S3ClientContextValue | null>(null);
 
 export function S3ClientProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+
+  const userLogin = useCallback(async (credentials: UserLoginCredentials): Promise<boolean> => {
+    dispatch({ type: 'USER_LOGIN_START' });
+
+    try {
+      const response = await apiUserLogin(credentials);
+      dispatch({
+        type: 'USER_LOGIN_SUCCESS',
+        username: response.username,
+      });
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to login';
+      dispatch({ type: 'USER_LOGIN_ERROR', error: message });
+      return false;
+    }
+  }, []);
 
   const connect = useCallback(async (credentials: LoginCredentials): Promise<boolean> => {
     dispatch({ type: 'CONNECT_START' });
@@ -134,9 +189,24 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
         const status = await getAuthStatus(abortController.signal);
         if (!abortController.signal.aborted) {
           if (status.authenticated && status.region) {
+            // Fully authenticated with S3 credentials
             dispatch({
               type: 'CONNECT_SUCCESS',
               session: { region: status.region, bucket: status.bucket || null },
+            });
+            // Also set user login state
+            if (status.userLoggedIn && status.username) {
+              dispatch({
+                type: 'USER_LOGIN_SUCCESS',
+                username: status.username,
+              });
+            }
+          } else if (status.userLoggedIn && status.username) {
+            // User logged in but no S3 credentials yet
+            dispatch({
+              type: 'SESSION_CHECK_COMPLETE',
+              isUserLoggedIn: true,
+              username: status.username,
             });
           } else {
             dispatch({ type: 'SESSION_CHECK_COMPLETE' });
@@ -170,9 +240,12 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
         }
       : null,
     isConnected: state.isConnected,
+    isUserLoggedIn: state.isUserLoggedIn,
+    username: state.username,
     isCheckingSession: state.isCheckingSession,
     requiresBucketSelection,
     error: state.error,
+    userLogin,
     connect,
     disconnect,
     selectBucket,

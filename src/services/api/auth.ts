@@ -1,11 +1,21 @@
-import { apiPost, apiGet } from './client';
+import { apiPost, apiGet, apiDelete } from './client';
 import type { BucketInfo } from '../../types';
+
+export interface UserLoginCredentials {
+  username: string;
+  password: string;
+}
+
+export interface UserLoginResponse {
+  success: boolean;
+  username: string;
+}
 
 export interface LoginCredentials {
   accessKeyId: string;
   secretAccessKey: string;
   region?: string;
-  bucket?: string;  // Optional - can be selected after login
+  bucket?: string;
   endpoint?: string;
 }
 
@@ -19,6 +29,8 @@ export interface LoginResponse {
 
 export interface AuthStatus {
   authenticated: boolean;
+  userLoggedIn: boolean;
+  username?: string;
   region?: string;
   bucket?: string | null;
   endpoint?: string;
@@ -32,6 +44,31 @@ export interface BucketsResponse {
 export interface SelectBucketResponse {
   success: boolean;
   bucket: string;
+}
+
+export interface ServerSavedConnection {
+  name: string;
+  endpoint: string;
+  bucket: string | null;
+  region: string | null;
+  autoDetectRegion: boolean;
+  lastUsedAt: number;
+}
+
+export interface ConnectionsResponse {
+  connections: ServerSavedConnection[];
+}
+
+export interface AccessKeyResponse {
+  accessKeyId: string;
+}
+
+export async function userLogin(credentials: UserLoginCredentials): Promise<UserLoginResponse> {
+  const response = await apiPost<UserLoginResponse>('/auth/user-login', credentials);
+  if (!response) {
+    throw new Error('Login failed: empty response');
+  }
+  return response;
 }
 
 export async function login(credentials: LoginCredentials): Promise<LoginResponse> {
@@ -68,4 +105,35 @@ export async function selectBucket(bucket: string): Promise<SelectBucketResponse
     throw new Error('Failed to select bucket: empty response');
   }
   return response;
+}
+
+export async function getConnections(): Promise<ServerSavedConnection[]> {
+  const response = await apiGet<ConnectionsResponse>('/auth/connections');
+  if (!response) {
+    throw new Error('Failed to get connections: empty response');
+  }
+  return response.connections;
+}
+
+export async function saveConnectionToServer(connection: {
+  name: string;
+  endpoint: string;
+  accessKeyId: string;
+  bucket?: string;
+  region?: string;
+  autoDetectRegion?: boolean;
+}): Promise<void> {
+  await apiPost('/auth/connections', connection);
+}
+
+export async function deleteConnectionFromServer(name: string): Promise<void> {
+  await apiDelete(`/auth/connections/${encodeURIComponent(name)}`);
+}
+
+export async function getConnectionAccessKey(name: string): Promise<string> {
+  const response = await apiGet<AccessKeyResponse>(`/auth/connections/${encodeURIComponent(name)}/accesskey`);
+  if (!response) {
+    throw new Error('Failed to get access key: empty response');
+  }
+  return response.accessKeyId;
 }

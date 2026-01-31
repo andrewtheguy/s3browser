@@ -2,17 +2,30 @@ import { Router, Request, Response } from 'express';
 import {
   validateCredentials,
   validateCredentialsOnly,
-  createSession,
   deleteSession,
   getSession,
   getBucketRegion,
   S3Credentials,
   authMiddleware,
+  userAuthMiddleware,
   AuthenticatedRequest,
   listUserBuckets,
   updateSessionBucket,
   validateBucket,
+  verifyUserAndCreateSession,
+  setS3CredentialsOnSession,
 } from '../middleware/auth.js';
+import {
+  getConnectionsByUserId,
+  saveConnection,
+  deleteConnection,
+  decryptConnectionAccessKey,
+} from '../db/index.js';
+
+interface UserLoginRequestBody {
+  username?: string;
+  password?: string;
+}
 
 interface LoginRequestBody {
   accessKeyId?: string;
@@ -26,12 +39,52 @@ interface SelectBucketRequestBody {
   bucket?: string;
 }
 
+interface SaveConnectionRequestBody {
+  name?: string;
+  endpoint?: string;
+  accessKeyId?: string;
+  bucket?: string;
+  region?: string;
+  autoDetectRegion?: boolean;
+}
+
 const router = Router();
 
-// POST /api/auth/login
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+// POST /api/auth/user-login - Authenticate user with username/password
+router.post('/user-login', async (req: Request, res: Response): Promise<void> => {
+  const body = req.body as UserLoginRequestBody;
+  const { username, password } = body;
+
+  if (!username || !password) {
+    res.status(400).json({ error: 'Username and password are required' });
+    return;
+  }
+
+  const result = await verifyUserAndCreateSession(username, password);
+  if (!result) {
+    res.status(401).json({ error: 'Invalid username or password' });
+    return;
+  }
+
+  // Set HTTP-only cookie with 4 hour expiry
+  res.cookie('sessionId', result.sessionId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 4 * 60 * 60 * 1000, // 4 hours
+  });
+
+  res.json({
+    success: true,
+    username: result.username,
+  });
+});
+
+// POST /api/auth/login - Set S3 credentials on existing user session
+router.post('/login', userAuthMiddleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as LoginRequestBody;
   const { accessKeyId, secretAccessKey, region, bucket, endpoint } = body;
+  const sessionId = req.sessionId!;
 
   if (!accessKeyId || !secretAccessKey) {
     res.status(400).json({ error: 'Missing required credentials' });
@@ -66,14 +119,12 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     endpoint: endpoint || undefined,
   };
 
-  // Always validate credentials before creating session
+  // Always validate credentials before setting on session
   let validation;
   try {
     if (bucket) {
-      // Validate credentials with bucket access
       validation = await validateCredentials(credentials);
     } else {
-      // Validate credentials only (no bucket) using STS or ListBuckets
       validation = await validateCredentialsOnly(accessKeyId, secretAccessKey, detectedRegion, endpoint);
     }
   } catch (error) {
@@ -87,15 +138,12 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const sessionId = createSession(credentials);
-
-  // Set HTTP-only cookie with 4 hour expiry
-  res.cookie('sessionId', sessionId, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 4 * 60 * 60 * 1000, // 4 hours
-  });
+  // Set S3 credentials on existing session
+  const updated = setS3CredentialsOnSession(sessionId, credentials);
+  if (!updated) {
+    res.status(401).json({ error: 'Session expired or invalid' });
+    return;
+  }
 
   res.json({
     success: true,
@@ -123,23 +171,28 @@ router.get('/status', (req: Request, res: Response): void => {
   const sessionId = req.cookies?.sessionId as string | undefined;
 
   if (!sessionId) {
-    res.json({ authenticated: false });
+    res.json({ authenticated: false, userLoggedIn: false });
     return;
   }
 
   const session = getSession(sessionId);
   if (!session) {
     res.clearCookie('sessionId');
-    res.json({ authenticated: false });
+    res.json({ authenticated: false, userLoggedIn: false });
     return;
   }
 
+  // User is logged in but may not have S3 credentials yet
+  const s3Connected = !!(session.credentials && session.client);
+
   res.json({
-    authenticated: true,
-    region: session.credentials.region,
-    bucket: session.credentials.bucket || null,
-    endpoint: session.credentials.endpoint,
-    requiresBucketSelection: !session.credentials.bucket,
+    authenticated: s3Connected,
+    userLoggedIn: true,
+    username: session.username,
+    region: session.credentials?.region || null,
+    bucket: session.credentials?.bucket || null,
+    endpoint: session.credentials?.endpoint || null,
+    requiresBucketSelection: s3Connected && !session.credentials?.bucket,
   });
 });
 
@@ -148,13 +201,12 @@ router.get('/buckets', authMiddleware, async (req: AuthenticatedRequest, res: Re
   const session = req.session!;
 
   try {
-    const buckets = await listUserBuckets(session.client);
+    const buckets = await listUserBuckets(session.client!);
     res.json({ buckets });
   } catch (error: unknown) {
     console.error('Failed to list buckets:', error);
 
     if (error instanceof Error) {
-      // Check for signature/auth errors first - these are config issues, not permission issues
       const signatureErrorNames = ['SignatureDoesNotMatch', 'InvalidAccessKeyId', 'ExpiredToken', 'AccessDenied', 'InvalidToken'];
       const isSignatureError =
         signatureErrorNames.some(n => error?.name === n || error?.name?.toLowerCase() === n.toLowerCase()) ||
@@ -195,10 +247,9 @@ router.post('/select-bucket', authMiddleware, async (req: AuthenticatedRequest, 
     return;
   }
 
-  // Validate that the bucket exists and is accessible
   let validation;
   try {
-    validation = await validateBucket(session.client, bucket);
+    validation = await validateBucket(session.client!, bucket);
   } catch (error) {
     console.error('Failed to validate bucket:', { bucket, error });
     res.status(500).json({ error: 'Failed to validate bucket' });
@@ -210,7 +261,6 @@ router.post('/select-bucket', authMiddleware, async (req: AuthenticatedRequest, 
     return;
   }
 
-  // Update the session with the selected bucket
   const updated = updateSessionBucket(sessionId, bucket);
   if (!updated) {
     res.status(401).json({ error: 'Session expired or invalid' });
@@ -221,6 +271,115 @@ router.post('/select-bucket', authMiddleware, async (req: AuthenticatedRequest, 
     success: true,
     bucket,
   });
+});
+
+// GET /api/auth/connections - List saved S3 connections for the user
+router.get('/connections', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
+  const session = req.session!;
+
+  const connections = getConnectionsByUserId(session.userId);
+
+  // Return connections without decrypted access keys (for security)
+  const safeConnections = connections.map(conn => ({
+    name: conn.name,
+    endpoint: conn.endpoint,
+    bucket: conn.bucket,
+    region: conn.region,
+    autoDetectRegion: conn.auto_detect_region === 1,
+    lastUsedAt: conn.last_used_at * 1000, // Convert to ms
+  }));
+
+  res.json({ connections: safeConnections });
+});
+
+// POST /api/auth/connections - Save an S3 connection
+router.post('/connections', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
+  const session = req.session!;
+  const body = req.body as SaveConnectionRequestBody;
+  const { name, endpoint, accessKeyId, bucket, region, autoDetectRegion } = body;
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    res.status(400).json({ error: 'Connection name is required' });
+    return;
+  }
+
+  if (/\s/.test(name)) {
+    res.status(400).json({ error: 'Connection name cannot contain spaces' });
+    return;
+  }
+
+  if (!endpoint || typeof endpoint !== 'string') {
+    res.status(400).json({ error: 'Endpoint is required' });
+    return;
+  }
+
+  if (!accessKeyId || typeof accessKeyId !== 'string') {
+    res.status(400).json({ error: 'Access key ID is required' });
+    return;
+  }
+
+  try {
+    saveConnection(
+      session.userId,
+      name.trim(),
+      endpoint,
+      accessKeyId,
+      bucket || null,
+      region || null,
+      autoDetectRegion !== false
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to save connection:', error);
+    res.status(500).json({ error: 'Failed to save connection' });
+  }
+});
+
+// DELETE /api/auth/connections/:name - Delete a saved connection
+router.delete('/connections/:name', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
+  const session = req.session!;
+  const name = req.params.name as string;
+
+  if (!name) {
+    res.status(400).json({ error: 'Connection name is required' });
+    return;
+  }
+
+  const deleted = deleteConnection(session.userId, name);
+  if (!deleted) {
+    res.status(404).json({ error: 'Connection not found' });
+    return;
+  }
+
+  res.json({ success: true });
+});
+
+// GET /api/auth/connections/:name/accesskey - Get decrypted access key for a connection
+router.get('/connections/:name/accesskey', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
+  const session = req.session!;
+  const name = req.params.name as string;
+
+  if (!name) {
+    res.status(400).json({ error: 'Connection name is required' });
+    return;
+  }
+
+  const connections = getConnectionsByUserId(session.userId);
+  const connection = connections.find(c => c.name === name);
+
+  if (!connection) {
+    res.status(404).json({ error: 'Connection not found' });
+    return;
+  }
+
+  try {
+    const accessKeyId = decryptConnectionAccessKey(connection);
+    res.json({ accessKeyId });
+  } catch (error) {
+    console.error('Failed to decrypt access key:', error);
+    res.status(500).json({ error: 'Failed to retrieve access key' });
+  }
 });
 
 export default router;

@@ -127,14 +127,14 @@ router.post(
     const contentType = req.headers['content-type'] || 'application/octet-stream';
 
     const command = new PutObjectCommand({
-      Bucket: session.credentials.bucket,
+      Bucket: session.credentials!.bucket,
       Key: keyValidation.sanitizedKey,
       Body: req.body as Buffer,
       ContentType: contentType,
     });
 
     try {
-      await session.client.send(command);
+      await session.client!.send(command);
       res.json({ success: true, key: keyValidation.sanitizedKey });
     } catch (error) {
       console.error('Single file upload failed:', error);
@@ -192,7 +192,7 @@ router.post(
     }
 
     const command = new UploadPartCommand({
-      Bucket: session.credentials.bucket,
+      Bucket: session.credentials!.bucket,
       Key: tracked.sanitizedKey,
       UploadId: uploadId,
       PartNumber: partNum,
@@ -200,7 +200,7 @@ router.post(
     });
 
     try {
-      const result = await session.client.send(command);
+      const result = await session.client!.send(command);
       res.json({ etag: result.ETag });
     } catch (error) {
       console.error('Upload part failed:', { key: tracked.sanitizedKey, uploadId, partNum, error });
@@ -239,14 +239,14 @@ router.post('/initiate', async (req: AuthenticatedRequest, res: Response): Promi
   }
 
   const command = new CreateMultipartUploadCommand({
-    Bucket: session.credentials.bucket,
+    Bucket: session.credentials!.bucket,
     Key: keyValidation.sanitizedKey,
     ContentType: contentType || 'application/octet-stream',
   });
 
   let response;
   try {
-    response = await session.client.send(command);
+    response = await session.client!.send(command);
   } catch (error) {
     console.error('Failed to initiate multipart upload:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -335,7 +335,7 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
   }
 
   const command = new CompleteMultipartUploadCommand({
-    Bucket: session.credentials.bucket,
+    Bucket: session.credentials!.bucket,
     Key: tracked.sanitizedKey,
     UploadId: uploadId,
     MultipartUpload: {
@@ -349,7 +349,7 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
   });
 
   try {
-    await session.client.send(command);
+    await session.client!.send(command);
     // Clean up tracking only on success
     uploadTracker.delete(trackingKey);
     res.json({ success: true, key: tracked.sanitizedKey });
@@ -358,11 +358,11 @@ router.post('/complete', async (req: AuthenticatedRequest, res: Response): Promi
     // Attempt to abort the multipart upload on S3
     try {
       const abortCommand = new AbortMultipartUploadCommand({
-        Bucket: session.credentials.bucket,
+        Bucket: session.credentials!.bucket,
         Key: tracked.sanitizedKey,
         UploadId: uploadId,
       });
-      await session.client.send(abortCommand);
+      await session.client!.send(abortCommand);
     } catch (abortError) {
       console.error('Failed to abort multipart upload after completion failure:', abortError);
     }
@@ -408,13 +408,13 @@ router.post('/abort', async (req: AuthenticatedRequest, res: Response): Promise<
   }
 
   const command = new AbortMultipartUploadCommand({
-    Bucket: session.credentials.bucket,
+    Bucket: session.credentials!.bucket,
     Key: sanitizedKey,
     UploadId: uploadId,
   });
 
   try {
-    await session.client.send(command);
+    await session.client!.send(command);
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to abort multipart upload:', error);
