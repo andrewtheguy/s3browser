@@ -35,7 +35,7 @@ function isValidUrl(value: string): boolean {
 }
 
 function isValidConnectionName(value: string): boolean {
-  if (!value) return true;
+  if (!value) return false;
   return !value.includes(' ');
 }
 
@@ -89,32 +89,27 @@ export function S3ConnectionForm({
       };
       const success = await connect(credentials);
 
-      if (success && formData.connectionName.trim() && nameValid) {
-        try {
-          await saveConnection({
-            name: formData.connectionName.trim(),
-            endpoint: formData.endpoint,
-            accessKeyId: formData.accessKeyId,
-            secretAccessKey: formData.secretAccessKey,
-            bucket: formData.bucket || undefined,
-            region: autoDetectRegion ? undefined : formData.region || undefined,
-            autoDetectRegion,
-          });
-        } catch (err) {
-          console.error('Failed to save connection:', err);
-        }
+      if (!success) {
+        return;
       }
 
-      if (success) {
-        setEndpointTouched(false);
-        setNameTouched(false);
+      await saveConnection({
+        name: formData.connectionName.trim(),
+        endpoint: formData.endpoint,
+        accessKeyId: formData.accessKeyId,
+        secretAccessKey: formData.secretAccessKey,
+        bucket: formData.bucket || undefined,
+        region: autoDetectRegion ? undefined : formData.region || undefined,
+        autoDetectRegion,
+      });
 
-        if (formData.bucket) {
-          void navigate(buildBrowseUrl(formData.bucket, ''), { replace: true });
-        } else {
-          // Navigate to bucket selection page
-          void navigate('/select-bucket', { replace: true });
-        }
+      setEndpointTouched(false);
+      setNameTouched(false);
+
+      if (formData.bucket) {
+        void navigate(buildBrowseUrl(formData.bucket, ''), { replace: true });
+      } else {
+        void navigate('/select-bucket', { replace: true });
       }
     } finally {
       setIsLoading(false);
@@ -186,6 +181,7 @@ export function S3ConnectionForm({
 
   const isFormValid =
     (autoDetectRegion || formData.bucket || formData.region) &&
+    formData.connectionName.trim() &&
     formData.accessKeyId &&
     formData.secretAccessKey &&
     endpointValid &&
@@ -268,11 +264,12 @@ export function S3ConnectionForm({
           margin="normal"
           autoComplete="off"
           placeholder="my-aws-account"
+          required
           error={showNameError}
           helperText={
             showNameError
               ? 'Connection name cannot contain spaces'
-              : 'Optional. Provide a name (no spaces) to save this connection.'
+              : 'A unique name for this connection (no spaces).'
           }
         />
 

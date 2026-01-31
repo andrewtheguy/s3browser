@@ -62,10 +62,6 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
   }, [isUserLoggedIn]);
 
   const saveConnection = useCallback(async (connection: Omit<SavedConnection, 'lastUsedAt'> & { secretAccessKey: string }) => {
-    if (!connection.name || connection.name.includes(' ')) {
-      return;
-    }
-
     try {
       await saveConnectionToServer({
         name: connection.name,
@@ -80,12 +76,12 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
       // Update local state
       setConnections((prev) => {
         const existingIndex = prev.findIndex((c) => c.name === connection.name);
-        const newConnection: SavedConnection = {
+        const newConnection: SavedConnection & { secretAccessKey: string } = {
           ...connection,
           lastUsedAt: Date.now(),
         };
 
-        let updated: SavedConnection[];
+        let updated: (SavedConnection & { secretAccessKey: string })[];
         if (existingIndex >= 0) {
           updated = [...prev];
           updated[existingIndex] = newConnection;

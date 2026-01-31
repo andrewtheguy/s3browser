@@ -159,13 +159,6 @@ function initializeDatabase(): Database {
   // Verify encryption key matches what was used to initialize the database
   verifyEncryptionKey(database);
 
-  // Migration: add secret_access_key column if it doesn't exist
-  const columns = database.prepare(`PRAGMA table_info(s3_connections)`).all() as { name: string }[];
-  const hasSecretKey = columns.some(col => col.name === 'secret_access_key');
-  if (!hasSecretKey) {
-    database.exec(`ALTER TABLE s3_connections ADD COLUMN secret_access_key TEXT NOT NULL DEFAULT ''`);
-  }
-
   return database;
 }
 
