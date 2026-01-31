@@ -16,6 +16,7 @@ import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import LogoutIcon from '@mui/icons-material/Logout';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { buildSelectBucketUrl } from '../../utils/urlEncoding';
 
@@ -110,6 +111,11 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
           >
             Upload
           </Button>
+          <Tooltip title="Manage Connections">
+            <IconButton onClick={() => void navigate('/')}>
+              <SettingsIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Sign Out">
             <IconButton onClick={handleDisconnect} color="error">
               <LogoutIcon />

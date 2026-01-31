@@ -18,6 +18,7 @@ import {
 import CloudIcon from '@mui/icons-material/Cloud';
 import LogoutIcon from '@mui/icons-material/Logout';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useS3Client } from '../../hooks';
 import { listBuckets } from '../../services/api';
 import { buildBrowseUrl } from '../../utils/urlEncoding';
@@ -248,19 +249,31 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
 
           <Divider sx={{ my: 3 }} />
 
-          <Button
-            fullWidth
-            variant="outlined"
-            color="inherit"
-            startIcon={<LogoutIcon />}
-            onClick={() => {
-              void disconnect();
-              void navigate('/');
-            }}
-            disabled={isSelecting}
-          >
-            Sign Out
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              fullWidth
+              variant="outlined"
+              color="primary"
+              startIcon={<SettingsIcon />}
+              onClick={() => void navigate('/')}
+              disabled={isSelecting}
+            >
+              Manage Connections
+            </Button>
+            <Button
+              fullWidth
+              variant="outlined"
+              color="inherit"
+              startIcon={<LogoutIcon />}
+              onClick={() => {
+                void disconnect();
+                void navigate('/');
+              }}
+              disabled={isSelecting}
+            >
+              Sign Out
+            </Button>
+          </Box>
         </CardContent>
       </Card>
     </Box>
