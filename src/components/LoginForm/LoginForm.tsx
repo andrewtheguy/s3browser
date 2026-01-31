@@ -14,12 +14,10 @@ import { useS3Client } from '../../hooks';
 import { S3ConnectionForm } from '../S3ConnectionForm';
 
 function UserLoginForm({
-  onSuccess,
   error: contextError,
   isLoading,
   setIsLoading,
 }: {
-  onSuccess: () => void;
   error: string | null;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
@@ -37,10 +35,8 @@ function UserLoginForm({
     setLocalError(null);
 
     try {
-      const success = await userLogin({ username, password });
-      if (success) {
-        onSuccess();
-      }
+      await userLogin({ username, password });
+      // isUserLoggedIn will be updated in context on success
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       console.error('Login error:', err);
@@ -97,20 +93,22 @@ function UserLoginForm({
 }
 
 export function LoginForm() {
-  const { isUserLoggedIn, username, error, disconnect } = useS3Client();
+  const { isUserLoggedIn, username, error: contextError, disconnect } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
-  const [justLoggedIn, setJustLoggedIn] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
-  const handleUserLoginSuccess = () => {
-    setJustLoggedIn(true);
-  };
+  const error = logoutError || contextError;
 
   const handleLogout = async () => {
-    await disconnect();
-    setJustLoggedIn(false);
+    setLogoutError(null);
+    try {
+      await disconnect();
+    } catch (err) {
+      console.error('Logout failed:', err);
+      const message = err instanceof Error ? err.message : 'Logout failed';
+      setLogoutError(message);
+    }
   };
-
-  const showS3Form = isUserLoggedIn || justLoggedIn;
 
   return (
     <Box
@@ -139,7 +137,7 @@ export function LoginForm() {
             </Typography>
           </Box>
 
-          {!showS3Form ? (
+          {!isUserLoggedIn ? (
             <>
               <Typography
                 variant="body2"
@@ -151,7 +149,6 @@ export function LoginForm() {
               </Typography>
 
               <UserLoginForm
-                onSuccess={handleUserLoginSuccess}
                 error={error}
                 isLoading={isLoading}
                 setIsLoading={setIsLoading}
