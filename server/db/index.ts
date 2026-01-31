@@ -3,7 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { randomBytes } from 'crypto';
-import { validateEncryptionKey, encrypt, decrypt } from './crypto.js';
+import { validateEncryptionKey, encrypt, decrypt, setSalt, generateSalt, getSaltLength } from './crypto.js';
 
 // Database directory and file path
 const DB_DIR = join(homedir(), '.s3browser');
@@ -45,31 +45,11 @@ export interface DbS3Connection {
 const KEY_CHECK_CANARY = 's3browser-key-check-v1';
 
 function verifyEncryptionKey(database: Database): void {
-  // Check if metadata table exists
-  const tableExists = database.prepare(`
-    SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'
-  `).get();
-
-  if (!tableExists) {
-    // First run - create table and store encrypted canary
-    database.exec(`
-      CREATE TABLE metadata (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    `);
-
-    const encryptedCanary = encrypt(KEY_CHECK_CANARY);
-    database.prepare(`INSERT INTO metadata (key, value) VALUES ('key_check', ?)`).run(encryptedCanary);
-    return;
-  }
-
-  // Existing database - verify the canary
+  // Metadata table is created by initializeSalt before this function is called
   const row = database.prepare(`SELECT value FROM metadata WHERE key = 'key_check'`).get() as { value: string } | undefined;
 
   if (!row) {
-    // Metadata table exists but no key_check - check if there's existing encrypted data
-    // that could indicate a key mismatch
+    // No key_check yet - check if there's existing encrypted data that could indicate a key/salt mismatch
     const connectionCount = database.prepare(`
       SELECT COUNT(*) as count FROM sqlite_master
       WHERE type='table' AND name='s3_connections'
@@ -82,9 +62,9 @@ function verifyEncryptionKey(database: Database): void {
 
       if (existingConnections.count > 0) {
         throw new Error(
-          'Encryption key verification failed: metadata table exists but key_check is missing, ' +
-          `and ${existingConnections.count} connection(s) with encrypted data exist in s3_connections table.\n` +
-          'This may indicate the encryption key has changed or the database is in an inconsistent state.\n' +
+          'Encryption key verification failed: key_check is missing, ' +
+          `but ${existingConnections.count} connection(s) with encrypted data exist in s3_connections table.\n` +
+          'This may indicate the encryption key or salt has changed, or the database is in an inconsistent state.\n' +
           'To fix this, use the original encryption key, or delete ~/.s3browser/s3browser.db to start fresh ' +
           '(this will delete all users and saved connections).'
         );
@@ -115,10 +95,37 @@ function verifyEncryptionKey(database: Database): void {
   }
 }
 
-function initializeDatabase(): Database {
-  // Validate encryption key before database initialization
-  validateEncryptionKey();
+function initializeSalt(database: Database): void {
+  // Ensure metadata table exists
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
 
+  // Check for existing salt
+  const row = database.prepare(`SELECT value FROM metadata WHERE key = 'encryption_salt'`).get() as { value: string } | undefined;
+
+  if (row) {
+    // Use existing salt
+    const salt = Buffer.from(row.value, 'base64');
+    if (salt.length !== getSaltLength()) {
+      throw new Error(
+        `Invalid salt length in database: expected ${getSaltLength()} bytes, got ${salt.length}. ` +
+        'The database may be corrupted. Delete ~/.s3browser/s3browser.db to start fresh.'
+      );
+    }
+    setSalt(salt);
+  } else {
+    // Generate and store new salt
+    const salt = generateSalt();
+    database.prepare(`INSERT INTO metadata (key, value) VALUES ('encryption_salt', ?)`).run(salt.toString('base64'));
+    setSalt(salt);
+  }
+}
+
+function initializeDatabase(): Database {
   // Ensure the database directory exists
   if (!existsSync(DB_DIR)) {
     mkdirSync(DB_DIR, { recursive: true });
@@ -129,6 +136,12 @@ function initializeDatabase(): Database {
 
   // Enable WAL mode for better concurrency
   database.exec('PRAGMA journal_mode = WAL');
+
+  // Initialize salt from database (must happen before encryption key validation)
+  initializeSalt(database);
+
+  // Now validate encryption key (which requires salt to be set)
+  validateEncryptionKey();
 
   // Create tables
   database.exec(`

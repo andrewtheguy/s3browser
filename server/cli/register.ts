@@ -25,14 +25,18 @@ async function promptPassword(prompt: string): Promise<string> {
     const onData = (char: string) => {
       // Handle Ctrl+C
       if (char === '\u0003') {
-        stdin.setRawMode(wasRaw || false);
+        if (stdin.isTTY) {
+          stdin.setRawMode(wasRaw || false);
+        }
         process.stdout.write('\n');
         process.exit(1);
       }
 
       // Handle Enter
       if (char === '\r' || char === '\n') {
-        stdin.setRawMode(wasRaw || false);
+        if (stdin.isTTY) {
+          stdin.setRawMode(wasRaw || false);
+        }
         stdin.removeListener('data', onData);
         stdin.pause();
         process.stdout.write('\n');

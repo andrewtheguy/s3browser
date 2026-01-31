@@ -6,9 +6,11 @@ import { homedir } from 'os';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
+const SALT_LENGTH = 32;
 const KEY_FILE_PATH = join(homedir(), '.s3browser', 'encryption.key');
 
 let encryptionKey: Buffer | null = null;
+let encryptionSalt: Buffer | null = null;
 
 function loadKeyFromFile(): string | null {
   if (!existsSync(KEY_FILE_PATH)) {
@@ -53,10 +55,33 @@ function getEncryptionKey(): Buffer {
     );
   }
 
+  if (!encryptionSalt) {
+    throw new Error(
+      'Encryption salt not initialized. This is an internal error - ' +
+      'the database should initialize the salt before encryption operations.'
+    );
+  }
+
   // Derive a 256-bit key using scrypt
-  const salt = Buffer.from('s3browser-fixed-salt-v1', 'utf8');
-  encryptionKey = scryptSync(keySource, salt, 32);
+  encryptionKey = scryptSync(keySource, encryptionSalt, 32);
   return encryptionKey;
+}
+
+export function setSalt(salt: Buffer): void {
+  if (salt.length !== SALT_LENGTH) {
+    throw new Error(`Salt must be exactly ${SALT_LENGTH} bytes`);
+  }
+  encryptionSalt = salt;
+  // Clear cached key so it's re-derived with new salt
+  encryptionKey = null;
+}
+
+export function generateSalt(): Buffer {
+  return randomBytes(SALT_LENGTH);
+}
+
+export function getSaltLength(): number {
+  return SALT_LENGTH;
 }
 
 export function encrypt(plaintext: string): string {
