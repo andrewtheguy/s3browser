@@ -4,7 +4,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 
 const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 16;
+const IV_LENGTH = 12; // NIST-recommended 96-bit IV for AES-GCM
 const AUTH_TAG_LENGTH = 16;
 const SALT_LENGTH = 32;
 const KEY_FILE_PATH = join(homedir(), '.s3browser', 'encryption.key');

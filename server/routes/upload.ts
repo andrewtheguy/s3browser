@@ -448,7 +448,8 @@ router.post('/abort', async (req: AuthenticatedRequest, res: Response): Promise<
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to abort multipart upload:', error);
-    res.status(500).json({ success: false, error: 'Failed to abort multipart upload' });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ success: false, error: 'Failed to abort multipart upload', details: message });
   } finally {
     // Clean up tracking regardless of success/failure
     uploadTracker.delete(trackingKey);
