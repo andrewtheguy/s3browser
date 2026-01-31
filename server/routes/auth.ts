@@ -53,7 +53,14 @@ router.post('/user-login', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  const result = await verifyUserAndCreateSession(username, password);
+  let result;
+  try {
+    result = await verifyUserAndCreateSession(username, password);
+  } catch (error) {
+    console.error('verifyUserAndCreateSession failed:', error);
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
   if (!result) {
     res.status(401).json({ error: 'Invalid username or password' });
     return;
@@ -143,16 +150,23 @@ router.post('/login', userAuthMiddleware, async (req: AuthenticatedRequest, res:
   }
 
   // Save or update the connection in s3_connections table
-  const savedConnection = saveConnection(
-    session.userId,
-    connectionName.trim(),
-    endpoint || 'https://s3.amazonaws.com',
-    accessKeyId,
-    secretAccessKey,
-    bucket || null,
-    detectedRegion,
-    autoDetectRegion !== false
-  );
+  let savedConnection;
+  try {
+    savedConnection = saveConnection(
+      session.userId,
+      connectionName.trim(),
+      endpoint || 'https://s3.amazonaws.com',
+      accessKeyId,
+      secretAccessKey,
+      bucket || null,
+      detectedRegion,
+      autoDetectRegion !== false
+    );
+  } catch (error) {
+    console.error('saveConnection failed:', error);
+    res.status(500).json({ error: 'Failed to save connection' });
+    return;
+  }
 
   // Activate this connection on the session
   const updated = activateConnectionOnSession(sessionId, savedConnection.id, bucket || undefined);
