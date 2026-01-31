@@ -28,6 +28,7 @@ interface S3ClientState {
   username: string | null;
   activeConnectionId: number | null;
   isCheckingSession: boolean;
+  isLoggingIn: boolean;
   error: string | null;
 }
 
@@ -36,7 +37,7 @@ type S3ClientAction =
   | { type: 'USER_LOGIN_SUCCESS'; username: string }
   | { type: 'USER_LOGIN_ERROR'; error: string }
   | { type: 'CONNECT_START' }
-  | { type: 'CONNECT_SUCCESS'; session: SessionInfo; connectionId: number }
+  | { type: 'CONNECT_SUCCESS'; session: SessionInfo; connectionId: number; username?: string }
   | { type: 'CONNECT_ERROR'; error: string }
   | { type: 'DISCONNECT' }
   | { type: 'BUCKET_SELECTED'; bucket: string }
@@ -46,13 +47,13 @@ type S3ClientAction =
 function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
   switch (action.type) {
     case 'USER_LOGIN_START':
-      return { ...state, error: null };
+      return { ...state, isLoggingIn: true, error: null };
     case 'USER_LOGIN_SUCCESS':
       return {
         ...state,
         isUserLoggedIn: true,
         username: action.username,
-        isCheckingSession: false,
+        isLoggingIn: false,
         error: null,
       };
     case 'USER_LOGIN_ERROR':
@@ -60,7 +61,7 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         ...state,
         isUserLoggedIn: false,
         username: null,
-        isCheckingSession: false,
+        isLoggingIn: false,
         error: action.error,
       };
     case 'CONNECT_START':
@@ -72,6 +73,11 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         isConnected: true,
         activeConnectionId: action.connectionId,
         isCheckingSession: false,
+        // Set user login state atomically if username is provided
+        ...(action.username && {
+          isUserLoggedIn: true,
+          username: action.username,
+        }),
         error: null,
       };
     case 'CONNECT_ERROR':
@@ -90,6 +96,7 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         username: null,
         activeConnectionId: null,
         isCheckingSession: false,
+        isLoggingIn: false,
         error: null,
       };
     case 'BUCKET_SELECTED':
@@ -123,6 +130,7 @@ const initialState: S3ClientState = {
   username: null,
   activeConnectionId: null,
   isCheckingSession: true,
+  isLoggingIn: false,
   error: null,
 };
 
@@ -214,19 +222,13 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
         const status = await getAuthStatus(abortController.signal);
         if (!abortController.signal.aborted) {
           if (status.authenticated && status.region && status.activeConnectionId) {
-            // Fully authenticated with S3 credentials
+            // Fully authenticated with S3 credentials - dispatch atomically with user info
             dispatch({
               type: 'CONNECT_SUCCESS',
               session: { region: status.region, bucket: status.bucket || null },
               connectionId: status.activeConnectionId,
+              username: status.userLoggedIn && status.username ? status.username : undefined,
             });
-            // Also set user login state
-            if (status.userLoggedIn && status.username) {
-              dispatch({
-                type: 'USER_LOGIN_SUCCESS',
-                username: status.username,
-              });
-            }
           } else if (status.userLoggedIn && status.username) {
             // User logged in but no S3 credentials yet
             dispatch({

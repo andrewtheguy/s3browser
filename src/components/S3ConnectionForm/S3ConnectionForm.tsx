@@ -68,6 +68,7 @@ export function S3ConnectionForm({
   const [endpointTouched, setEndpointTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [selectedConnectionName, setSelectedConnectionName] = useState<string | null>(null);
+  const [deletionError, setDeletionError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     connectionName: '',
     region: '',
@@ -159,6 +160,7 @@ export function S3ConnectionForm({
   const handleDeleteConnection = async (e: React.MouseEvent, connectionId: number, name: string) => {
     e.stopPropagation();
     e.preventDefault();
+    setDeletionError(null);
     try {
       await deleteConnection(connectionId);
       if (selectedConnectionName === name) {
@@ -175,6 +177,8 @@ export function S3ConnectionForm({
       }
     } catch (err) {
       console.error('Failed to delete connection:', err);
+      const message = err instanceof Error ? err.message : 'Failed to delete connection';
+      setDeletionError(`Could not delete "${name}": ${message}`);
     }
   };
 
@@ -204,7 +208,13 @@ export function S3ConnectionForm({
 
       <Divider sx={{ mb: 2 }} />
 
-      {canContinueBrowsing && activeConnectionId && (
+      {deletionError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setDeletionError(null)}>
+          {deletionError}
+        </Alert>
+      )}
+
+      {canContinueBrowsing && (
         <Button
           fullWidth
           variant="outlined"
