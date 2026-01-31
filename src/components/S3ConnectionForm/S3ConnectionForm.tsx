@@ -20,6 +20,7 @@ import {
 import type { SelectChangeEvent } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LogoutIcon from '@mui/icons-material/Logout';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useS3Client, useConnectionHistory } from '../../hooks';
 import { buildBrowseUrl, buildSelectBucketUrl } from '../../utils/urlEncoding';
 import type { LoginCredentials } from '../../types';
@@ -55,8 +56,11 @@ export function S3ConnectionForm({
   onLogout,
 }: S3ConnectionFormProps) {
   const navigate = useNavigate();
-  const { connect, isUserLoggedIn } = useS3Client();
+  const { connect, isUserLoggedIn, activeConnectionId, credentials, isConnected } = useS3Client();
   const { connections, deleteConnection, isLoading: connectionsLoading } = useConnectionHistory(isUserLoggedIn);
+
+  // Check if we can continue browsing (have an active connection)
+  const canContinueBrowsing = isConnected && activeConnectionId;
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
   const [endpointTouched, setEndpointTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
@@ -197,8 +201,27 @@ export function S3ConnectionForm({
 
       <Divider sx={{ mb: 2 }} />
 
+      {canContinueBrowsing && activeConnectionId && (
+        <Button
+          fullWidth
+          variant="outlined"
+          color="primary"
+          startIcon={<ArrowForwardIcon />}
+          onClick={() => {
+            if (credentials?.bucket) {
+              void navigate(buildBrowseUrl(activeConnectionId, credentials.bucket, ''));
+            } else {
+              void navigate(buildSelectBucketUrl(activeConnectionId));
+            }
+          }}
+          sx={{ mb: 2 }}
+        >
+          Continue Browsing{credentials?.bucket ? ` (${credentials.bucket})` : ''}
+        </Button>
+      )}
+
       <Typography variant="body2" color="text.secondary" textAlign="center" mb={2}>
-        Enter your S3 credentials to browse storage
+        {canContinueBrowsing ? 'Or connect to a different S3 storage' : 'Enter your S3 credentials to browse storage'}
       </Typography>
 
       {error && (
