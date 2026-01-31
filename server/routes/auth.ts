@@ -19,7 +19,7 @@ import {
 import {
   getConnectionsByUserId,
   saveConnection,
-  deleteConnection,
+  deleteConnectionById,
   decryptConnectionSecretKey,
   getConnectionById,
 } from '../db/index.js';
@@ -420,17 +420,17 @@ router.get('/connections', userAuthMiddleware, (req: AuthenticatedRequest, res: 
   res.json({ connections: decryptedConnections });
 });
 
-// DELETE /api/auth/connections/:name - Delete a saved connection
-router.delete('/connections/:name', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
+// DELETE /api/auth/connections/:id - Delete a saved connection by ID
+router.delete('/connections/:id', userAuthMiddleware, (req: AuthenticatedRequest, res: Response): void => {
   const session = req.session!;
-  const name = req.params.name as string;
+  const connectionId = parseInt(req.params.id as string, 10);
 
-  if (!name) {
-    res.status(400).json({ error: 'Connection name is required' });
+  if (isNaN(connectionId) || connectionId <= 0) {
+    res.status(400).json({ error: 'Valid connection ID is required' });
     return;
   }
 
-  const deleted = deleteConnection(session.userId, name);
+  const deleted = deleteConnectionById(session.userId, connectionId);
   if (!deleted) {
     res.status(404).json({ error: 'Connection not found' });
     return;

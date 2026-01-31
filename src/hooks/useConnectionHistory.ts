@@ -61,12 +61,12 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
     };
   }, [isUserLoggedIn]);
 
-  const deleteConnection = useCallback(async (name: string) => {
+  const deleteConnection = useCallback(async (connectionId: number) => {
     try {
-      await deleteConnectionFromServer(name);
+      await deleteConnectionFromServer(connectionId);
 
       // Update local state
-      setConnections((prev) => prev.filter((c) => c.name !== name));
+      setConnections((prev) => prev.filter((c) => c.id !== connectionId));
     } catch (err) {
       console.error('Failed to delete connection:', err);
       throw err;

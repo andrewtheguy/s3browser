@@ -374,10 +374,10 @@ export function saveConnection(
   return stmt.get(userId, name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0) as DbS3Connection;
 }
 
-export function deleteConnection(userId: number, name: string): boolean {
+export function deleteConnectionById(userId: number, connectionId: number): boolean {
   const database = getDb();
-  const stmt = database.prepare('DELETE FROM s3_connections WHERE user_id = ? AND name = ?');
-  const result = stmt.run(userId, name);
+  const stmt = database.prepare('DELETE FROM s3_connections WHERE id = ? AND user_id = ?');
+  const result = stmt.run(connectionId, userId);
   return result.changes > 0;
 }
 

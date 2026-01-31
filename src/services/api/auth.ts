@@ -144,7 +144,7 @@ export async function activateConnection(connectionId: number, bucket?: string):
   return response;
 }
 
-export async function deleteConnectionFromServer(name: string): Promise<void> {
-  await apiDelete(`/auth/connections/${encodeURIComponent(name)}`);
+export async function deleteConnectionFromServer(connectionId: number): Promise<void> {
+  await apiDelete(`/auth/connections/${connectionId}`);
 }
 

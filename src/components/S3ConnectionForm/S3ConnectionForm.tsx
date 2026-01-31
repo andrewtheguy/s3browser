@@ -153,11 +153,11 @@ export function S3ConnectionForm({
     }
   };
 
-  const handleDeleteConnection = async (e: React.MouseEvent, name: string) => {
+  const handleDeleteConnection = async (e: React.MouseEvent, connectionId: number, name: string) => {
     e.stopPropagation();
     e.preventDefault();
     try {
-      await deleteConnection(name);
+      await deleteConnection(connectionId);
       if (selectedConnectionName === name) {
         setSelectedConnectionName(null);
         setFormData({
@@ -257,7 +257,7 @@ export function S3ConnectionForm({
                 />
                 <IconButton
                   size="small"
-                  onClick={(e) => handleDeleteConnection(e, connection.name)}
+                  onClick={(e) => handleDeleteConnection(e, connection.id, connection.name)}
                   aria-label="delete"
                   sx={{ flexShrink: 0 }}
                 >
