@@ -66,15 +66,8 @@ export async function getPresignedUrl(
 export async function downloadFile(connectionId: number, bucket: string, key: string): Promise<void> {
   const url = await getDownloadUrl(connectionId, bucket, key);
 
-  // Extract filename from key
-  const filename = key.split('/').pop() || 'download';
-
-  // Create a temporary link and trigger download
+  // Create detached link and click - works in modern browsers without DOM append
   const link = document.createElement('a');
   link.href = url;
-  link.download = filename;
-  link.target = '_blank';
-  document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
 }
