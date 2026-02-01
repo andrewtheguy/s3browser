@@ -69,6 +69,8 @@ export interface S3ClientContextValue {
   activateConnection: (connectionId: number, bucket?: string) => Promise<boolean>;
   selectBucket: (bucket: string) => boolean;
   error: string | null;
+  serverError: string | null;
+  retryConnection: () => void;
 }
 
 export interface BrowserContextValue {

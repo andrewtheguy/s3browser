@@ -27,6 +27,7 @@ interface S3ClientState {
   isCheckingSession: boolean;
   isLoggingIn: boolean;
   error: string | null;
+  serverError: string | null;
 }
 
 type S3ClientAction =
@@ -39,7 +40,9 @@ type S3ClientAction =
   | { type: 'DISCONNECT' }
   | { type: 'BUCKET_SELECTED'; bucket: string }
   | { type: 'BUCKET_SELECT_ERROR'; error: string }
-  | { type: 'SESSION_CHECK_COMPLETE'; isLoggedIn?: boolean; activeConnectionId?: number | null };
+  | { type: 'SESSION_CHECK_START' }
+  | { type: 'SESSION_CHECK_COMPLETE'; isLoggedIn?: boolean; activeConnectionId?: number | null }
+  | { type: 'SESSION_CHECK_ERROR'; error: string };
 
 function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
   switch (action.type) {
@@ -103,12 +106,25 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         ...state,
         error: action.error,
       };
+    case 'SESSION_CHECK_START':
+      return {
+        ...state,
+        isCheckingSession: true,
+        serverError: null,
+      };
     case 'SESSION_CHECK_COMPLETE':
       return {
         ...state,
         isCheckingSession: false,
         isLoggedIn: action.isLoggedIn ?? state.isLoggedIn,
         activeConnectionId: action.activeConnectionId ?? state.activeConnectionId,
+        serverError: null,
+      };
+    case 'SESSION_CHECK_ERROR':
+      return {
+        ...state,
+        isCheckingSession: false,
+        serverError: action.error,
       };
     default:
       return state;
@@ -123,6 +139,7 @@ const initialState: S3ClientState = {
   isCheckingSession: true,
   isLoggingIn: false,
   error: null,
+  serverError: null,
 };
 
 export const S3ClientContext = createContext<S3ClientContextValue | null>(null);
@@ -198,39 +215,74 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     return true;
   }, [state.isConnected, state.activeConnectionId]);
 
+  // Check session status
+  const checkSession = useCallback(async (signal?: AbortSignal) => {
+    dispatch({ type: 'SESSION_CHECK_START' });
+
+    try {
+      // Add timeout to prevent hanging on proxy issues
+      const timeoutId = setTimeout(() => {
+        if (!signal?.aborted) {
+          console.error('Session check timed out');
+        }
+      }, 10000);
+
+      const status = await getAuthStatus(signal);
+      clearTimeout(timeoutId);
+
+      if (!signal?.aborted) {
+        console.log('Auth status received:', status);
+        if (status.authenticated) {
+          dispatch({
+            type: 'SESSION_CHECK_COMPLETE',
+            isLoggedIn: true,
+          });
+        } else {
+          dispatch({ type: 'SESSION_CHECK_COMPLETE' });
+        }
+      }
+    } catch (error) {
+      // Ignore abort errors from cleanup
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const errorType = error instanceof Error ? error.constructor.name : typeof error;
+      console.error('Session status check failed:', { message, errorType, error });
+
+      // For the initial auth status check, treat most errors as server connection issues
+      // since a working server should always return a valid JSON response.
+      // Only treat explicit auth failures (401, 403) as "not logged in"
+      const isAuthError =
+        message.includes('401') ||
+        message.includes('403') ||
+        message.includes('Unauthorized') ||
+        message.includes('Forbidden');
+
+      if (isAuthError) {
+        // Auth error means server is up but user is not authenticated
+        dispatch({ type: 'SESSION_CHECK_COMPLETE' });
+      } else {
+        // Any other error during initial status check is likely a server issue
+        dispatch({ type: 'SESSION_CHECK_ERROR', error: 'Unable to connect to server. Please ensure the server is running.' });
+      }
+    }
+  }, []);
+
+  const retryConnection = useCallback(() => {
+    void checkSession();
+  }, [checkSession]);
+
   // Check session status on mount
   useEffect(() => {
     const abortController = new AbortController();
-
-    void (async () => {
-      try {
-        const status = await getAuthStatus(abortController.signal);
-        if (!abortController.signal.aborted) {
-          if (status.authenticated) {
-            // User is logged in
-            dispatch({
-              type: 'SESSION_CHECK_COMPLETE',
-              isLoggedIn: true,
-            });
-          } else {
-            dispatch({ type: 'SESSION_CHECK_COMPLETE' });
-          }
-        }
-      } catch (error) {
-        // Ignore abort errors from cleanup
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return;
-        }
-        // Log other errors - user stays disconnected (initial state)
-        console.error('Session status check failed:', error);
-        dispatch({ type: 'SESSION_CHECK_COMPLETE' });
-      }
-    })();
+    void checkSession(abortController.signal);
 
     return () => {
       abortController.abort();
     };
-  }, []);
+  }, [checkSession]);
 
   const requiresBucketSelection = state.isConnected && !state.session?.bucket;
 
@@ -249,11 +301,13 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     isCheckingSession: state.isCheckingSession,
     requiresBucketSelection,
     error: state.error,
+    serverError: state.serverError,
     login,
     connect,
     disconnect,
     activateConnection,
     selectBucket,
+    retryConnection,
   };
 
   return (
