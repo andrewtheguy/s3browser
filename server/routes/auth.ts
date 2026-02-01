@@ -16,6 +16,7 @@ import {
   deleteConnectionById,
   getConnectionById,
   decryptConnectionSecretKey,
+  isUniqueConstraintError,
 } from '../db/index.js';
 import { getLoginPassword, timingSafeCompare } from '../db/crypto.js';
 import { createAuthToken, verifyAuthToken, AUTH_COOKIE_OPTIONS } from '../auth/token.js';
@@ -121,6 +122,10 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
   // Look up existing connection by ID if provided
   let existingConnection;
   if (connectionId !== undefined) {
+    if (typeof connectionId !== 'number' || !Number.isInteger(connectionId) || connectionId <= 0) {
+      res.status(400).json({ error: 'Invalid connection ID' });
+      return;
+    }
     existingConnection = getConnectionById(connectionId);
     if (!existingConnection) {
       res.status(404).json({ error: 'Connection not found' });
@@ -204,8 +209,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
       autoDetectRegion !== false
     );
   } catch (error) {
-    // Handle database UNIQUE constraint error for duplicate names
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+    if (isUniqueConstraintError(error)) {
       res.status(400).json({ error: 'Connection name already exists' });
       return;
     }

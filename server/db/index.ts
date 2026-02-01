@@ -265,4 +265,12 @@ export function decryptConnectionSecretKey(connection: DbS3Connection): string {
   return decrypt(connection.secret_access_key);
 }
 
+/**
+ * Check if an error is a SQLite UNIQUE constraint violation.
+ * This is SQLite-specific and relies on the error message format.
+ */
+export function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('UNIQUE constraint failed');
+}
+
 export { encrypt, decrypt } from './crypto.js';
