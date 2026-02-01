@@ -10,6 +10,9 @@ import {
 import { s3Middleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 import { UPLOAD_CONFIG } from '../config/upload.js';
 
+const RAW_SINGLE_LIMIT = Math.max(UPLOAD_CONFIG.MULTIPART_THRESHOLD, UPLOAD_CONFIG.PART_SIZE);
+const RAW_PART_LIMIT = Math.max(UPLOAD_CONFIG.PART_SIZE, UPLOAD_CONFIG.MULTIPART_THRESHOLD);
+
 // Check for control characters (0x00-0x1f, 0x7f) or backslashes
 function hasUnsafeChars(str: string): boolean {
   for (let i = 0; i < str.length; i++) {
@@ -239,7 +242,7 @@ router.post(
   '/:connectionId/:bucket/single',
   s3Middleware,
   requireBucket,
-  express.raw({ limit: '10mb', type: '*/*' }),
+  express.raw({ limit: RAW_SINGLE_LIMIT, type: '*/*' }),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const key = req.query.key as string;
     const bucket = req.s3Credentials?.bucket;
@@ -287,7 +290,7 @@ router.post(
   '/:connectionId/:bucket/part',
   s3Middleware,
   requireBucket,
-  express.raw({ limit: '15mb', type: '*/*' }),
+  express.raw({ limit: RAW_PART_LIMIT, type: '*/*' }),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const uploadId = req.query.uploadId as string;
     const partNumber = req.query.partNumber as string;
