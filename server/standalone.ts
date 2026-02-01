@@ -12,14 +12,24 @@ import indexHtml from '../dist/index.html' with { type: 'text' };
 import indexJs from '../dist/assets/index.js' with { type: 'text' };
 import indexCss from '../dist/assets/index.css' with { type: 'text' };
 
+// Version injected at build time via --define
+declare const BUILD_VERSION: string;
+const VERSION = typeof BUILD_VERSION !== 'undefined' ? BUILD_VERSION : 'dev';
+
 // Parse CLI arguments
 const { values } = parseArgs({
   options: {
     bind: { type: 'string', short: 'b' },
     help: { type: 'boolean', short: 'h' },
+    version: { type: 'boolean', short: 'v' },
   },
   strict: false,
 });
+
+if (values.version) {
+  console.log(`s3browser ${VERSION}`);
+  process.exit(0);
+}
 
 if (values.help) {
   console.log(`Usage: s3browser [options]
@@ -27,6 +37,7 @@ if (values.help) {
 Options:
   -b, --bind <[host]:port>  Address to bind to (default: :8170)
   -h, --help                Show this help message
+  -v, --version             Show version number
 
 Examples:
   s3browser                    Listen on all interfaces, port 8170

@@ -44,7 +44,13 @@ jobs:
           STANDALONE_BUILD: 'true'
 
       - name: Compile standalone binary
-        run: bun build server/standalone.ts --compile --outfile ${{ matrix.artifact }} --target ${{ matrix.target }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="${{ github.sha }}"
+          fi
+          bun build server/standalone.ts --compile --outfile ${{ matrix.artifact }} --target ${{ matrix.target }} --define "BUILD_VERSION='\"$VERSION\"'"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
