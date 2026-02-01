@@ -1,4 +1,4 @@
-import { apiGet } from './client';
+import { apiGet, apiGetText } from './client';
 
 interface DownloadUrlResponse {
   url: string;
@@ -67,4 +67,17 @@ export async function downloadFile(connectionId: number, bucket: string, key: st
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+export async function getFilePreview(connectionId: number, bucket: string, key: string, signal?: AbortSignal): Promise<string> {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+
+  const content = await apiGetText(
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/preview?key=${encodeURIComponent(key)}`,
+    signal
+  );
+
+  return content ?? '';
 }

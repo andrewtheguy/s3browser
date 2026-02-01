@@ -4,18 +4,23 @@ export interface ApiError {
   error: string;
 }
 
+interface ApiRequestOptions extends RequestInit {
+  responseType?: 'json' | 'text';
+}
+
 export async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiRequestOptions = {}
 ): Promise<T | null> {
+  const { responseType = 'json', ...fetchOptions } = options;
   const url = `${API_BASE}${endpoint}`;
 
   const response = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...fetchOptions.headers,
     },
   });
 
@@ -46,6 +51,10 @@ export async function apiRequest<T>(
     return null;
   }
 
+  if (responseType === 'text') {
+    return response.text() as Promise<T>;
+  }
+
   // Reject unexpected non-JSON responses
   if (!contentType?.includes('application/json')) {
     throw new Error(`Unexpected content type: ${contentType || 'none'}`);
@@ -56,6 +65,10 @@ export async function apiRequest<T>(
 
 export function apiGet<T>(endpoint: string, signal?: AbortSignal): Promise<T | null> {
   return apiRequest<T>(endpoint, { method: 'GET', signal });
+}
+
+export function apiGetText(endpoint: string, signal?: AbortSignal): Promise<string | null> {
+  return apiRequest<string>(endpoint, { method: 'GET', signal, responseType: 'text' });
 }
 
 export function apiPost<T>(endpoint: string, body?: unknown, signal?: AbortSignal): Promise<T | null> {

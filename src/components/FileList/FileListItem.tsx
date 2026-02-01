@@ -23,6 +23,7 @@ interface FileListItemProps {
   onDownload: (key: string) => void;
   onCopyUrl: (key: string) => void;
   onDelete: (item: S3Object) => void;
+  onPreview: (item: S3Object) => void;
   isSelected?: boolean;
   onSelect?: (key: string, checked: boolean) => void;
 }
@@ -61,6 +62,7 @@ export function FileListItem({
   onDownload,
   onCopyUrl,
   onDelete,
+  onPreview,
   isSelected = false,
   onSelect,
 }: FileListItemProps) {
@@ -71,6 +73,8 @@ export function FileListItem({
   const handleClick = () => {
     if (item.isFolder) {
       onNavigate(item.key);
+    } else {
+      onPreview(item);
     }
   };
 
@@ -103,7 +107,7 @@ export function FileListItem({
       onClick={handleClick}
       selected={isSelected}
       sx={{
-        cursor: item.isFolder ? 'pointer' : 'default',
+        cursor: 'pointer',
         '&:hover': {
           bgcolor: 'action.hover',
         },

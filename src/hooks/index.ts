@@ -5,3 +5,4 @@ export { useDownload } from './useDownload';
 export { useDelete } from './useDelete';
 export { useConnectionHistory } from './useConnectionHistory';
 export { usePresignedUrl } from './usePresignedUrl';
+export { usePreview } from './usePreview';
