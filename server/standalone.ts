@@ -174,6 +174,7 @@ try {
   console.log('Database initialized successfully');
 } catch (error) {
   console.error('Failed to initialize database:', error instanceof Error ? error.message : error);
+  releaseLock();
   process.exit(1);
 }
 
