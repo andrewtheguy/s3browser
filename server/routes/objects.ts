@@ -192,26 +192,6 @@ router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req:
     return;
   }
 
-  // If deleting a folder (key ends with /), check if it's empty first
-  if (key.endsWith('/')) {
-    const listCommand = new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: key,
-      MaxKeys: 2, // We only need to know if there's more than the folder marker
-    });
-
-    const listResponse = await client.send(listCommand);
-    const contents = listResponse.Contents || [];
-
-    // Filter out the folder marker itself
-    const otherObjects = contents.filter((obj) => obj.Key !== key);
-
-    if (otherObjects.length > 0) {
-      res.status(400).json({ error: 'Cannot delete folder: folder is not empty' });
-      return;
-    }
-  }
-
   const command = new DeleteObjectCommand({
     Bucket: bucket,
     Key: key,
