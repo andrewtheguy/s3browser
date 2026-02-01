@@ -24,7 +24,7 @@ function validateDownloadUrlResponse(response: DownloadUrlResponse | null, error
 }
 
 export async function getDownloadUrl(connectionId: number, bucket: string, key: string): Promise<string> {
-  if (!Number.isFinite(connectionId) || connectionId < 1) {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
     throw new Error('Invalid connection ID');
   }
 
@@ -36,12 +36,15 @@ export async function getDownloadUrl(connectionId: number, bucket: string, key: 
 }
 
 export async function getPresignedUrl(connectionId: number, bucket: string, key: string, ttl: number = 86400): Promise<string> {
-  if (!Number.isFinite(connectionId) || connectionId < 1) {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
     throw new Error('Invalid connection ID');
   }
 
-  // Validate ttl is a finite positive integer, fallback to default if invalid
-  const sanitizedTtl = Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : 86400;
+  if (!Number.isFinite(ttl) || ttl <= 0) {
+    throw new Error('Invalid TTL: must be a positive number');
+  }
+
+  const sanitizedTtl = Math.floor(ttl);
 
   const response = await apiGet<DownloadUrlResponse>(
     `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`

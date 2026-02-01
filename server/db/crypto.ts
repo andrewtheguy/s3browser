@@ -168,11 +168,11 @@ export function getLoginPassword(): string {
   }
 
   // Validate minimum length
-  if (!password || password.length < 8) {
+  if (!password || password.length < 16) {
     throw new Error(
       `Login password not configured. Please either:\n` +
-      `  1. Set S3BROWSER_LOGIN_PASSWORD environment variable (8+ characters), or\n` +
-      `  2. Create ${PASSWORD_FILE_PATH} with an 8+ character password\n`
+      `  1. Set S3BROWSER_LOGIN_PASSWORD environment variable (16+ characters), or\n` +
+      `  2. Create ${PASSWORD_FILE_PATH} with a 16+ character password\n`
     );
   }
 

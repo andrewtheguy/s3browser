@@ -58,7 +58,7 @@ chmod 700 ~/.s3browser
 
 **Login Password** (required):
 
-The password must be at least 8 characters. Environment variable takes precedence over file.
+The password must be at least 16 characters. Environment variable takes precedence over file. The example command below generates a 44-character password.
 
 ```bash
 # Option 1: Password file (recommended for persistence)
