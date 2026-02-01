@@ -110,15 +110,17 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
   // For existing connections, secret key is optional (use stored key if not provided)
   // For new connections, secret key is required
   const existingConnection = getConnectionByName(connectionName.trim());
-  let effectiveSecretKey = secretAccessKey;
+  let effectiveSecretKey: string;
 
-  if (!secretAccessKey) {
+  if (secretAccessKey === undefined || secretAccessKey === '') {
     if (!existingConnection) {
       res.status(400).json({ error: 'Secret access key is required for new connections' });
       return;
     }
     // Use existing secret key for validation
     effectiveSecretKey = decryptConnectionSecretKey(existingConnection);
+  } else {
+    effectiveSecretKey = secretAccessKey;
   }
 
   // If bucket is provided, use existing flow with region detection
