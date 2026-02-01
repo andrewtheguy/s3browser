@@ -28,6 +28,7 @@ interface FileListItemProps {
   onSelect?: (key: string, checked: boolean) => void;
   allowFolderSelect?: boolean;
   allowRecursiveDelete?: boolean;
+  selectionMode?: boolean;
 }
 
 const iconMap: Record<FileIconType, React.ElementType> = {
@@ -69,6 +70,7 @@ export function FileListItem({
   onSelect,
   allowFolderSelect = false,
   allowRecursiveDelete = false,
+  selectionMode = false,
 }: FileListItemProps) {
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
@@ -117,25 +119,32 @@ export function FileListItem({
         },
       }}
     >
-      <TableCell sx={{ width: 48, padding: '0 8px' }}>
-        {(onSelect && (allowFolderSelect || !item.isFolder)) ? (
-          <Checkbox
-            size="small"
-            checked={isSelected}
-            onChange={handleCheckboxChange}
-            onClick={handleCheckboxClick}
-          />
-        ) : null}
-      </TableCell>
+      {selectionMode && (
+        <TableCell sx={{ width: 48, padding: '0 8px' }}>
+          {(onSelect && (allowFolderSelect || !item.isFolder)) ? (
+            <Checkbox
+              size="small"
+              checked={isSelected}
+              onChange={handleCheckboxChange}
+              onClick={handleCheckboxClick}
+            />
+          ) : null}
+        </TableCell>
+      )}
       <TableCell sx={{ width: 48 }}>
         <IconComponent sx={{ color: iconColor, fontSize: 24 }} />
       </TableCell>
-      <TableCell>
+      <TableCell sx={{ minWidth: 120 }}>
         <Box>
           <Typography
             variant="body2"
             sx={{
               fontWeight: item.isFolder ? 500 : 400,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'block',
+              maxWidth: 'clamp(140px, 35vw, 320px)',
               '&:hover': item.isFolder ? { textDecoration: 'underline' } : {},
             }}
           >
@@ -144,13 +153,13 @@ export function FileListItem({
           </Typography>
         </Box>
       </TableCell>
-      <TableCell sx={{ width: 100 }}>
-        <Typography variant="body2" color="text.secondary">
+      <TableCell sx={{ width: { xs: 72, sm: 100 } }}>
+        <Typography variant="body2" color="text.secondary" noWrap>
           {formatFileSize(item.size)}
         </Typography>
       </TableCell>
-      <TableCell sx={{ width: 180 }}>
-        <Typography variant="body2" color="text.secondary">
+      <TableCell sx={{ width: { xs: 120, sm: 180 } }}>
+        <Typography variant="body2" color="text.secondary" noWrap>
           {formatDate(item.lastModified)}
         </Typography>
       </TableCell>

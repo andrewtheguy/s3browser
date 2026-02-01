@@ -10,7 +10,14 @@ import {
   DialogActions,
   TextField,
   Button,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
+import DeleteIcon from '@mui/icons-material/Delete';
+import TouchAppIcon from '@mui/icons-material/TouchApp';
+import CloseIcon from '@mui/icons-material/Close';
 import { Toolbar } from '../Toolbar';
 import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
@@ -61,6 +68,7 @@ export function S3Browser() {
   const [deleteResolveError, setDeleteResolveError] = useState<string | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -155,6 +163,16 @@ export function S3Browser() {
       setSelectedKeys(new Set());
     }
   }, [objects, allowRecursiveDelete]);
+
+  const handleToggleSelection = useCallback(() => {
+    setSelectionMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSelectedKeys(new Set());
+      }
+      return next;
+    });
+  }, []);
 
   const handleDeleteRequest = useCallback((item: S3Object) => {
     const shouldDeleteRecursively = item.isFolder && allowRecursiveDelete;
@@ -356,25 +374,68 @@ export function S3Browser() {
           selectedCount={selectedKeys.size}
           onBatchDelete={handleBatchDeleteRequest}
           isDeleting={isDeleting}
+          selectionMode={selectionMode}
+          onToggleSelection={handleToggleSelection}
         />
-        <Box
-          sx={{
-            flexGrow: 1,
-            overflowY: 'scroll',
-            overflowX: 'hidden',
-            scrollbarGutter: 'stable',
-          }}
-        >
-          <FileList
-            onDeleteRequest={handleDeleteRequest}
-            onCopyUrl={handleCopyUrl}
-            onPreview={handlePreview}
-            selectedKeys={selectedKeys}
-            onSelectItem={handleSelectItem}
-            onSelectAll={handleSelectAll}
-            allowFolderSelect={allowRecursiveDelete}
-            allowRecursiveDelete={allowRecursiveDelete}
-          />
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <Box
+            sx={{
+              flexGrow: 1,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              scrollbarGutter: 'stable',
+              minHeight: 0,
+            }}
+          >
+            <FileList
+              onDeleteRequest={handleDeleteRequest}
+              onCopyUrl={handleCopyUrl}
+              onPreview={handlePreview}
+              selectedKeys={selectedKeys}
+              onSelectItem={handleSelectItem}
+              onSelectAll={handleSelectAll}
+              allowFolderSelect={allowRecursiveDelete}
+              allowRecursiveDelete={allowRecursiveDelete}
+              selectionMode={selectionMode}
+            />
+          </Box>
+          <Box
+            sx={{
+              display: { xs: 'flex', sm: 'none' },
+              flexWrap: 'wrap',
+              gap: 1,
+              justifyContent: 'flex-start',
+              p: 1,
+              borderTop: 1,
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+            }}
+          >
+            <Tooltip title={selectionMode ? 'Cancel selection' : 'Select items'}>
+              <IconButton onClick={handleToggleSelection} color={selectionMode ? 'primary' : 'default'}>
+                {selectionMode ? <CloseIcon /> : <TouchAppIcon />}
+              </IconButton>
+            </Tooltip>
+            {selectionMode && selectedKeys.size > 0 && (
+              <Tooltip title={isDeleting ? 'Deleting...' : `Delete (${selectedKeys.size})`}>
+                <span>
+                  <IconButton onClick={handleBatchDeleteRequest} disabled={isDeleting} color="error">
+                    <DeleteIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
+            <Tooltip title="New Folder">
+              <IconButton onClick={handleCreateFolderClick} color="default">
+                <CreateNewFolderIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Upload">
+              <IconButton onClick={handleUploadClick} color="primary">
+                <CloudUploadIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
       </Paper>
 
