@@ -91,11 +91,31 @@ router.get('/:connectionId/:bucket/preview', s3Middleware, requireBucket, async 
       return;
     }
 
-    // Convert stream to string
+    // Layer 1: Early reject using headers if ContentLength exceeds limit
+    if (response.ContentLength !== undefined && response.ContentLength > MAX_PREVIEW_SIZE) {
+      if ('destroy' in bodyStream && typeof bodyStream.destroy === 'function') {
+        bodyStream.destroy();
+      }
+      res.status(413).json({ error: 'File too large to preview' });
+      return;
+    }
+
+    // Layer 2: Hard stop while streaming - count bytes and abort if limit exceeded
     const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
     for await (const chunk of bodyStream as AsyncIterable<Uint8Array>) {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_PREVIEW_SIZE) {
+        if ('destroy' in bodyStream && typeof bodyStream.destroy === 'function') {
+          bodyStream.destroy();
+        }
+        res.status(413).json({ error: 'File too large to preview' });
+        return;
+      }
       chunks.push(chunk);
     }
+
     const buffer = Buffer.concat(chunks);
     const content = buffer.toString('utf-8');
 
