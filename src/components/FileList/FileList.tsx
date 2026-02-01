@@ -26,12 +26,23 @@ interface FileListProps {
   selectedKeys: Set<string>;
   onSelectItem: (key: string, checked: boolean) => void;
   onSelectAll: (checked: boolean) => void;
+  allowFolderSelect?: boolean;
+  allowRecursiveDelete?: boolean;
 }
 
-export function FileList({ onDeleteRequest, onCopyUrl, onPreview, selectedKeys, onSelectItem, onSelectAll }: FileListProps) {
+export function FileList({
+  onDeleteRequest,
+  onCopyUrl,
+  onPreview,
+  selectedKeys,
+  onSelectItem,
+  onSelectAll,
+  allowFolderSelect = false,
+  allowRecursiveDelete = false,
+}: FileListProps) {
   const { objects, isLoading, error, navigateTo } = useBrowserContext();
 
-  const selectableItems = objects.filter((item) => !item.isFolder);
+  const selectableItems = allowFolderSelect ? objects : objects.filter((item) => !item.isFolder);
   const selectableCount = selectableItems.length;
   const selectedCount = selectableItems.filter((item) => selectedKeys.has(item.key)).length;
   const isAllSelected = selectableCount > 0 && selectedCount === selectableCount;
@@ -153,6 +164,8 @@ export function FileList({ onDeleteRequest, onCopyUrl, onPreview, selectedKeys, 
               onPreview={onPreview}
               isSelected={selectedKeys.has(item.key)}
               onSelect={onSelectItem}
+              allowFolderSelect={allowFolderSelect}
+              allowRecursiveDelete={allowRecursiveDelete}
             />
           ))}
         </TableBody>

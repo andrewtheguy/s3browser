@@ -26,6 +26,8 @@ interface FileListItemProps {
   onPreview: (item: S3Object) => void;
   isSelected?: boolean;
   onSelect?: (key: string, checked: boolean) => void;
+  allowFolderSelect?: boolean;
+  allowRecursiveDelete?: boolean;
 }
 
 const iconMap: Record<FileIconType, React.ElementType> = {
@@ -65,6 +67,8 @@ export function FileListItem({
   onPreview,
   isSelected = false,
   onSelect,
+  allowFolderSelect = false,
+  allowRecursiveDelete = false,
 }: FileListItemProps) {
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
@@ -114,7 +118,7 @@ export function FileListItem({
       }}
     >
       <TableCell sx={{ width: 48, padding: '0 8px' }}>
-        {!item.isFolder && onSelect ? (
+        {(onSelect && (allowFolderSelect || !item.isFolder)) ? (
           <Checkbox
             size="small"
             checked={isSelected}
@@ -166,7 +170,14 @@ export function FileListItem({
               </Tooltip>
             </>
           )}
-          <Tooltip title={item.isFolder ? "Delete folder (must be empty)" : "Delete"} placement="top-start">
+          <Tooltip
+            title={
+              item.isFolder
+                ? (allowRecursiveDelete ? 'Delete folder and contents' : 'Delete folder (must be empty)')
+                : 'Delete'
+            }
+            placement="top-start"
+          >
             <IconButton size="small" onClick={handleDelete} color="error">
               <DeleteIcon fontSize="small" />
             </IconButton>

@@ -17,6 +17,7 @@ import {
 interface SessionInfo {
   region: string;
   bucket: string | null;
+  endpoint: string | null;
 }
 
 interface S3ClientState {
@@ -169,7 +170,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
       const response = await saveConnection(credentials);
       dispatch({
         type: 'CONNECT_SUCCESS',
-        session: { region: response.region, bucket: response.bucket },
+        session: { region: response.region, bucket: response.bucket, endpoint: response.endpoint },
         connectionId: response.connectionId,
       });
       return { success: true, connectionId: response.connectionId };
@@ -196,7 +197,11 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
       const connection = await getConnection(connectionId);
       dispatch({
         type: 'CONNECT_SUCCESS',
-        session: { region: connection.region || 'us-east-1', bucket: bucket || connection.bucket },
+        session: {
+          region: connection.region || 'us-east-1',
+          bucket: bucket || connection.bucket,
+          endpoint: connection.endpoint,
+        },
         connectionId: connection.id,
       });
       return true;
@@ -294,6 +299,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
           secretAccessKey: '', // Not exposed to frontend
           region: state.session.region,
           bucket: state.session.bucket || undefined,
+          endpoint: state.session.endpoint || undefined,
         }
       : null,
     isConnected: state.isConnected,
