@@ -68,3 +68,21 @@ export async function downloadFile(connectionId: number, bucket: string, key: st
   link.click();
   document.body.removeChild(link);
 }
+
+export async function getFilePreview(connectionId: number, bucket: string, key: string): Promise<string> {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+
+  const response = await fetch(
+    `/api/download/${connectionId}/${encodeURIComponent(bucket)}/preview?key=${encodeURIComponent(key)}`,
+    { credentials: 'include' }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(errorData.error || `Failed to fetch file: ${response.statusText}`);
+  }
+
+  return response.text();
+}

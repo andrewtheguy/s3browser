@@ -15,8 +15,9 @@ import { Toolbar } from '../Toolbar';
 import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
 import { DeleteDialog } from '../DeleteDialog';
+import { PreviewDialog } from '../PreviewDialog';
 import { useBrowserContext } from '../../contexts';
-import { useDelete, useUpload, usePresignedUrl } from '../../hooks';
+import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview } from '../../hooks';
 import type { S3Object } from '../../types';
 
 interface SnackbarState {
@@ -30,6 +31,8 @@ export function S3Browser() {
   const { remove, removeMany, isDeleting } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl } = usePresignedUrl();
+  const { download } = useDownload();
+  const preview = usePreview();
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -180,6 +183,18 @@ export function S3Browser() {
     }
   }, [copyPresignedUrl, showSnackbar]);
 
+  const handlePreview = useCallback((item: S3Object) => {
+    void preview.openPreview(item);
+  }, [preview]);
+
+  const handlePreviewDownload = useCallback(async (key: string) => {
+    try {
+      await download(key);
+    } catch {
+      showSnackbar('Download failed', 'error');
+    }
+  }, [download, showSnackbar]);
+
   return (
     <Box
       sx={{
@@ -208,6 +223,7 @@ export function S3Browser() {
           <FileList
             onDeleteRequest={handleDeleteRequest}
             onCopyUrl={handleCopyUrl}
+            onPreview={handlePreview}
             selectedKeys={selectedKeys}
             onSelectItem={handleSelectItem}
             onSelectAll={handleSelectAll}
@@ -227,6 +243,17 @@ export function S3Browser() {
         isDeleting={isDeleting}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
+      />
+
+      <PreviewDialog
+        open={preview.isOpen}
+        isLoading={preview.isLoading}
+        error={preview.error}
+        content={preview.content}
+        item={preview.item}
+        cannotPreviewReason={preview.cannotPreviewReason}
+        onClose={preview.closePreview}
+        onDownload={handlePreviewDownload}
       />
 
       <Dialog

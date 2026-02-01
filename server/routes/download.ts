@@ -50,6 +50,63 @@ const router = Router();
 // All routes use s3Middleware which checks auth and creates S3 client from connectionId
 // Routes: /api/download/:connectionId/:bucket/...
 
+// GET /api/download/:connectionId/:bucket/preview?key= (proxied content for preview)
+router.get('/:connectionId/:bucket/preview', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
+
+  if (!bucket || !client) {
+    console.error('Download preview route missing S3 context:', {
+      route: 'GET /api/download/:connectionId/:bucket/preview',
+      method: req.method,
+      path: req.path,
+      hasBucket: !!bucket,
+      hasClient: !!client,
+    });
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+
+  const keyValidation = validateKey(req.query.key);
+  if (!keyValidation.valid) {
+    res.status(400).json({ error: keyValidation.error });
+    return;
+  }
+
+  // Limit content size for preview (256KB)
+  const MAX_PREVIEW_SIZE = 262144;
+
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: keyValidation.validatedKey,
+    Range: `bytes=0-${MAX_PREVIEW_SIZE - 1}`,
+  });
+
+  try {
+    const response = await client.send(command);
+    const bodyStream = response.Body;
+
+    if (!bodyStream) {
+      res.status(404).json({ error: 'File not found or empty' });
+      return;
+    }
+
+    // Convert stream to string
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of bodyStream as AsyncIterable<Uint8Array>) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+    const content = buffer.toString('utf-8');
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(content);
+  } catch (error) {
+    console.error('Failed to fetch file content:', error);
+    res.status(500).json({ error: 'Failed to fetch file content' });
+  }
+});
+
 // GET /api/download/:connectionId/:bucket/url?key=
 router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const bucket = req.s3Credentials?.bucket;
