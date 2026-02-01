@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import {
   Table,
   TableBody,
@@ -37,13 +38,12 @@ export function FileList({ onDeleteRequest, onCopyUrl, onPreview, selectedKeys, 
   const isIndeterminate = selectedCount > 0 && selectedCount < selectableCount;
   const { download } = useDownload();
 
-  const handleDownload = async (key: string) => {
-    try {
-      await download(key);
-    } catch {
-      // Error is handled by hook
-    }
-  };
+  const handleDownload = useCallback(
+    (key: string) => {
+      void download(key);
+    },
+    [download]
+  );
 
   if (error) {
     return (

@@ -1,13 +1,76 @@
 import { getFileExtension } from './formatters';
 
-export const PREVIEWABLE_EXTENSIONS = new Set([
+export type EmbedType = 'text' | 'pdf' | 'image' | 'video' | 'audio' | 'unsupported';
+
+export const TEXT_EXTENSIONS = new Set([
   // Code files
   'js', 'ts', 'tsx', 'jsx', 'html', 'css', 'scss', 'less', 'json', 'xml',
   'yaml', 'yml', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs',
   'rb', 'php', 'sh', 'bash', 'sql', 'vue', 'svelte',
   // Text/config files
   'txt', 'md', 'log', 'csv', 'toml', 'ini', 'env',
+  // Additional text/config extensions
+  'rst', 'tex', 'rtf', 'diff', 'patch', 'conf', 'cfg', 'properties',
+  'gradle', 'kt', 'kts', 'scala', 'clj', 'ex', 'exs', 'erl', 'hrl',
+  'hs', 'elm', 'ml', 'mli', 'r', 'jl', 'lua', 'pl', 'pm', 'swift',
+  'dockerfile', 'makefile', 'cmake', 'tf', 'tfvars', 'nix',
 ]);
+
+export const IMAGE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico',
+]);
+
+export const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'mov']);
+
+// Note: .ogg is treated as audio (Ogg Vorbis); use .ogv for Ogg video
+export const AUDIO_EXTENSIONS = new Set([
+  'mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'oga', 'opus',
+]);
+
+export const PDF_EXTENSIONS = new Set(['pdf']);
+
+// MIME type mapping for overriding S3 Content-Type
+const MIME_TYPES: Record<string, string> = {
+  // Images
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+  // Video
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  ogv: 'video/ogg',
+  mov: 'video/quicktime',
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  flac: 'audio/flac',
+  aac: 'audio/aac',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  opus: 'audio/opus',
+  // PDF
+  pdf: 'application/pdf',
+  // Text types
+  txt: 'text/plain',
+  md: 'text/markdown',
+  json: 'application/json',
+  xml: 'application/xml',
+  html: 'text/html',
+  css: 'text/css',
+  js: 'text/javascript',
+  ts: 'application/typescript',
+};
+
+export function getMimeType(filename: string): string | undefined {
+  const ext = getFileExtension(filename);
+  return MIME_TYPES[ext];
+}
 
 export const PREVIEWABLE_FILENAMES = new Set([
   'Makefile', 'Dockerfile', 'LICENSE', 'README', 'CHANGELOG',
@@ -15,30 +78,45 @@ export const PREVIEWABLE_FILENAMES = new Set([
   '.eslintrc', '.babelrc', '.env', '.env.local', '.env.example',
 ]);
 
-export const MAX_PREVIEW_SIZE = 262144; // 256KB
-
-export interface PreviewabilityResult {
-  canPreview: boolean;
-  reason?: string;
-}
-
-export function isPreviewableFile(filename: string, size?: number): PreviewabilityResult {
+export function getEmbedType(filename: string): EmbedType {
   const ext = getFileExtension(filename);
   const basename = filename.split('/').pop() || filename;
 
-  const isPreviewableType = PREVIEWABLE_EXTENSIONS.has(ext) || PREVIEWABLE_FILENAMES.has(basename);
-
-  if (!isPreviewableType) {
-    return { canPreview: false, reason: 'File type not supported for preview' };
+  if (PDF_EXTENSIONS.has(ext)) {
+    return 'pdf';
   }
 
-  if (size === undefined) {
-    return { canPreview: false, reason: 'File size unknown' };
+  if (IMAGE_EXTENSIONS.has(ext)) {
+    return 'image';
   }
 
-  if (size > MAX_PREVIEW_SIZE) {
-    return { canPreview: false, reason: 'File is too large to preview (max 256KB)' };
+  if (VIDEO_EXTENSIONS.has(ext)) {
+    return 'video';
   }
 
-  return { canPreview: true };
+  if (AUDIO_EXTENSIONS.has(ext)) {
+    return 'audio';
+  }
+
+  if (TEXT_EXTENSIONS.has(ext) || PREVIEWABLE_FILENAMES.has(basename)) {
+    return 'text';
+  }
+
+  return 'unsupported';
+}
+
+export interface PreviewabilityResult {
+  canPreview: boolean;
+  embedType: EmbedType;
+  reason?: string;
+}
+
+export function isPreviewableFile(filename: string): PreviewabilityResult {
+  const embedType = getEmbedType(filename);
+
+  if (embedType === 'unsupported') {
+    return { canPreview: false, embedType, reason: 'File type not supported for preview' };
+  }
+
+  return { canPreview: true, embedType };
 }

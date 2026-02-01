@@ -1,15 +1,19 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
-import { getFilePreview } from '../services/api';
-import { isPreviewableFile } from '../utils/previewUtils';
+import { getPresignedUrl } from '../services/api';
+import { isPreviewableFile, getMimeType, type EmbedType } from '../utils/previewUtils';
 import type { S3Object } from '../types';
+
+// TTL for preview signed URLs (1 hour)
+const PREVIEW_TTL_SECONDS = 3600;
 
 interface PreviewState {
   isOpen: boolean;
   isLoading: boolean;
   error: string | null;
-  content: string | null;
+  signedUrl: string | null;
+  embedType: EmbedType;
   item: S3Object | null;
   cannotPreviewReason: string | null;
 }
@@ -23,7 +27,8 @@ export function usePreview() {
     isOpen: false,
     isLoading: false,
     error: null,
-    content: null,
+    signedUrl: null,
+    embedType: 'unsupported',
     item: null,
     cannotPreviewReason: null,
   });
@@ -52,14 +57,15 @@ export function usePreview() {
       }
 
       // Check previewability before allocating resources
-      const previewability = isPreviewableFile(item.name, item.size);
+      const previewability = isPreviewableFile(item.name);
 
       if (!previewability.canPreview) {
         setState({
           isOpen: true,
           isLoading: false,
           error: null,
-          content: null,
+          signedUrl: null,
+          embedType: previewability.embedType,
           item,
           cannotPreviewReason: previewability.reason || 'Cannot preview this file',
         });
@@ -75,13 +81,23 @@ export function usePreview() {
         isOpen: true,
         isLoading: true,
         error: null,
-        content: null,
+        signedUrl: null,
+        embedType: previewability.embedType,
         item,
         cannotPreviewReason: null,
       });
 
       try {
-        const content = await getFilePreview(activeConnectionId, bucket, item.key, abortController.signal);
+        const mimeType = getMimeType(item.name);
+        const signedUrl = await getPresignedUrl(
+          activeConnectionId,
+          bucket,
+          item.key,
+          PREVIEW_TTL_SECONDS,
+          'inline',
+          mimeType,
+          abortController.signal
+        );
 
         // Verify this request is still the active one before updating state
         if (currentRequestId !== requestIdRef.current) {
@@ -91,7 +107,7 @@ export function usePreview() {
         setState((prev) => ({
           ...prev,
           isLoading: false,
-          content,
+          signedUrl,
         }));
       } catch (err) {
         // Ignore aborted requests
@@ -104,7 +120,7 @@ export function usePreview() {
           return;
         }
 
-        const message = err instanceof Error ? err.message : 'Failed to load file content';
+        const message = err instanceof Error ? err.message : 'Failed to load file preview';
         setState((prev) => ({
           ...prev,
           isLoading: false,
@@ -129,7 +145,8 @@ export function usePreview() {
       isOpen: false,
       isLoading: false,
       error: null,
-      content: null,
+      signedUrl: null,
+      embedType: 'unsupported',
       item: null,
       cannotPreviewReason: null,
     });

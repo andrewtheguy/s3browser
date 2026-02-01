@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -13,13 +14,16 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import DownloadIcon from '@mui/icons-material/Download';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import type { S3Object } from '../../types';
+import type { EmbedType } from '../../utils/previewUtils';
 
 interface PreviewDialogProps {
   open: boolean;
   isLoading: boolean;
   error: string | null;
-  content: string | null;
+  signedUrl: string | null;
+  embedType: EmbedType;
   item: S3Object | null;
   cannotPreviewReason: string | null;
   onClose: () => void;
@@ -30,17 +34,71 @@ export function PreviewDialog({
   open,
   isLoading,
   error,
-  content,
+  signedUrl,
+  embedType,
   item,
   cannotPreviewReason,
   onClose,
   onDownload,
 }: PreviewDialogProps) {
+  // Track error with the URL that caused it, so error auto-clears when URL changes
+  const [mediaError, setMediaError] = useState<{ url: string; message: string } | null>(null);
+
+  // Only show error if it's for the current signedUrl
+  const mediaLoadError = mediaError?.url === signedUrl ? mediaError.message : null;
+
   const handleDownload = () => {
     if (item) {
       onDownload(item.key);
     }
   };
+
+  const handleMediaError = useCallback(
+    (mediaType: 'video' | 'audio') => {
+      if (signedUrl) {
+        console.error(`Failed to load ${mediaType}:`, signedUrl);
+        setMediaError({
+          url: signedUrl,
+          message: `${mediaType === 'video' ? 'Video' : 'Audio'} failed to load`,
+        });
+      }
+    },
+    [signedUrl]
+  );
+
+  const handleRetry = useCallback(() => {
+    setMediaError(null);
+  }, []);
+
+  const renderMediaError = () => (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: 'text.secondary',
+        p: 4,
+      }}
+    >
+      <InsertDriveFileIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
+      <Typography variant="h6" gutterBottom>
+        {mediaLoadError}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 2 }}>
+        The file could not be played. Try again or download the file.
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2 }}>
+        <Button variant="outlined" startIcon={<RefreshIcon />} onClick={handleRetry}>
+          Retry
+        </Button>
+        <Button variant="contained" startIcon={<DownloadIcon />} onClick={handleDownload} disabled={!item}>
+          Download
+        </Button>
+      </Box>
+    </Box>
+  );
 
   const renderContent = () => {
     if (isLoading) {
@@ -99,23 +157,101 @@ export function PreviewDialog({
       );
     }
 
-    if (content !== null) {
+    if (signedUrl !== null) {
+      if (embedType === 'image') {
+        return (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              p: 2,
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
+            }}
+          >
+            <Box
+              component="img"
+              src={signedUrl}
+              alt={item?.name || 'Preview'}
+              sx={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+              }}
+            />
+          </Box>
+        );
+      }
+
+      if (embedType === 'video') {
+        if (mediaLoadError) {
+          return renderMediaError();
+        }
+        return (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              p: 2,
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
+            }}
+          >
+            <Box
+              component="video"
+              controls
+              src={signedUrl}
+              onError={() => handleMediaError('video')}
+              sx={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+              }}
+            />
+          </Box>
+        );
+      }
+
+      if (embedType === 'audio') {
+        if (mediaLoadError) {
+          return renderMediaError();
+        }
+        return (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              p: 2,
+            }}
+          >
+            <Box
+              component="audio"
+              controls
+              src={signedUrl}
+              onError={() => handleMediaError('audio')}
+              sx={{ width: '100%', maxWidth: 500 }}
+            />
+          </Box>
+        );
+      }
+
+      // For text and PDF, use iframe
       return (
         <Box
-          component="pre"
+          component="iframe"
+          src={signedUrl}
+          title={item?.name || 'Preview'}
           sx={{
-            m: 0,
-            p: 2,
-            fontFamily: 'monospace',
-            fontSize: '0.875rem',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            bgcolor: (theme) => theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
-            minHeight: '100%',
+            width: '100%',
+            height: '100%',
+            border: 'none',
           }}
-        >
-          {content}
-        </Box>
+        />
       );
     }
 
@@ -126,10 +262,17 @@ export function PreviewDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="md"
-      fullWidth
+      maxWidth={false}
       PaperProps={{
-        sx: { height: '80vh', display: 'flex', flexDirection: 'column' },
+        sx: {
+          width: 'calc(100vw - 64px)',
+          height: 'calc(100vh - 64px)',
+          maxWidth: 'calc(100vw - 64px)',
+          maxHeight: 'calc(100vh - 64px)',
+          m: 4,
+          display: 'flex',
+          flexDirection: 'column',
+        },
       }}
     >
       <DialogTitle
