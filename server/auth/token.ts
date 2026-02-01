@@ -12,10 +12,12 @@ export const AUTH_COOKIE_OPTIONS: {
   httpOnly: boolean;
   secure: boolean;
   sameSite: 'lax' | 'strict' | 'none';
+  path: string;
 } = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax',
+  path: '/',
 };
 
 interface TokenPayload {
