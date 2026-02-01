@@ -52,8 +52,9 @@ export function UploadProgress({
               key={upload.id}
               secondaryAction={
                 <Box sx={{ display: 'flex', gap: 0.5 }}>
-                  {upload.status === 'uploading' && upload.isMultipart && onPause && (
-                    <Tooltip title="Pause">
+                {upload.status === 'uploading' && upload.isMultipart && onPause && (
+                  <Tooltip title="Pause">
+                    <span>
                       <IconButton
                         edge="end"
                         size="small"
@@ -61,10 +62,12 @@ export function UploadProgress({
                       >
                         <PauseIcon fontSize="small" />
                       </IconButton>
-                    </Tooltip>
-                  )}
-                  {upload.status === 'paused' && onResume && (
-                    <Tooltip title="Resume">
+                    </span>
+                  </Tooltip>
+                )}
+                {upload.status === 'paused' && onResume && (
+                  <Tooltip title="Resume">
+                    <span>
                       <IconButton
                         edge="end"
                         size="small"
@@ -72,10 +75,12 @@ export function UploadProgress({
                       >
                         <PlayArrowIcon fontSize="small" />
                       </IconButton>
-                    </Tooltip>
-                  )}
-                  {upload.status === 'error' && onRetry && (
-                    <Tooltip title="Retry">
+                    </span>
+                  </Tooltip>
+                )}
+                {upload.status === 'error' && onRetry && (
+                  <Tooltip title="Retry">
+                    <span>
                       <IconButton
                         edge="end"
                         size="small"
@@ -83,13 +88,15 @@ export function UploadProgress({
                       >
                         <RefreshIcon fontSize="small" />
                       </IconButton>
-                    </Tooltip>
-                  )}
-                  {(upload.status === 'uploading' ||
-                    upload.status === 'paused' ||
-                    upload.status === 'error' ||
-                    upload.status === 'pending') && (
-                    <Tooltip title="Cancel">
+                    </span>
+                  </Tooltip>
+                )}
+                {(upload.status === 'uploading' ||
+                  upload.status === 'paused' ||
+                  upload.status === 'error' ||
+                  upload.status === 'pending') && (
+                  <Tooltip title="Cancel">
+                    <span>
                       <IconButton
                         edge="end"
                         size="small"
@@ -97,8 +104,9 @@ export function UploadProgress({
                       >
                         <CloseIcon fontSize="small" />
                       </IconButton>
-                    </Tooltip>
-                  )}
+                    </span>
+                  </Tooltip>
+                )}
                 </Box>
               }
               sx={{
@@ -119,6 +127,7 @@ export function UploadProgress({
                 )}
               </ListItemIcon>
               <ListItemText
+                disableTypography
                 primary={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                     <Tooltip title={displayName} placement="top" arrow>

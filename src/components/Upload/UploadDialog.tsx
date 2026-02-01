@@ -198,20 +198,24 @@ export function UploadDialog({
                   secondaryAction={
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
                       <Tooltip title="Re-select file to resume upload">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleResumeFromPending(pending)}
-                        >
-                          <CloudUploadIcon fontSize="small" />
-                        </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleResumeFromPending(pending)}
+                          >
+                            <CloudUploadIcon fontSize="small" />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                       <Tooltip title="Discard">
-                        <IconButton
-                          size="small"
-                          onClick={() => removePendingResumable(pending.id)}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => removePendingResumable(pending.id)}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                     </Box>
                   }
