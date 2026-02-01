@@ -19,7 +19,7 @@ import {
   isUniqueConstraintError,
 } from '../db/index.js';
 import { getLoginPassword, timingSafeCompare } from '../db/crypto.js';
-import { createAuthToken, verifyAuthToken, AUTH_COOKIE_OPTIONS } from '../auth/token.js';
+import { createAuthToken, verifyAuthToken, AUTH_COOKIE_OPTIONS, AUTH_COOKIE_NAME } from '../auth/token.js';
 
 interface LoginRequestBody {
   password?: string;
@@ -79,24 +79,24 @@ router.post('/login', (req: Request, res: Response): void => {
 
   const token = createAuthToken();
 
-  // Set HTTP-only cookie with sliding 4 hour expiry
-  res.cookie('authToken', token, AUTH_COOKIE_OPTIONS);
+  // Set HTTP-only session cookie (expires when browser closes, server validates expiry in token)
+  res.cookie(AUTH_COOKIE_NAME, token, AUTH_COOKIE_OPTIONS);
 
   res.json({ success: true });
 });
 
 // POST /api/auth/logout
 router.post('/logout', (_req: Request, res: Response): void => {
-  res.clearCookie('authToken');
+  res.clearCookie(AUTH_COOKIE_NAME);
   res.json({ success: true });
 });
 
 // GET /api/auth/status
 router.get('/status', (req: Request, res: Response): void => {
-  const token = req.cookies?.authToken as string | undefined;
+  const token = req.cookies?.[AUTH_COOKIE_NAME] as string | undefined;
 
   if (!token || !verifyAuthToken(token)) {
-    res.clearCookie('authToken');
+    res.clearCookie(AUTH_COOKIE_NAME);
     res.json({ authenticated: false });
     return;
   }

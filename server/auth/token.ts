@@ -4,17 +4,20 @@ import { getLoginPassword, createHmacSignature, timingSafeCompare } from '../db/
 const TOKEN_EXPIRATION_HOURS = 4;
 const CLOCK_SKEW_SECONDS = 30;
 
-// Cookie options for auth token
+// Unique cookie name for this application
+export const AUTH_COOKIE_NAME = 's3browser_auth_token';
+
+// Cookie options for auth token (session cookie - expires when browser closes)
 export const AUTH_COOKIE_OPTIONS: {
   httpOnly: boolean;
   secure: boolean;
   sameSite: 'lax' | 'strict' | 'none';
-  maxAge: number;
+  path: string;
 } = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax',
-  maxAge: TOKEN_EXPIRATION_HOURS * 60 * 60 * 1000, // 4 hours in milliseconds
+  path: '/',
 };
 
 interface TokenPayload {
