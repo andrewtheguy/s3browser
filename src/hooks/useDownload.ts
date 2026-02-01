@@ -13,7 +13,9 @@ export function useDownload() {
   const download = useCallback(
     async (key: string): Promise<void> => {
       if (!isConnected || !activeConnectionId || !bucket) {
-        throw new Error('Not connected to S3');
+        throw new Error(
+          `Missing S3 connection details: isConnected=${isConnected} | activeConnectionId=${activeConnectionId} | bucket=${bucket}`
+        );
       }
 
       setIsDownloading(true);
