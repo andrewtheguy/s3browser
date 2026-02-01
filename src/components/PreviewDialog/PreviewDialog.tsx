@@ -112,7 +112,8 @@ export function PreviewDialog({
               justifyContent: 'center',
               height: '100%',
               p: 2,
-              bgcolor: (theme) => theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
             }}
           >
             <Box
@@ -125,6 +126,48 @@ export function PreviewDialog({
                 objectFit: 'contain',
               }}
             />
+          </Box>
+        );
+      }
+
+      if (embedType === 'video') {
+        return (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              p: 2,
+              bgcolor: (theme) =>
+                theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
+            }}
+          >
+            <Box
+              component="video"
+              controls
+              src={signedUrl}
+              sx={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+              }}
+            />
+          </Box>
+        );
+      }
+
+      if (embedType === 'audio') {
+        return (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              p: 2,
+            }}
+          >
+            <Box component="audio" controls src={signedUrl} sx={{ width: '100%', maxWidth: 500 }} />
           </Box>
         );
       }

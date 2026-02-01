@@ -41,6 +41,7 @@ export async function getPresignedUrl(
   key: string,
   ttl: number = 86400,
   disposition?: 'inline' | 'attachment',
+  contentType?: string,
   signal?: AbortSignal
 ): Promise<string> {
   if (!Number.isInteger(connectionId) || connectionId < 1) {
@@ -56,6 +57,9 @@ export async function getPresignedUrl(
   let url = `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`;
   if (disposition) {
     url += `&disposition=${disposition}`;
+  }
+  if (contentType) {
+    url += `&contentType=${encodeURIComponent(contentType)}`;
   }
 
   const response = await apiGet<DownloadUrlResponse>(url, signal);

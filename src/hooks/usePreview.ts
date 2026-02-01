@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { getPresignedUrl } from '../services/api';
-import { isPreviewableFile, type EmbedType } from '../utils/previewUtils';
+import { isPreviewableFile, getMimeType, type EmbedType } from '../utils/previewUtils';
 import type { S3Object } from '../types';
 
 interface PreviewState {
@@ -85,12 +85,14 @@ export function usePreview() {
       });
 
       try {
+        const mimeType = getMimeType(item.name);
         const signedUrl = await getPresignedUrl(
           activeConnectionId,
           bucket,
           item.key,
           3600, // 1 hour TTL for preview
           'inline',
+          mimeType,
           abortController.signal
         );
 

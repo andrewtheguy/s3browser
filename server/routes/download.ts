@@ -93,6 +93,9 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
   const disposition = req.query.disposition as string | undefined;
   const filename = keyValidation.validatedKey.split('/').pop() || 'download';
 
+  // Parse contentType parameter for overriding S3 Content-Type
+  const contentType = req.query.contentType as string | undefined;
+
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: keyValidation.validatedKey,
@@ -100,6 +103,7 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
     ...(disposition === 'attachment' && {
       ResponseContentDisposition: `attachment; filename="${filename}"`,
     }),
+    ...(contentType && { ResponseContentType: contentType }),
   });
 
   try {
