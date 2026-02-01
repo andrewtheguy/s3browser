@@ -208,6 +208,7 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
       if (disabled) return;
 
       void (async () => {
+        const fallback = Array.from(e.dataTransfer.files).map((file) => mapFileToCandidate(file));
         try {
           const files = await collectFilesFromDataTransfer(e.dataTransfer.items, e.dataTransfer.files);
           if (files.length > 0) {
@@ -215,7 +216,6 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
           }
         } catch (error) {
           console.error('Failed to process dropped files:', error);
-          const fallback = Array.from(e.dataTransfer.files).map((file) => mapFileToCandidate(file));
           if (fallback.length > 0) {
             onFilesSelected(fallback);
           }
