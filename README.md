@@ -183,6 +183,11 @@ All data is stored in `~/.s3browser/`:
 - Path traversal protection on all file operations
 - Configuration files should be secured with 0600 permissions
 
+**Data transmission**:
+- S3 secret keys are transmitted to authenticated clients to enable saved connection form pre-filling
+- All S3 operations (list, upload, download, delete) are performed server-side
+- S3 credentials are never exposed to unauthenticated requests
+
 **Not recommended for**:
 - Public internet deployment
 - Multi-tenant environments
