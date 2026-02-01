@@ -111,14 +111,14 @@ export function UploadDialog({
     [pendingToResume, upload]
   );
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
     if (isUploading) {
       // Optionally show a confirmation
       const confirmed = window.confirm(
         'Uploads are in progress. Are you sure you want to close?'
       );
       if (!confirmed) return;
-      clearAll();
+      await clearAll();
     }
     onClose();
   }, [isUploading, clearAll, onClose]);

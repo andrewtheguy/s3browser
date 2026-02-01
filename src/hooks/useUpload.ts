@@ -403,9 +403,7 @@ export function useUpload() {
           file.lastModified
         ).catch(() => null);
 
-        const canReuseExisting = existingUpload
-          ? existingUpload.key === computedKey || (!candidate.relativePath && normalizedPrefix === '')
-          : false;
+        const canReuseExisting = existingUpload ? existingUpload.key === computedKey : false;
 
         const resumableUpload = canReuseExisting ? existingUpload : null;
         const key = resumableUpload?.key || computedKey;
@@ -525,8 +523,6 @@ export function useUpload() {
       updateUpload(id, {
         status: 'pending',
         error: undefined,
-        loaded: 0,
-        percentage: 0,
       });
 
       enqueueUploadIds([id]);
@@ -569,8 +565,8 @@ export function useUpload() {
     void refreshPendingUploads();
   }, [cancelUploadInternal, refreshPendingUploads]);
 
-  const clearAll = useCallback(() => {
-    void cancelAll();
+  const clearAll = useCallback(async () => {
+    await cancelAll();
     setUploadsAndSync(() => []);
   }, [cancelAll, setUploadsAndSync]);
 
