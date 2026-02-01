@@ -220,8 +220,18 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SESSION_CHECK_START' });
 
     try {
+      // Add timeout to prevent hanging on proxy issues
+      const timeoutId = setTimeout(() => {
+        if (!signal?.aborted) {
+          console.error('Session check timed out');
+        }
+      }, 10000);
+
       const status = await getAuthStatus(signal);
+      clearTimeout(timeoutId);
+
       if (!signal?.aborted) {
+        console.log('Auth status received:', status);
         if (status.authenticated) {
           dispatch({
             type: 'SESSION_CHECK_COMPLETE',
@@ -236,23 +246,26 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return;
       }
-      // Check for connection errors (network failures, server down, etc.)
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      const isConnectionError =
-        message.includes('Failed to fetch') ||
-        message.includes('Network') ||
-        message.includes('ECONNREFUSED') ||
-        message.includes('502') ||
-        message.includes('503') ||
-        message.includes('504');
 
-      if (isConnectionError) {
-        console.error('Server connection failed:', error);
-        dispatch({ type: 'SESSION_CHECK_ERROR', error: 'Unable to connect to server. Please ensure the server is running.' });
-      } else {
-        // Other errors - treat as not logged in
-        console.error('Session status check failed:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      const errorType = error instanceof Error ? error.constructor.name : typeof error;
+      console.error('Session status check failed:', { message, errorType, error });
+
+      // For the initial auth status check, treat most errors as server connection issues
+      // since a working server should always return a valid JSON response.
+      // Only treat explicit auth failures (401, 403) as "not logged in"
+      const isAuthError =
+        message.includes('401') ||
+        message.includes('403') ||
+        message.includes('Unauthorized') ||
+        message.includes('Forbidden');
+
+      if (isAuthError) {
+        // Auth error means server is up but user is not authenticated
         dispatch({ type: 'SESSION_CHECK_COMPLETE' });
+      } else {
+        // Any other error during initial status check is likely a server issue
+        dispatch({ type: 'SESSION_CHECK_ERROR', error: 'Unable to connect to server. Please ensure the server is running.' });
       }
     }
   }, []);

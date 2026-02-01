@@ -128,7 +128,21 @@ export function LoginForm() {
             </Typography>
           </Box>
 
-          {serverError ? (
+          {isCheckingSession && !serverError ? (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                py: 4,
+              }}
+            >
+              <CircularProgress size={40} sx={{ mb: 2 }} />
+              <Typography variant="body2" color="text.secondary">
+                Connecting to server...
+              </Typography>
+            </Box>
+          ) : serverError ? (
             <Box
               sx={{
                 display: 'flex',
