@@ -10,10 +10,14 @@ import {
   DialogActions,
   TextField,
   Button,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import DeleteIcon from '@mui/icons-material/Delete';
+import TouchAppIcon from '@mui/icons-material/TouchApp';
+import CloseIcon from '@mui/icons-material/Close';
 import { Toolbar } from '../Toolbar';
 import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
@@ -407,41 +411,30 @@ export function S3Browser() {
               bgcolor: 'background.paper',
             }}
           >
-            <Button
-              variant={selectionMode ? 'contained' : 'outlined'}
-              onClick={handleToggleSelection}
-              sx={{ minWidth: 'auto' }}
-            >
-              {selectionMode ? 'Cancel' : 'Select'}
-            </Button>
+            <Tooltip title={selectionMode ? 'Cancel selection' : 'Select items'}>
+              <IconButton onClick={handleToggleSelection} color={selectionMode ? 'primary' : 'default'}>
+                {selectionMode ? <CloseIcon /> : <TouchAppIcon />}
+              </IconButton>
+            </Tooltip>
             {selectionMode && selectedKeys.size > 0 && (
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={handleBatchDeleteRequest}
-                disabled={isDeleting}
-                sx={{ minWidth: 'auto' }}
-              >
-                <DeleteIcon sx={{ mr: 0.5 }} />
-                {isDeleting ? 'Deleting...' : `Delete (${selectedKeys.size})`}
-              </Button>
+              <Tooltip title={isDeleting ? 'Deleting...' : `Delete (${selectedKeys.size})`}>
+                <span>
+                  <IconButton onClick={handleBatchDeleteRequest} disabled={isDeleting} color="error">
+                    <DeleteIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
             )}
-            <Button
-              variant="outlined"
-              onClick={handleCreateFolderClick}
-              sx={{ minWidth: 'auto' }}
-            >
-              <CreateNewFolderIcon sx={{ mr: 0.5 }} />
-              New Folder
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleUploadClick}
-              sx={{ minWidth: 'auto' }}
-            >
-              <CloudUploadIcon sx={{ mr: 0.5 }} />
-              Upload
-            </Button>
+            <Tooltip title="New Folder">
+              <IconButton onClick={handleCreateFolderClick} color="default">
+                <CreateNewFolderIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Upload">
+              <IconButton onClick={handleUploadClick} color="primary">
+                <CloudUploadIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
       </Paper>
