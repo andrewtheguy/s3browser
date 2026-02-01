@@ -3,6 +3,7 @@ export { useListObjects } from './useListObjects';
 export { useUpload } from './useUpload';
 export { useDownload } from './useDownload';
 export { useDelete } from './useDelete';
+export { useCopyMove } from './useCopyMove';
 export { useConnectionHistory } from './useConnectionHistory';
 export { usePresignedUrl } from './usePresignedUrl';
 export { usePreview } from './usePreview';
