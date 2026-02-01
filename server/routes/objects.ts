@@ -148,9 +148,9 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
   });
 });
 
-// DELETE /api/objects/:connectionId/:bucket/*key
-router.delete('/:connectionId/:bucket/*key', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  // Express wildcard routes (*key) always return a string
+// DELETE /api/objects/:connectionId/:bucket/{*key}
+router.delete('/:connectionId/:bucket/{*key}', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  // Express 5 {*key} syntax captures rest of path as a single string
   const key = req.params.key as string;
 
   if (!key) {
