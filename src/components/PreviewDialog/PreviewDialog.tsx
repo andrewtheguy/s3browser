@@ -151,10 +151,17 @@ export function PreviewDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      maxWidth="md"
-      fullWidth
+      maxWidth={false}
       PaperProps={{
-        sx: { height: '80vh', display: 'flex', flexDirection: 'column' },
+        sx: {
+          width: 'calc(100vw - 64px)',
+          height: 'calc(100vh - 64px)',
+          maxWidth: 'calc(100vw - 64px)',
+          maxHeight: 'calc(100vh - 64px)',
+          m: 4,
+          display: 'flex',
+          flexDirection: 'column',
+        },
       }}
     >
       <DialogTitle
