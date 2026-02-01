@@ -92,6 +92,12 @@ bun run dev
 
 The frontend runs on `http://localhost:5173` and proxies API requests to the backend on `http://localhost:3001`.
 
+To bind the dev backend to a different interface, set `HOST`. You can also set `PORT` to change the backend port:
+
+```bash
+HOST=0.0.0.0 PORT=3001 bun run dev:server
+```
+
 ### Production Build
 
 ```bash
