@@ -179,16 +179,8 @@ export function getConnectionById(connectionId: number): DbS3Connection | undefi
   return stmt.get(connectionId) as DbS3Connection | undefined;
 }
 
-export function getConnectionByName(name: string): DbS3Connection | undefined {
-  const database = getDb();
-  const stmt = database.prepare(`
-    SELECT * FROM s3_connections
-    WHERE name = ?
-  `);
-  return stmt.get(name) as DbS3Connection | undefined;
-}
-
 export function saveConnection(
+  connectionId: number | null,
   name: string,
   endpoint: string,
   accessKeyId: string,
@@ -199,43 +191,58 @@ export function saveConnection(
 ): DbS3Connection {
   const database = getDb();
 
-  // If no secret key provided, check if connection exists and keep existing key
-  if (!secretAccessKey) {
-    const existing = getConnectionByName(name);
+  if (connectionId !== null) {
+    // UPDATE existing connection by ID
+    const existing = getConnectionById(connectionId);
     if (!existing) {
+      throw new Error('Connection not found');
+    }
+
+    if (secretAccessKey !== null) {
+      // Update with new secret key
+      const encryptedSecretAccessKey = encrypt(secretAccessKey);
+      const stmt = database.prepare(`
+        UPDATE s3_connections SET
+          name = ?,
+          endpoint = ?,
+          access_key_id = ?,
+          secret_access_key = ?,
+          bucket = ?,
+          region = ?,
+          auto_detect_region = ?,
+          last_used_at = unixepoch()
+        WHERE id = ?
+      `);
+      stmt.run(name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
+    } else {
+      // Update without changing the secret key
+      const stmt = database.prepare(`
+        UPDATE s3_connections SET
+          name = ?,
+          endpoint = ?,
+          access_key_id = ?,
+          bucket = ?,
+          region = ?,
+          auto_detect_region = ?,
+          last_used_at = unixepoch()
+        WHERE id = ?
+      `);
+      stmt.run(name, endpoint, accessKeyId, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
+    }
+    return getConnectionById(connectionId)!;
+  } else {
+    // INSERT new connection (name uniqueness enforced by DB UNIQUE constraint)
+    if (!secretAccessKey) {
       throw new Error('Secret access key is required for new connections');
     }
-    // Update without changing the secret key
+    const encryptedSecretAccessKey = encrypt(secretAccessKey);
     const stmt = database.prepare(`
-      UPDATE s3_connections SET
-        endpoint = ?,
-        access_key_id = ?,
-        bucket = ?,
-        region = ?,
-        auto_detect_region = ?,
-        last_used_at = unixepoch()
-      WHERE name = ?
-      RETURNING *
+      INSERT INTO s3_connections (name, endpoint, access_key_id, secret_access_key, bucket, region, auto_detect_region, last_used_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
     `);
-    return stmt.get(endpoint, accessKeyId, bucket, region, autoDetectRegion ? 1 : 0, name) as DbS3Connection;
+    const result = stmt.run(name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0);
+    return getConnectionById(Number(result.lastInsertRowid))!;
   }
-
-  const encryptedSecretAccessKey = encrypt(secretAccessKey);
-
-  const stmt = database.prepare(`
-    INSERT INTO s3_connections (name, endpoint, access_key_id, secret_access_key, bucket, region, auto_detect_region, last_used_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
-    ON CONFLICT(name) DO UPDATE SET
-      endpoint = excluded.endpoint,
-      access_key_id = excluded.access_key_id,
-      secret_access_key = excluded.secret_access_key,
-      bucket = excluded.bucket,
-      region = excluded.region,
-      auto_detect_region = excluded.auto_detect_region,
-      last_used_at = unixepoch()
-    RETURNING *
-  `);
-  return stmt.get(name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0) as DbS3Connection;
 }
 
 export function deleteConnectionById(connectionId: number): boolean {

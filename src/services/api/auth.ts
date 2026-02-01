@@ -10,6 +10,7 @@ export interface LoginResponse {
 }
 
 export interface S3ConnectionCredentials {
+  connectionId?: number;
   accessKeyId: string;
   secretAccessKey: string;
   region?: string;
