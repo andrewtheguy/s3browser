@@ -130,12 +130,17 @@ export function FileListItem({
       <TableCell sx={{ width: 48 }}>
         <IconComponent sx={{ color: iconColor, fontSize: 24 }} />
       </TableCell>
-      <TableCell>
+      <TableCell sx={{ minWidth: 120 }}>
         <Box>
           <Typography
             variant="body2"
             sx={{
               fontWeight: item.isFolder ? 500 : 400,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'block',
+              maxWidth: 'clamp(140px, 35vw, 320px)',
               '&:hover': item.isFolder ? { textDecoration: 'underline' } : {},
             }}
           >
@@ -144,13 +149,13 @@ export function FileListItem({
           </Typography>
         </Box>
       </TableCell>
-      <TableCell sx={{ width: 100 }}>
-        <Typography variant="body2" color="text.secondary">
+      <TableCell sx={{ width: { xs: 72, sm: 100 } }}>
+        <Typography variant="body2" color="text.secondary" noWrap>
           {formatFileSize(item.size)}
         </Typography>
       </TableCell>
-      <TableCell sx={{ width: 180 }}>
-        <Typography variant="body2" color="text.secondary">
+      <TableCell sx={{ width: { xs: 120, sm: 180 } }}>
+        <Typography variant="body2" color="text.secondary" noWrap>
           {formatDate(item.lastModified)}
         </Typography>
       </TableCell>

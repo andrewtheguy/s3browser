@@ -66,15 +66,15 @@ export function FileList({
 
   if (isLoading) {
     return (
-      <TableContainer component={Paper} elevation={0}>
-        <Table>
+      <TableContainer component={Paper} elevation={0} sx={{ overflowX: 'auto' }}>
+        <Table sx={{ width: 'max-content', tableLayout: 'auto' }}>
           <TableHead>
             <TableRow>
               <TableCell sx={{ width: 48, padding: '0 8px' }} />
               <TableCell sx={{ width: 48 }} />
-              <TableCell>Name</TableCell>
-              <TableCell sx={{ width: 100 }}>Size</TableCell>
-              <TableCell sx={{ width: 180 }}>Last Modified</TableCell>
+              <TableCell sx={{ minWidth: 120, whiteSpace: 'nowrap' }}>Name</TableCell>
+              <TableCell sx={{ width: { xs: 72, sm: 100 }, whiteSpace: 'nowrap' }}>Size</TableCell>
+              <TableCell sx={{ width: { xs: 120, sm: 180 }, whiteSpace: 'nowrap' }}>Last Modified</TableCell>
               <TableCell sx={{ width: 100 }} />
             </TableRow>
           </TableHead>
@@ -129,8 +129,8 @@ export function FileList({
   }
 
   return (
-    <TableContainer component={Paper} elevation={0}>
-      <Table sx={{ tableLayout: 'fixed' }}>
+    <TableContainer component={Paper} elevation={0} sx={{ overflowX: 'auto' }}>
+      <Table sx={{ width: 'max-content', tableLayout: 'auto' }}>
         <TableHead>
           <TableRow>
             <TableCell sx={{ width: 48, padding: '0 8px' }}>
@@ -144,9 +144,9 @@ export function FileList({
               )}
             </TableCell>
             <TableCell sx={{ width: 48 }} />
-            <TableCell>Name</TableCell>
-            <TableCell sx={{ width: 100 }}>Size</TableCell>
-            <TableCell sx={{ width: 180 }}>Last Modified</TableCell>
+            <TableCell sx={{ minWidth: 120, whiteSpace: 'nowrap' }}>Name</TableCell>
+            <TableCell sx={{ width: { xs: 72, sm: 100 }, whiteSpace: 'nowrap' }}>Size</TableCell>
+            <TableCell sx={{ width: { xs: 120, sm: 180 }, whiteSpace: 'nowrap' }}>Last Modified</TableCell>
             <TableCell sx={{ width: 100 }} align="right">
               Actions
             </TableCell>

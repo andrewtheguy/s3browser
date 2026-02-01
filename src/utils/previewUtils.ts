@@ -4,7 +4,7 @@ export type EmbedType = 'text' | 'pdf' | 'image' | 'video' | 'audio' | 'unsuppor
 
 export const TEXT_EXTENSIONS = new Set([
   // Code files
-  'js', 'ts', 'tsx', 'jsx', 'html', 'css', 'scss', 'less', 'json', 'xml',
+  'js', 'ts', 'tsx', 'jsx', 'html', 'htm', 'css', 'scss', 'less', 'json', 'xml',
   'yaml', 'yml', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs',
   'rb', 'php', 'sh', 'bash', 'sql', 'vue', 'svelte',
   // Text/config files
@@ -61,7 +61,9 @@ const MIME_TYPES: Record<string, string> = {
   md: 'text/markdown',
   json: 'application/json',
   xml: 'application/xml',
-  html: 'text/html',
+  // Force HTML previews to render as plain text to avoid executing markup in the preview dialog.
+  html: 'text/plain',
+  htm: 'text/plain',
   css: 'text/css',
   js: 'text/javascript',
   ts: 'application/typescript',
