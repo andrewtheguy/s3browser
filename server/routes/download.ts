@@ -15,6 +15,25 @@ function hasUnsafeChars(str: string): boolean {
   return false;
 }
 
+// Sanitize filename for Content-Disposition header
+function sanitizeFilename(filename: string): string {
+  // Remove control characters, double quotes, and semicolons; normalize whitespace
+  let result = '';
+  for (let i = 0; i < filename.length; i++) {
+    const code = filename.charCodeAt(i);
+    // Skip control characters (0x00-0x1f, 0x7f) and unsafe header chars (", ;)
+    if (code <= 0x1f || code === 0x7f || filename[i] === '"' || filename[i] === ';') {
+      continue;
+    }
+    result += filename[i];
+  }
+  // Collapse whitespace to single spaces and trim
+  const sanitized = result.replace(/\s+/g, ' ').trim();
+
+  // Fall back to default if result is empty
+  return sanitized || 'download';
+}
+
 function validateKey(key: unknown): { valid: false; error: string } | { valid: true; validatedKey: string } {
   // Handle array case - reject if multiple values
   if (Array.isArray(key)) {
@@ -91,7 +110,8 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
 
   // Parse disposition parameter for Content-Disposition header
   const disposition = req.query.disposition as string | undefined;
-  const filename = keyValidation.validatedKey.split('/').pop() || 'download';
+  const rawFilename = keyValidation.validatedKey.split('/').pop() || 'download';
+  const filename = sanitizeFilename(rawFilename);
 
   // Parse contentType parameter for overriding S3 Content-Type
   const contentType = req.query.contentType as string | undefined;

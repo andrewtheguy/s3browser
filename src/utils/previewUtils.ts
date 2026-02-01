@@ -20,12 +20,11 @@ export const IMAGE_EXTENSIONS = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico',
 ]);
 
-export const VIDEO_EXTENSIONS = new Set([
-  'mp4', 'webm', 'ogg', 'ogv', 'mov',
-]);
+export const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'mov']);
 
+// Note: .ogg is treated as audio (Ogg Vorbis); use .ogv for Ogg video
 export const AUDIO_EXTENSIONS = new Set([
-  'mp3', 'wav', 'flac', 'aac', 'm4a', 'oga', 'opus',
+  'mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'oga', 'opus',
 ]);
 
 export const PDF_EXTENSIONS = new Set(['pdf']);
@@ -44,7 +43,6 @@ const MIME_TYPES: Record<string, string> = {
   // Video
   mp4: 'video/mp4',
   webm: 'video/webm',
-  ogg: 'video/ogg',
   ogv: 'video/ogg',
   mov: 'video/quicktime',
   // Audio
@@ -53,6 +51,7 @@ const MIME_TYPES: Record<string, string> = {
   flac: 'audio/flac',
   aac: 'audio/aac',
   m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
   oga: 'audio/ogg',
   opus: 'audio/opus',
   // PDF
@@ -65,7 +64,7 @@ const MIME_TYPES: Record<string, string> = {
   html: 'text/html',
   css: 'text/css',
   js: 'text/javascript',
-  ts: 'text/typescript',
+  ts: 'application/typescript',
 };
 
 export function getMimeType(filename: string): string | undefined {
