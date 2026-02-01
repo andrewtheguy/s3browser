@@ -25,7 +25,7 @@ import { DeleteDialog } from '../DeleteDialog';
 import { PreviewDialog } from '../PreviewDialog';
 import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDialog';
 import { CopyMoveDialog } from '../CopyMoveDialog';
-import { useBrowserContext, useS3ClientContext } from '../../contexts';
+import { useBrowserContext } from '../../contexts';
 import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove } from '../../hooks';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
@@ -37,25 +37,9 @@ interface SnackbarState {
 }
 
 const DELETE_PREVIEW_LIMIT = 50;
-const AWS_ENDPOINT_SUFFIX = 'amazonaws.com';
-
-function getEndpointHost(endpoint?: string | null): string | null {
-  if (!endpoint) {
-    return null;
-  }
-  try {
-    return new URL(endpoint).hostname.toLowerCase();
-  } catch {
-    return endpoint
-      .replace(/^https?:\/\//i, '')
-      .split('/')[0]
-      .toLowerCase();
-  }
-}
 
 export function S3Browser() {
   const { refresh, currentPath, objects } = useBrowserContext();
-  const { credentials } = useS3ClientContext();
   const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl } = usePresignedUrl();
@@ -109,11 +93,6 @@ export function S3Browser() {
     []
   );
 
-  const endpointHost = useMemo(() => getEndpointHost(credentials?.endpoint), [credentials?.endpoint]);
-  const allowRecursiveDelete = useMemo(
-    () => (endpointHost ? !endpointHost.endsWith(AWS_ENDPOINT_SUFFIX) : false),
-    [endpointHost]
-  );
   const isDeleting = isDeletingBatch || isDeletingHook;
 
   const deletePreview = useMemo(() => {
@@ -180,13 +159,12 @@ export function S3Browser() {
 
   const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
-      const selectableItems = allowRecursiveDelete ? objects : objects.filter((item) => !item.isFolder);
-      const keys = selectableItems.map((item) => item.key);
+      const keys = objects.map((item) => item.key);
       setSelectedKeys(new Set(keys));
     } else {
       setSelectedKeys(new Set());
     }
-  }, [objects, allowRecursiveDelete]);
+  }, [objects]);
 
   const handleToggleSelection = useCallback(() => {
     setSelectionMode((prev) => {
@@ -199,13 +177,12 @@ export function S3Browser() {
   }, []);
 
   const handleDeleteRequest = useCallback((item: S3Object) => {
-    const shouldDeleteRecursively = item.isFolder && allowRecursiveDelete;
-    setDeleteMode(shouldDeleteRecursively ? 'batch' : 'single');
+    setDeleteMode(item.isFolder ? 'batch' : 'single');
     setItemsToDelete([item]);
     setDeletePlan(null);
     setDeleteResolveError(null);
     setDeleteDialogOpen(true);
-  }, [allowRecursiveDelete]);
+  }, []);
 
   const handleBatchDeleteRequest = useCallback(() => {
     const items = objects.filter((item) => selectedKeys.has(item.key));
@@ -233,7 +210,7 @@ export function S3Browser() {
     void (async () => {
       try {
         const plan = await resolveDeletePlan(itemsToDeleteRef.current, {
-          includeFolderContents: allowRecursiveDelete,
+          includeFolderContents: true,
           signal: abortController.signal,
         });
         if (!abortController.signal.aborted) {
@@ -254,7 +231,7 @@ export function S3Browser() {
     return () => {
       abortController.abort();
     };
-  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, allowRecursiveDelete, resolveDeletePlan]);
+  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, resolveDeletePlan]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
@@ -590,8 +567,6 @@ export function S3Browser() {
               selectedKeys={selectedKeys}
               onSelectItem={handleSelectItem}
               onSelectAll={handleSelectAll}
-              allowFolderSelect={allowRecursiveDelete}
-              allowRecursiveDelete={allowRecursiveDelete}
               selectionMode={selectionMode}
             />
           </Box>

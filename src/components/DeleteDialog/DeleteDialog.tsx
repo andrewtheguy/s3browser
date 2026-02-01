@@ -72,7 +72,7 @@ function getMessage({
       return (
         <>
           Are you sure you want to delete the folder{' '}
-          <strong>{singleItem.name}</strong>? The folder must be empty.
+          <strong>{singleItem.name}</strong> and all its contents? This action cannot be undone.
         </>
       );
     }
