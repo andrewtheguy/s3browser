@@ -45,8 +45,11 @@ app.use('/api/download', downloadRoutes);
 const distPath = path.resolve(process.cwd(), 'dist');
 app.use(express.static(distPath));
 
-// SPA fallback: serve index.html for non-API routes
-app.get(/^(?!\/api\/).*/, (_req, res) => {
+// SPA fallback: serve index.html for non-API GET routes
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || req.path.startsWith('/api/')) {
+    return next();
+  }
   return res.sendFile(path.join(distPath, 'index.html'));
 });
 
