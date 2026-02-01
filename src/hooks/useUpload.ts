@@ -563,7 +563,13 @@ export function useUpload() {
     pendingQueueRef.current = [];
     queuedIdsRef.current.clear();
 
-    await Promise.all(idsToCancel.map((id) => cancelUploadInternal(id, false)));
+    const results = await Promise.allSettled(
+      idsToCancel.map((id) => cancelUploadInternal(id, false))
+    );
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length > 0) {
+      console.error('Failed to cancel some uploads:', failures);
+    }
     void refreshPendingUploads();
   }, [cancelUploadInternal, refreshPendingUploads]);
 
