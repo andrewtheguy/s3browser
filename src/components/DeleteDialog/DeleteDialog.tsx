@@ -28,6 +28,70 @@ interface DeleteDialogProps {
   onCancel: () => void;
 }
 
+function getMessage({
+  isBatch,
+  resolutionError,
+  isResolving,
+  resolvedTotalKeys,
+  folderCount,
+  isSingleItem,
+  isFolder,
+  singleItem,
+  itemsLength,
+}: {
+  isBatch: boolean;
+  resolutionError: string | null;
+  isResolving: boolean;
+  resolvedTotalKeys: number;
+  folderCount: number;
+  isSingleItem: boolean;
+  isFolder: boolean;
+  singleItem: S3Object;
+  itemsLength: number;
+}): React.ReactNode {
+  if (isBatch) {
+    if (resolutionError) {
+      return 'Unable to load objects to delete.';
+    }
+    if (isResolving) {
+      return 'Gathering objects to delete...';
+    }
+    if (resolvedTotalKeys === 0 && folderCount > 0) {
+      return 'No objects found under the selected folders.';
+    }
+    return (
+      <>
+        Are you sure you want to delete{' '}
+        <strong>{resolvedTotalKeys} object{resolvedTotalKeys === 1 ? '' : 's'}</strong>? This action cannot be undone.
+      </>
+    );
+  }
+
+  if (isSingleItem) {
+    if (isFolder) {
+      return (
+        <>
+          Are you sure you want to delete the folder{' '}
+          <strong>{singleItem.name}</strong>? The folder must be empty.
+        </>
+      );
+    }
+
+    return (
+      <>
+        Are you sure you want to delete{' '}
+        <strong>{singleItem.name}</strong>? This action cannot be undone.
+      </>
+    );
+  }
+
+  return (
+    <>
+      Are you sure you want to delete <strong>{itemsLength} files</strong>? This action cannot be undone.
+    </>
+  );
+}
+
 export function DeleteDialog({
   open,
   items,
@@ -66,41 +130,17 @@ export function DeleteDialog({
       ? isFolder ? 'Delete Folder' : 'Delete File'
       : `Delete ${items.length} Files`;
 
-  const message = isBatch
-    ? (
-        <>
-          {resolutionError
-            ? 'Unable to load objects to delete.'
-            : isResolving
-            ? 'Gathering objects to delete...'
-            : resolvedTotalKeys === 0 && folderCount > 0
-              ? 'No objects found under the selected folders.'
-              : (
-                  <>
-                    Are you sure you want to delete <strong>{resolvedTotalKeys} object{resolvedTotalKeys === 1 ? '' : 's'}</strong>? This action cannot be undone.
-                  </>
-                )}
-        </>
-      )
-    : isSingleItem
-      ? isFolder
-        ? (
-            <>
-              Are you sure you want to delete the folder{' '}
-              <strong>{singleItem.name}</strong>? The folder must be empty.
-            </>
-          )
-        : (
-            <>
-              Are you sure you want to delete{' '}
-              <strong>{singleItem.name}</strong>? This action cannot be undone.
-            </>
-          )
-      : (
-          <>
-            Are you sure you want to delete <strong>{items.length} files</strong>? This action cannot be undone.
-          </>
-        );
+  const message = getMessage({
+    isBatch,
+    resolutionError,
+    isResolving,
+    resolvedTotalKeys,
+    folderCount,
+    isSingleItem,
+    isFolder,
+    singleItem,
+    itemsLength: items.length,
+  });
 
   return (
     <Dialog
