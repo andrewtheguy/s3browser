@@ -1,5 +1,5 @@
 # Build stage
-FROM oven/bun:alpine AS builder
+FROM oven/bun:1.3-alpine AS builder
 WORKDIR /app
 
 # Copy package files
@@ -15,25 +15,24 @@ COPY . .
 RUN bun run build
 
 # Production stage
-FROM oven/bun:alpine AS runner
+FROM oven/bun:1.3-alpine AS runner
 
-RUN addgroup -g 1000 s3browser && \
-    adduser -D -u 1000 -G s3browser s3browser
+RUN mkdir -p /home/bun/app && chown -R bun:bun /home/bun
 
-WORKDIR /app
+WORKDIR /home/bun/app
 
 # Copy package files
-COPY --chown=s3browser:s3browser package.json bun.lock ./
+COPY --chown=bun:bun package.json bun.lock ./
 
 # Install production dependencies only
-USER s3browser
+USER bun
 RUN bun install --frozen-lockfile --production
 
 # Copy built frontend from builder
-COPY --from=builder --chown=s3browser:s3browser /app/dist ./dist
+COPY --from=builder --chown=bun:bun /app/dist ./dist
 
 # Copy built server from builder
-COPY --from=builder --chown=s3browser:s3browser /app/dist-server ./dist-server
+COPY --from=builder --chown=bun:bun /app/dist-server ./dist-server
 
 ENV NODE_ENV=production
 
