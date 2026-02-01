@@ -45,17 +45,12 @@ export interface UploadProgress {
   persistenceId?: string;
 }
 
-export interface UserLoginCredentials {
-  username: string;
+export interface LoginCredentials {
   password: string;
 }
 
-export interface LoginCredentials {
-  accessKeyId: string;
-  secretAccessKey: string;
+export interface S3ConnectionCredentials extends Omit<S3Credentials, 'region'> {
   region?: string;
-  bucket?: string;  // Optional - can be selected after login
-  endpoint?: string;
   connectionName: string;
   autoDetectRegion?: boolean;
 }
@@ -63,16 +58,15 @@ export interface LoginCredentials {
 export interface S3ClientContextValue {
   credentials: S3Credentials | null;
   isConnected: boolean;
-  isUserLoggedIn: boolean;
-  username: string | null;
+  isLoggedIn: boolean;
   activeConnectionId: number | null;
   isCheckingSession: boolean;
   requiresBucketSelection: boolean;
-  userLogin: (credentials: UserLoginCredentials) => Promise<boolean>;
-  connect: (credentials: LoginCredentials) => Promise<{ success: boolean; connectionId?: number }>;
+  login: (credentials: LoginCredentials) => Promise<boolean>;
+  connect: (credentials: S3ConnectionCredentials) => Promise<{ success: boolean; connectionId?: number }>;
   disconnect: () => void | Promise<void>;
   activateConnection: (connectionId: number, bucket?: string) => Promise<boolean>;
-  selectBucket: (bucket: string) => Promise<boolean>;
+  selectBucket: (bucket: string) => boolean;
   error: string | null;
 }
 

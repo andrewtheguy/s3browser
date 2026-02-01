@@ -2,7 +2,6 @@ import { Database } from 'bun:sqlite';
 import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
-import { randomBytes } from 'crypto';
 import { validateEncryptionKey, encrypt, decrypt, setSalt, generateSalt, getSaltLength } from './crypto.js';
 
 // Database directory and file path
@@ -11,26 +10,8 @@ const DB_PATH = join(DB_DIR, 's3browser.db');
 
 let db: Database | null = null;
 
-export interface DbUser {
-  id: number;
-  username: string;
-  password_hash: string;
-  created_at: number;
-  updated_at: number;
-}
-
-export interface DbSession {
-  id: string;
-  user_id: number;
-  active_connection_id: number | null;
-  active_bucket: string | null;
-  created_at: number;
-  expires_at: number;
-}
-
 export interface DbS3Connection {
   id: number;
-  user_id: number;
   name: string;
   endpoint: string;
   access_key_id: string;
@@ -66,7 +47,7 @@ function verifyEncryptionKey(database: Database): void {
           `but ${existingConnections.count} connection(s) with encrypted data exist in s3_connections table.\n` +
           'This may indicate the encryption key or salt has changed, or the database is in an inconsistent state.\n' +
           'To fix this, use the original encryption key, or delete ~/.s3browser/s3browser.db to start fresh ' +
-          '(this will delete all users and saved connections).'
+          '(this will delete all saved connections).'
         );
       }
     }
@@ -90,7 +71,7 @@ function verifyEncryptionKey(database: Database): void {
       '  - The S3BROWSER_ENCRYPTION_KEY environment variable changed\n' +
       '  - The ~/.s3browser/encryption.key file was modified\n' +
       '  - You are using a different key file or environment\n\n' +
-      'To fix this, use the original encryption key, or delete ~/.s3browser/s3browser.db to start fresh (this will delete all users and saved connections).'
+      'To fix this, use the original encryption key, or delete ~/.s3browser/s3browser.db to start fresh (this will delete all saved connections).'
     );
   }
 }
@@ -145,45 +126,18 @@ function initializeDatabase(): Database {
 
   // Create tables
   database.exec(`
-    -- Users: simple username/password accounts
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      created_at INTEGER DEFAULT (unixepoch()),
-      updated_at INTEGER DEFAULT (unixepoch())
-    );
-
-    -- S3 connections: saved S3 connection profiles per user
-    -- (must be created before sessions due to foreign key dependency)
+    -- S3 connections: saved S3 connection profiles (globally unique names)
     CREATE TABLE IF NOT EXISTS s3_connections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
+      name TEXT NOT NULL UNIQUE,
       endpoint TEXT NOT NULL,
       access_key_id TEXT NOT NULL,
       secret_access_key TEXT NOT NULL,
       bucket TEXT,
       region TEXT,
       auto_detect_region INTEGER DEFAULT 1,
-      last_used_at INTEGER DEFAULT (unixepoch()),
-      UNIQUE(user_id, name)
+      last_used_at INTEGER DEFAULT (unixepoch())
     );
-
-    -- Sessions: replaces in-memory Map
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      active_connection_id INTEGER REFERENCES s3_connections(id) ON DELETE SET NULL,
-      active_bucket TEXT,
-      created_at INTEGER DEFAULT (unixepoch()),
-      expires_at INTEGER NOT NULL
-    );
-
-    -- Create indexes for better query performance
-    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-    CREATE INDEX IF NOT EXISTS idx_s3_connections_user_id ON s3_connections(user_id);
   `);
 
   // Verify encryption key matches what was used to initialize the database
@@ -206,168 +160,72 @@ export function closeDb(): void {
   }
 }
 
-// User operations
-export function createUser(username: string, passwordHash: string): DbUser {
-  const database = getDb();
-  const stmt = database.prepare(`
-    INSERT INTO users (username, password_hash)
-    VALUES (?, ?)
-    RETURNING *
-  `);
-  return stmt.get(username, passwordHash) as DbUser;
-}
-
-export function getUserByUsername(username: string): DbUser | undefined {
-  const database = getDb();
-  const stmt = database.prepare('SELECT * FROM users WHERE username = ?');
-  return stmt.get(username) as DbUser | undefined;
-}
-
-export function getUserById(id: number): DbUser | undefined {
-  const database = getDb();
-  const stmt = database.prepare('SELECT * FROM users WHERE id = ?');
-  return stmt.get(id) as DbUser | undefined;
-}
-
-// Session operations
-const SESSION_DURATION_HOURS = 4;
-
-export function createSession(userId: number): string {
-  const database = getDb();
-  const sessionId = randomBytes(32).toString('hex');
-  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_DURATION_HOURS * 60 * 60;
-
-  const stmt = database.prepare(`
-    INSERT INTO sessions (id, user_id, expires_at)
-    VALUES (?, ?, ?)
-  `);
-  stmt.run(sessionId, userId, expiresAt);
-
-  return sessionId;
-}
-
-export interface SessionWithConnection extends DbSession {
-  username: string;
-  // Connection fields (null if no active connection)
-  connection_name: string | null;
-  connection_endpoint: string | null;
-  connection_access_key_id: string | null;
-  connection_secret_access_key: string | null;
-  connection_region: string | null;
-}
-
-export function getSession(sessionId: string): SessionWithConnection | undefined {
-  const database = getDb();
-  const stmt = database.prepare(`
-    SELECT
-      s.*,
-      u.username,
-      c.name as connection_name,
-      c.endpoint as connection_endpoint,
-      c.access_key_id as connection_access_key_id,
-      c.secret_access_key as connection_secret_access_key,
-      c.region as connection_region
-    FROM sessions s
-    JOIN users u ON s.user_id = u.id
-    LEFT JOIN s3_connections c ON s.active_connection_id = c.id
-    WHERE s.id = ? AND s.expires_at > unixepoch()
-  `);
-  const row = stmt.get(sessionId) as SessionWithConnection | undefined;
-
-  if (row && row.connection_secret_access_key) {
-    // Decrypt the secret access key
-    try {
-      row.connection_secret_access_key = decrypt(row.connection_secret_access_key);
-    } catch (err) {
-      console.error('Failed to decrypt S3 credentials for session:', {
-        sessionId: row.id,
-        connectionId: row.active_connection_id,
-        userId: row.user_id,
-        error: err,
-      });
-      return undefined;
-    }
-  }
-
-  return row;
-}
-
-export function setSessionActiveConnection(sessionId: string, connectionId: number | null): void {
-  const database = getDb();
-  const stmt = database.prepare(`
-    UPDATE sessions SET active_connection_id = ? WHERE id = ?
-  `);
-  stmt.run(connectionId, sessionId);
-}
-
-export function setSessionActiveBucket(sessionId: string, bucket: string): void {
-  const database = getDb();
-  const stmt = database.prepare(`
-    UPDATE sessions SET active_bucket = ? WHERE id = ?
-  `);
-  stmt.run(bucket, sessionId);
-}
-
-export function deleteSession(sessionId: string): boolean {
-  const database = getDb();
-  const stmt = database.prepare('DELETE FROM sessions WHERE id = ?');
-  const result = stmt.run(sessionId);
-  return result.changes > 0;
-}
-
-export function cleanupExpiredSessions(): number {
-  const database = getDb();
-  const stmt = database.prepare('DELETE FROM sessions WHERE expires_at <= unixepoch()');
-  const result = stmt.run();
-  return result.changes;
-}
-
 // S3 Connections operations
-export function getConnectionsByUserId(userId: number): DbS3Connection[] {
+export function getAllConnections(): DbS3Connection[] {
   const database = getDb();
   const stmt = database.prepare(`
     SELECT * FROM s3_connections
-    WHERE user_id = ?
     ORDER BY last_used_at DESC
   `);
-  return stmt.all(userId) as DbS3Connection[];
+  return stmt.all() as DbS3Connection[];
 }
 
-export function getConnectionById(connectionId: number, userId: number): DbS3Connection | undefined {
+export function getConnectionById(connectionId: number): DbS3Connection | undefined {
   const database = getDb();
   const stmt = database.prepare(`
     SELECT * FROM s3_connections
-    WHERE id = ? AND user_id = ?
+    WHERE id = ?
   `);
-  return stmt.get(connectionId, userId) as DbS3Connection | undefined;
+  return stmt.get(connectionId) as DbS3Connection | undefined;
 }
 
-export function getConnectionByName(userId: number, name: string): DbS3Connection | undefined {
+export function getConnectionByName(name: string): DbS3Connection | undefined {
   const database = getDb();
   const stmt = database.prepare(`
     SELECT * FROM s3_connections
-    WHERE user_id = ? AND name = ?
+    WHERE name = ?
   `);
-  return stmt.get(userId, name) as DbS3Connection | undefined;
+  return stmt.get(name) as DbS3Connection | undefined;
 }
 
 export function saveConnection(
-  userId: number,
   name: string,
   endpoint: string,
   accessKeyId: string,
-  secretAccessKey: string,
+  secretAccessKey: string | null,
   bucket: string | null,
   region: string | null,
   autoDetectRegion: boolean
 ): DbS3Connection {
   const database = getDb();
+
+  // If no secret key provided, check if connection exists and keep existing key
+  if (!secretAccessKey) {
+    const existing = getConnectionByName(name);
+    if (!existing) {
+      throw new Error('Secret access key is required for new connections');
+    }
+    // Update without changing the secret key
+    const stmt = database.prepare(`
+      UPDATE s3_connections SET
+        endpoint = ?,
+        access_key_id = ?,
+        bucket = ?,
+        region = ?,
+        auto_detect_region = ?,
+        last_used_at = unixepoch()
+      WHERE name = ?
+      RETURNING *
+    `);
+    return stmt.get(endpoint, accessKeyId, bucket, region, autoDetectRegion ? 1 : 0, name) as DbS3Connection;
+  }
+
   const encryptedSecretAccessKey = encrypt(secretAccessKey);
 
   const stmt = database.prepare(`
-    INSERT INTO s3_connections (user_id, name, endpoint, access_key_id, secret_access_key, bucket, region, auto_detect_region, last_used_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
-    ON CONFLICT(user_id, name) DO UPDATE SET
+    INSERT INTO s3_connections (name, endpoint, access_key_id, secret_access_key, bucket, region, auto_detect_region, last_used_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+    ON CONFLICT(name) DO UPDATE SET
       endpoint = excluded.endpoint,
       access_key_id = excluded.access_key_id,
       secret_access_key = excluded.secret_access_key,
@@ -377,22 +235,22 @@ export function saveConnection(
       last_used_at = unixepoch()
     RETURNING *
   `);
-  return stmt.get(userId, name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0) as DbS3Connection;
+  return stmt.get(name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0) as DbS3Connection;
 }
 
-export function deleteConnectionById(userId: number, connectionId: number): boolean {
+export function deleteConnectionById(connectionId: number): boolean {
   const database = getDb();
-  const stmt = database.prepare('DELETE FROM s3_connections WHERE id = ? AND user_id = ?');
-  const result = stmt.run(connectionId, userId);
+  const stmt = database.prepare('DELETE FROM s3_connections WHERE id = ?');
+  const result = stmt.run(connectionId);
   return result.changes > 0;
 }
 
-export function updateConnectionLastUsed(connectionId: number, userId: number): boolean {
+export function updateConnectionLastUsed(connectionId: number): boolean {
   const database = getDb();
   const stmt = database.prepare(`
-    UPDATE s3_connections SET last_used_at = unixepoch() WHERE id = ? AND user_id = ?
+    UPDATE s3_connections SET last_used_at = unixepoch() WHERE id = ?
   `);
-  const result = stmt.run(connectionId, userId);
+  const result = stmt.run(connectionId);
   return result.changes > 0;
 }
 

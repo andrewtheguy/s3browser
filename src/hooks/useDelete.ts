@@ -1,15 +1,18 @@
 import { useCallback, useState } from 'react';
+import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { deleteObject, deleteObjects } from '../services/api';
 
 export function useDelete() {
-  const { isConnected } = useS3ClientContext();
+  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
+  const { bucket: urlBucket } = useParams<{ bucket: string }>();
+  const bucket = urlBucket || credentials?.bucket;
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const remove = useCallback(
     async (key: string): Promise<void> => {
-      if (!isConnected) {
+      if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -17,7 +20,7 @@ export function useDelete() {
       setError(null);
 
       try {
-        await deleteObject(key);
+        await deleteObject(activeConnectionId, bucket, key);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Delete failed';
         setError(message);
@@ -26,7 +29,7 @@ export function useDelete() {
         setIsDeleting(false);
       }
     },
-    [isConnected]
+    [isConnected, activeConnectionId, bucket]
   );
 
   const removeMany = useCallback(
@@ -35,7 +38,7 @@ export function useDelete() {
         return { deleted: [], errors: [] };
       }
 
-      if (!isConnected) {
+      if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -43,7 +46,7 @@ export function useDelete() {
       setError(null);
 
       try {
-        const result = await deleteObjects(keys);
+        const result = await deleteObjects(activeConnectionId, bucket, keys);
         return result;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Batch delete failed';
@@ -53,7 +56,7 @@ export function useDelete() {
         setIsDeleting(false);
       }
     },
-    [isConnected]
+    [isConnected, activeConnectionId, bucket]
   );
 
   return {

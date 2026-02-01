@@ -90,41 +90,65 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
           />
         </Tooltip>
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: { xs: 0.5, sm: 1 } }}>
           <Tooltip title="Refresh">
             <IconButton onClick={refresh} disabled={isLoading}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>
           {selectedCount > 0 && onBatchDelete && (
+            <Tooltip title={isDeleting ? 'Deleting...' : `Delete ${selectedCount} item(s)`}>
+              <Box component="span" sx={{ display: 'inline-block' }}>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={onBatchDelete}
+                  disabled={isDeleting}
+                  sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+                >
+                  <DeleteIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                    {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
+                  </Box>
+                </Button>
+              </Box>
+            </Tooltip>
+          )}
+          <Tooltip title="New Folder">
             <Button
               variant="outlined"
-              color="error"
-              startIcon={<DeleteIcon />}
-              onClick={onBatchDelete}
-              disabled={isDeleting}
+              onClick={onCreateFolderClick}
+              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
             >
-              {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
+              <CreateNewFolderIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                New Folder
+              </Box>
             </Button>
-          )}
-          <Button
-            variant="outlined"
-            startIcon={<CreateNewFolderIcon />}
-            onClick={onCreateFolderClick}
-          >
-            New Folder
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<CloudUploadIcon />}
-            onClick={onUploadClick}
-          >
-            Upload
-          </Button>
+          </Tooltip>
+          <Tooltip title="Upload">
+            <Button
+              variant="contained"
+              onClick={onUploadClick}
+              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+            >
+              <CloudUploadIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                Upload
+              </Box>
+            </Button>
+          </Tooltip>
           <Tooltip title="Manage Connections">
-            <IconButton onClick={handleManageConnections}>
-              <SettingsIcon />
-            </IconButton>
+            <Button
+              variant="outlined"
+              onClick={handleManageConnections}
+              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+            >
+              <SettingsIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                Manage Connections
+              </Box>
+            </Button>
           </Tooltip>
           <Tooltip title="Sign Out">
             <IconButton onClick={handleDisconnect} color="error">

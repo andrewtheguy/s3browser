@@ -1,6 +1,20 @@
 import { apiPost } from './client';
 import { UPLOAD_CONFIG } from '../../config/upload';
 
+function validateUploadContext(connectionId: number, bucket: string): string {
+  if (!Number.isInteger(connectionId) || connectionId <= 0) {
+    throw new Error('connectionId must be a positive integer');
+  }
+  if (typeof bucket !== 'string') {
+    throw new Error('bucket must be a non-empty string');
+  }
+  const trimmedBucket = bucket.trim();
+  if (trimmedBucket.length === 0) {
+    throw new Error('bucket must be a non-empty string');
+  }
+  return trimmedBucket;
+}
+
 export interface InitiateUploadResponse {
   uploadId: string;
   key: string;
@@ -34,6 +48,8 @@ export interface PersistenceError {
 }
 
 export interface MultipartUploadOptions {
+  connectionId: number;
+  bucket: string;
   file: File;
   key: string;
   onProgress?: (loaded: number, total: number, partProgress?: UploadPartProgress) => void;
@@ -49,15 +65,22 @@ export interface MultipartUploadOptions {
  * Initiate a multipart upload
  */
 export async function initiateUpload(
+  connectionId: number,
+  bucket: string,
   key: string,
   contentType: string,
   fileSize: number
 ): Promise<InitiateUploadResponse> {
-  const response = await apiPost<InitiateUploadResponse>('/upload/initiate', {
-    key,
-    contentType,
-    fileSize,
-  });
+  const sanitizedBucket = validateUploadContext(connectionId, bucket);
+
+  const response = await apiPost<InitiateUploadResponse>(
+    `/upload/${connectionId}/${encodeURIComponent(sanitizedBucket)}/initiate`,
+    {
+      key,
+      contentType,
+      fileSize,
+    }
+  );
   if (!response) {
     throw new Error('Failed to initiate multipart upload');
   }
@@ -158,6 +181,8 @@ function performXhrUpload({
  * Upload a single part through the server proxy
  */
 export async function uploadPart(
+  connectionId: number,
+  bucket: string,
   uploadId: string,
   key: string,
   partNumber: number,
@@ -165,6 +190,8 @@ export async function uploadPart(
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
 ): Promise<string> {
+  const sanitizedBucket = validateUploadContext(connectionId, bucket);
+
   const params = new URLSearchParams({
     uploadId,
     key,
@@ -172,7 +199,7 @@ export async function uploadPart(
   });
 
   const responseText = await performXhrUpload({
-    url: `/api/upload/part?${params.toString()}`,
+    url: `/api/upload/${connectionId}/${encodeURIComponent(sanitizedBucket)}/part?${params.toString()}`,
     body: chunk,
     contentType: 'application/octet-stream',
     onProgress,
@@ -196,15 +223,19 @@ export async function uploadPart(
  * Upload a small file through the server proxy
  */
 export async function uploadSingleFile(
+  connectionId: number,
+  bucket: string,
   key: string,
   file: File,
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
 ): Promise<void> {
+  const sanitizedBucket = validateUploadContext(connectionId, bucket);
+
   const params = new URLSearchParams({ key });
 
   await performXhrUpload({
-    url: `/api/upload/single?${params.toString()}`,
+    url: `/api/upload/${connectionId}/${encodeURIComponent(sanitizedBucket)}/single?${params.toString()}`,
     body: file,
     contentType: file.type || 'application/octet-stream',
     onProgress,
@@ -216,18 +247,25 @@ export async function uploadSingleFile(
  * Complete a multipart upload
  */
 export async function completeUpload(
+  connectionId: number,
+  bucket: string,
   uploadId: string,
   key: string,
   parts: CompletedPart[]
 ): Promise<{ success: boolean; key: string }> {
+  const sanitizedBucket = validateUploadContext(connectionId, bucket);
+
   // Sort parts by partNumber in ascending order (S3 requires deterministic ordering)
   const sortedParts = [...parts].sort((a, b) => a.partNumber - b.partNumber);
 
-  const response = await apiPost<{ success: boolean; key: string }>('/upload/complete', {
-    uploadId,
-    key,
-    parts: sortedParts,
-  });
+  const response = await apiPost<{ success: boolean; key: string }>(
+    `/upload/${connectionId}/${encodeURIComponent(sanitizedBucket)}/complete`,
+    {
+      uploadId,
+      key,
+      parts: sortedParts,
+    }
+  );
   if (!response) {
     throw new Error('Failed to complete multipart upload');
   }
@@ -238,13 +276,20 @@ export async function completeUpload(
  * Abort a multipart upload
  */
 export async function abortUpload(
+  connectionId: number,
+  bucket: string,
   uploadId: string,
   key: string
 ): Promise<{ success: boolean }> {
-  const response = await apiPost<{ success: boolean }>('/upload/abort', {
-    uploadId,
-    key,
-  });
+  const sanitizedBucket = validateUploadContext(connectionId, bucket);
+
+  const response = await apiPost<{ success: boolean }>(
+    `/upload/${connectionId}/${encodeURIComponent(sanitizedBucket)}/abort`,
+    {
+      uploadId,
+      key,
+    }
+  );
   if (!response) {
     throw new Error('Failed to abort multipart upload');
   }
@@ -255,6 +300,8 @@ export async function abortUpload(
  * Upload a part with retry logic
  */
 async function uploadPartWithRetry(
+  connectionId: number,
+  bucket: string,
   uploadId: string,
   key: string,
   partNumber: number,
@@ -272,7 +319,7 @@ async function uploadPartWithRetry(
         throw new DOMException('Upload aborted', 'AbortError');
       }
 
-      const etag = await uploadPart(uploadId, key, partNumber, chunk, onProgress, abortSignal);
+      const etag = await uploadPart(connectionId, bucket, uploadId, key, partNumber, chunk, onProgress, abortSignal);
       return etag;
     } catch (error) {
       // Don't retry abort errors
@@ -324,6 +371,8 @@ async function uploadPartWithRetry(
  * Orchestrate a multipart upload with concurrency control
  */
 export async function uploadFileMultipart({
+  connectionId,
+  bucket,
   file,
   key,
   onProgress,
@@ -339,6 +388,8 @@ export async function uploadFileMultipart({
   completedParts: CompletedPart[];
   persistenceErrors?: PersistenceError[];
 }> {
+  const sanitizedBucket = validateUploadContext(connectionId, bucket);
+
   const contentType = file.type || 'application/octet-stream';
   const fileSize = file.size;
   const partSize = UPLOAD_CONFIG.PART_SIZE;
@@ -352,7 +403,7 @@ export async function uploadFileMultipart({
     uploadId = existingUploadId;
     sanitizedKey = key; // Key should already be sanitized for resumed uploads
   } else {
-    const initResponse = await initiateUpload(key, contentType, fileSize);
+    const initResponse = await initiateUpload(connectionId, sanitizedBucket, key, contentType, fileSize);
     uploadId = initResponse.uploadId;
     sanitizedKey = initResponse.key;
   }
@@ -424,6 +475,8 @@ export async function uploadFileMultipart({
 
       try {
         const etag = await uploadPartWithRetry(
+          connectionId,
+          sanitizedBucket,
           uploadId,
           sanitizedKey,
           partNumber,
@@ -496,7 +549,7 @@ export async function uploadFileMultipart({
   }
 
   // Complete the upload
-  await completeUpload(uploadId, sanitizedKey, completedParts);
+  await completeUpload(connectionId, sanitizedBucket, uploadId, sanitizedKey, completedParts);
 
   return {
     uploadId,

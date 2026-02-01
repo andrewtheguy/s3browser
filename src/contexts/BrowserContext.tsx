@@ -61,12 +61,15 @@ export function BrowserProvider({
   buildUrl,
 }: BrowserProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { isConnected } = useS3ClientContext();
+  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const navigate = useNavigate();
-  const { '*': splatPath } = useParams<{ '*': string }>();
+  const { '*': splatPath, bucket: urlBucket } = useParams<{ '*': string; bucket: string }>();
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFetchedPathRef = useRef<string | null>(null);
+
+  // Get bucket from URL params or credentials
+  const bucket = urlBucket || credentials?.bucket;
 
   // Current path derived from URL (or initial path on first render)
   // Use trailing slash for folder-style S3 prefixes
@@ -76,7 +79,7 @@ export function BrowserProvider({
 
   const fetchObjects = useCallback(
     async (path: string) => {
-      if (!isConnected) return;
+      if (!isConnected || !activeConnectionId || !bucket) return;
 
       // Abort any in-flight request
       if (abortControllerRef.current) {
@@ -90,7 +93,7 @@ export function BrowserProvider({
       dispatch({ type: 'FETCH_START' });
 
       try {
-        const result = await listObjects(path, undefined, abortController.signal);
+        const result = await listObjects(activeConnectionId, bucket, path, undefined, abortController.signal);
         if (requestId === requestIdRef.current) {
           // Sort client-side: folders first, then files, alphabetically
           dispatch({ type: 'FETCH_SUCCESS', objects: sortObjects(result.objects) });
@@ -107,7 +110,7 @@ export function BrowserProvider({
         }
       }
     },
-    [isConnected]
+    [isConnected, activeConnectionId, bucket]
   );
 
   const navigateTo = useCallback(

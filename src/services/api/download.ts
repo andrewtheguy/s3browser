@@ -4,57 +4,57 @@ interface DownloadUrlResponse {
   url: string;
 }
 
-export async function getDownloadUrl(key: string): Promise<string> {
-  const response = await apiGet<DownloadUrlResponse>(
-    `/download/url?key=${encodeURIComponent(key)}`
-  );
+function validateDownloadUrlResponse(response: DownloadUrlResponse | null, errorPrefix: string): string {
   if (!response) {
-    throw new Error('Failed to get download URL: empty response');
+    throw new Error(`${errorPrefix}: empty response`);
   }
 
   const url = response.url;
   if (typeof url !== 'string' || !url.trim()) {
-    throw new Error('Failed to get download URL: missing or invalid url');
+    throw new Error(`${errorPrefix}: missing or invalid url`);
   }
 
-  // Validate URL format
   try {
     new URL(url);
   } catch {
-    throw new Error('Failed to get download URL: invalid url format');
+    throw new Error(`${errorPrefix}: invalid url format`);
   }
 
   return url;
 }
 
-export async function getPresignedUrl(key: string, ttl: number = 86400): Promise<string> {
-  // Validate ttl is a finite positive integer, fallback to default if invalid
-  const sanitizedTtl = Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : 86400;
+export async function getDownloadUrl(connectionId: number, bucket: string, key: string): Promise<string> {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
 
   const response = await apiGet<DownloadUrlResponse>(
-    `/download/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}`
   );
-  if (!response) {
-    throw new Error('Failed to get presigned URL: empty response');
-  }
 
-  const url = response.url;
-  if (typeof url !== 'string' || !url.trim()) {
-    throw new Error('Failed to get presigned URL: missing or invalid url');
-  }
-
-  // Validate URL format
-  try {
-    new URL(url);
-  } catch {
-    throw new Error('Failed to get presigned URL: invalid url format');
-  }
-
-  return url;
+  return validateDownloadUrlResponse(response, 'Failed to get download URL');
 }
 
-export async function downloadFile(key: string): Promise<void> {
-  const url = await getDownloadUrl(key);
+export async function getPresignedUrl(connectionId: number, bucket: string, key: string, ttl: number = 86400): Promise<string> {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+
+  if (!Number.isFinite(ttl) || ttl <= 0) {
+    throw new Error('Invalid TTL: must be a positive number');
+  }
+
+  const sanitizedTtl = Math.floor(ttl);
+
+  const response = await apiGet<DownloadUrlResponse>(
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`
+  );
+
+  return validateDownloadUrlResponse(response, 'Failed to get presigned URL');
+}
+
+export async function downloadFile(connectionId: number, bucket: string, key: string): Promise<void> {
+  const url = await getDownloadUrl(connectionId, bucket, key);
 
   // Extract filename from key
   const filename = key.split('/').pop() || 'download';

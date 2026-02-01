@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync, timingSafeEqual, createHmac } from 'crypto';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -8,6 +8,7 @@ const IV_LENGTH = 12; // NIST-recommended 96-bit IV for AES-GCM
 const AUTH_TAG_LENGTH = 16;
 const SALT_LENGTH = 32;
 const KEY_FILE_PATH = join(homedir(), '.s3browser', 'encryption.key');
+const PASSWORD_FILE_PATH = join(homedir(), '.s3browser', 'login.password');
 
 let encryptionKey: Buffer | null = null;
 let encryptionSalt: Buffer | null = null;
@@ -131,4 +132,71 @@ export function validateEncryptionKey(): void {
 
 export function getKeyFilePath(): string {
   return KEY_FILE_PATH;
+}
+
+function loadPasswordFromFile(): string | null {
+  if (!existsSync(PASSWORD_FILE_PATH)) {
+    return null;
+  }
+
+  try {
+    const content = readFileSync(PASSWORD_FILE_PATH, 'utf8').trim();
+    if (content.length >= 8) {
+      return content;
+    }
+    console.warn(`Warning: ${PASSWORD_FILE_PATH} exists but contains less than 8 characters`);
+    return null;
+  } catch (err) {
+    console.warn(`Warning: Failed to read ${PASSWORD_FILE_PATH}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+let loginPassword: string | null = null;
+
+export function getLoginPassword(): string {
+  if (loginPassword) {
+    return loginPassword;
+  }
+
+  // First try environment variable
+  let password = process.env.S3BROWSER_LOGIN_PASSWORD;
+
+  // If not in env, try to load from file
+  if (!password) {
+    password = loadPasswordFromFile() ?? undefined;
+  }
+
+  // Validate minimum length
+  if (!password || password.length < 16) {
+    throw new Error(
+      `Login password not configured. Please either:\n` +
+      `  1. Set S3BROWSER_LOGIN_PASSWORD environment variable (16+ characters), or\n` +
+      `  2. Create ${PASSWORD_FILE_PATH} with a 16+ character password\n`
+    );
+  }
+
+  loginPassword = password;
+  return loginPassword;
+}
+
+export function getPasswordFilePath(): string {
+  return PASSWORD_FILE_PATH;
+}
+
+export function timingSafeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+
+  if (bufA.length !== bufB.length) {
+    // Compare against itself to maintain constant time
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
+
+  return timingSafeEqual(bufA, bufB);
+}
+
+export function createHmacSignature(data: string, key: string): string {
+  return createHmac('sha256', key).update(data).digest('base64url');
 }

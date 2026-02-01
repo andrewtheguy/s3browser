@@ -6,13 +6,12 @@ import {
   type ServerSavedConnection,
 } from '../services/api/auth';
 
-function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection & { id: number; secretAccessKey: string } {
+function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection & { id: number } {
   return {
     id: conn.id,
     name: conn.name,
     endpoint: conn.endpoint,
     accessKeyId: conn.accessKeyId,
-    secretAccessKey: conn.secretAccessKey,
     bucket: conn.bucket || undefined,
     region: conn.region || undefined,
     autoDetectRegion: conn.autoDetectRegion,
@@ -21,7 +20,7 @@ function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection &
 }
 
 export function useConnectionHistory(isUserLoggedIn: boolean) {
-  const [connections, setConnections] = useState<(SavedConnection & { id: number; secretAccessKey: string })[]>([]);
+  const [connections, setConnections] = useState<(SavedConnection & { id: number })[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);

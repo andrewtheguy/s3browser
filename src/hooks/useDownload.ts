@@ -1,23 +1,28 @@
 import { useCallback, useState } from 'react';
+import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { downloadFile } from '../services/api';
 
 export function useDownload() {
-  const { isConnected } = useS3ClientContext();
+  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
+  const { bucket: urlBucket } = useParams<{ bucket: string }>();
+  const bucket = urlBucket || credentials?.bucket;
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const download = useCallback(
     async (key: string): Promise<void> => {
-      if (!isConnected) {
-        throw new Error('Not connected to S3');
+      if (!isConnected || !activeConnectionId || !bucket) {
+        throw new Error(
+          `Missing S3 connection details: isConnected=${isConnected} | activeConnectionId=${activeConnectionId} | bucket=${bucket}`
+        );
       }
 
       setIsDownloading(true);
       setError(null);
 
       try {
-        await downloadFile(key);
+        await downloadFile(activeConnectionId, bucket, key);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Download failed';
         setError(message);
@@ -26,7 +31,7 @@ export function useDownload() {
         setIsDownloading(false);
       }
     },
-    [isConnected]
+    [isConnected, activeConnectionId, bucket]
   );
 
   return {

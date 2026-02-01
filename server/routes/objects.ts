@@ -5,13 +5,9 @@ import {
   DeleteObjectsCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { authMiddleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
+import { s3Middleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
-
-// All routes require authentication and a bucket to be selected
-router.use(authMiddleware);
-router.use(requireBucket);
 
 interface FolderRequestBody {
   path?: string;
@@ -43,27 +39,72 @@ function extractFileName(key: string): string {
   return segments[segments.length - 1] || cleanKey;
 }
 
-// GET /api/objects?prefix=&continuationToken=
-router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+function sanitizeFolderPath(path: string): { valid: true; path: string } | { valid: false; error: string } {
+  // Trim whitespace
+  let sanitized = path.trim();
+
+  // Check for path traversal
+  if (sanitized.includes('../')) {
+    return { valid: false, error: 'Path traversal is not allowed' };
+  }
+
+  // Remove leading slashes
+  sanitized = sanitized.replace(/^\/+/, '');
+
+  // Collapse repeated slashes into single slash
+  sanitized = sanitized.replace(/\/+/g, '/');
+
+  // Remove trailing slash for processing, we'll add it back
+  sanitized = sanitized.replace(/\/+$/, '');
+
+  // Check if empty after sanitization
+  if (sanitized.length === 0) {
+    return { valid: false, error: 'Folder path cannot be empty' };
+  }
+
+  // Check for empty segments (would result from paths like "a//b" after collapse, but we handle that above)
+  const segments = sanitized.split('/');
+  if (segments.some(seg => seg.length === 0)) {
+    return { valid: false, error: 'Folder path contains empty segments' };
+  }
+
+  // Add trailing slash for S3 folder convention
+  const folderPath = sanitized + '/';
+
+  // Validate byte length (S3 key limit is 1024 bytes)
+  if (Buffer.byteLength(folderPath, 'utf8') > 1024) {
+    return { valid: false, error: 'Folder path exceeds maximum length of 1024 bytes' };
+  }
+
+  return { valid: true, path: folderPath };
+}
+
+// All routes use s3Middleware which checks auth and creates S3 client from connectionId
+// Routes: /api/objects/:connectionId/:bucket/...
+
+// GET /api/objects/:connectionId/:bucket?prefix=&continuationToken=
+router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const prefix = (req.query.prefix as string) || '';
   const continuationToken = (req.query.continuationToken as string) || undefined;
-  const session = req.session;
+
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
 
   // Defensive check (middleware guarantees these exist)
-  if (!session?.credentials?.bucket || !session?.client) {
+  if (!bucket || !client) {
     res.status(500).json({ error: 'Internal server error' });
     return;
   }
 
   const command = new ListObjectsV2Command({
-    Bucket: session.credentials.bucket,
+    Bucket: bucket,
     Prefix: prefix,
     Delimiter: '/',
     MaxKeys: 1000,
     ContinuationToken: continuationToken,
   });
 
-  const response = await session.client.send(command);
+  const response = await client.send(command);
   const objects: S3Object[] = [];
 
   // Add folders (CommonPrefixes)
@@ -107,21 +148,27 @@ router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> 
   });
 });
 
-// DELETE /api/objects/:key
-router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  // Get the key from the URL path (everything after /api/objects/)
-  const keyParam = req.params.key;
-  const key = Array.isArray(keyParam) ? keyParam.join('/') : keyParam;
+// DELETE /api/objects/:connectionId/:bucket/*key
+router.delete('/:connectionId/:bucket/*key', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  // Express wildcard routes (*key) always return a string
+  const key = req.params.key as string;
 
   if (!key) {
     res.status(400).json({ error: 'Object key is required' });
     return;
   }
 
-  const session = req.session;
+  // Validate key to prevent path traversal and invalid paths
+  if (key.includes('../') || key.startsWith('/')) {
+    res.status(400).json({ error: 'Invalid object key' });
+    return;
+  }
+
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
 
   // Defensive check (middleware guarantees these exist)
-  if (!session?.credentials?.bucket || !session?.client) {
+  if (!bucket || !client) {
     res.status(500).json({ error: 'Internal server error' });
     return;
   }
@@ -129,12 +176,12 @@ router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise
   // If deleting a folder (key ends with /), check if it's empty first
   if (key.endsWith('/')) {
     const listCommand = new ListObjectsV2Command({
-      Bucket: session.credentials.bucket,
+      Bucket: bucket,
       Prefix: key,
       MaxKeys: 2, // We only need to know if there's more than the folder marker
     });
 
-    const listResponse = await session.client.send(listCommand);
+    const listResponse = await client.send(listCommand);
     const contents = listResponse.Contents || [];
 
     // Filter out the folder marker itself
@@ -147,16 +194,16 @@ router.delete('/*key', async (req: AuthenticatedRequest, res: Response): Promise
   }
 
   const command = new DeleteObjectCommand({
-    Bucket: session.credentials.bucket,
+    Bucket: bucket,
     Key: key,
   });
 
-  await session.client.send(command);
+  await client.send(command);
   res.json({ success: true });
 });
 
-// POST /api/objects/batch-delete
-router.post('/batch-delete', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// POST /api/objects/:connectionId/:bucket/batch-delete
+router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as BatchDeleteRequestBody;
   const { keys } = body;
 
@@ -179,23 +226,24 @@ router.post('/batch-delete', async (req: AuthenticatedRequest, res: Response): P
     return;
   }
 
-  const session = req.session;
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
 
   // Defensive check (middleware guarantees these exist)
-  if (!session?.credentials?.bucket || !session?.client) {
+  if (!bucket || !client) {
     res.status(500).json({ error: 'Internal server error' });
     return;
   }
 
   const command = new DeleteObjectsCommand({
-    Bucket: session.credentials.bucket,
+    Bucket: bucket,
     Delete: {
       Objects: fileKeys.map((key) => ({ Key: key })),
       Quiet: false,
     },
   });
 
-  const response = await session.client.send(command);
+  const response = await client.send(command);
 
   const result: BatchDeleteResponse = {
     deleted: response.Deleted
@@ -212,34 +260,41 @@ router.post('/batch-delete', async (req: AuthenticatedRequest, res: Response): P
   res.json(result);
 });
 
-// POST /api/objects/folder
-router.post('/folder', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// POST /api/objects/:connectionId/:bucket/folder
+router.post('/:connectionId/:bucket/folder', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as FolderRequestBody;
   const { path } = body;
 
-  if (typeof path !== 'string' || path.trim().length === 0) {
-    res.status(400).json({ error: 'Folder path must be a non-empty string' });
+  if (typeof path !== 'string') {
+    res.status(400).json({ error: 'Folder path must be a string' });
     return;
   }
 
-  const session = req.session;
+  const sanitizeResult = sanitizeFolderPath(path);
+  if (!sanitizeResult.valid) {
+    res.status(400).json({ error: sanitizeResult.error });
+    return;
+  }
+
+  const folderPath = sanitizeResult.path;
+
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
 
   // Defensive check (middleware guarantees these exist)
-  if (!session?.credentials?.bucket || !session?.client) {
+  if (!bucket || !client) {
     res.status(500).json({ error: 'Internal server error' });
     return;
   }
 
-  const folderPath = path.endsWith('/') ? path : `${path}/`;
-
   const command = new PutObjectCommand({
-    Bucket: session.credentials.bucket,
+    Bucket: bucket,
     Key: folderPath,
     Body: '',
     ContentType: 'application/x-directory',
   });
 
-  await session.client.send(command);
+  await client.send(command);
   res.json({ success: true, key: folderPath });
 });
 

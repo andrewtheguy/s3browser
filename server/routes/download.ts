@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import path from 'path';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { authMiddleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
+import { s3Middleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 
 // Check for control characters (0x00-0x1f, 0x7f) or backslashes
 function hasUnsafeChars(str: string): boolean {
@@ -47,28 +47,24 @@ function validateKey(key: unknown): { valid: false; error: string } | { valid: t
 
 const router = Router();
 
-// All routes require authentication and a bucket to be selected
-router.use(authMiddleware);
-router.use(requireBucket);
+// All routes use s3Middleware which checks auth and creates S3 client from connectionId
+// Routes: /api/download/:connectionId/:bucket/...
 
-// GET /api/download/url?key=
-router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  // Defensive check: authMiddleware should populate these, but verify to avoid runtime errors
-  const session = req.session;
-  if (!session) {
-    res.status(401).json({ error: 'Not authenticated' });
-    return;
-  }
+// GET /api/download/:connectionId/:bucket/url?key=
+router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
 
-  // Verify session has expected shape with credentials and client
-  if (!session.credentials || !session.client) {
-    res.status(401).json({ error: 'Invalid session state' });
-    return;
-  }
-
-  // Verify bucket is defined in credentials
-  if (!session.credentials.bucket) {
-    res.status(400).json({ error: 'No bucket configured for this session' });
+  // Defensive check: s3Middleware should populate these, but verify to avoid runtime errors
+  if (!bucket || !client) {
+    console.error('Download route missing S3 context:', {
+      route: 'GET /api/download/:connectionId/:bucket/url',
+      method: req.method,
+      path: req.path,
+      hasBucket: !!bucket,
+      hasClient: !!client,
+    });
+    res.status(500).json({ error: 'Internal server error' });
     return;
   }
 
@@ -94,12 +90,12 @@ router.get('/url', async (req: AuthenticatedRequest, res: Response): Promise<voi
   }
 
   const command = new GetObjectCommand({
-    Bucket: session.credentials.bucket,
+    Bucket: bucket,
     Key: keyValidation.validatedKey,
   });
 
   try {
-    const url = await getSignedUrl(session.client, command, { expiresIn: ttl });
+    const url = await getSignedUrl(client, command, { expiresIn: ttl });
     res.json({ url });
   } catch (error) {
     console.error('Failed to generate presigned URL:', error);

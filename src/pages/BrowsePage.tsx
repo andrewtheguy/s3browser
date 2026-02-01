@@ -29,7 +29,7 @@ export function BrowsePage() {
     [connectionId, bucket]
   );
 
-  const doSelectBucket = useCallback(async (bucketName: string) => {
+  const doSelectBucket = useCallback((bucketName: string) => {
     if (selectingRef.current) return;
     selectingRef.current = true;
     setIsSelectingBucket(true);
@@ -42,7 +42,7 @@ export function BrowsePage() {
     }
 
     try {
-      const success = await selectBucket(bucketName);
+      const success = selectBucket(bucketName);
       if (!success) {
         setError(`Failed to access bucket: ${bucketName}`);
         timeoutIdRef.current = setTimeout(() => void navigate('/', { replace: true }), 2000);
