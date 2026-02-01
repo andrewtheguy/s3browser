@@ -80,6 +80,98 @@ export function Toolbar({
     }
   };
 
+  const refreshAction = (
+    <Tooltip title="Refresh">
+      <IconButton onClick={refresh} disabled={isLoading}>
+        <RefreshIcon />
+      </IconButton>
+    </Tooltip>
+  );
+
+  const selectAction = onToggleSelection ? (
+    <Tooltip title={selectionMode ? 'Cancel selection' : 'Select items'}>
+      <Button
+        variant={selectionMode ? 'contained' : 'outlined'}
+        onClick={onToggleSelection}
+        sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+      >
+        {selectionMode ? 'Cancel' : 'Select'}
+      </Button>
+    </Tooltip>
+  ) : null;
+
+  const batchDeleteAction = selectionMode && selectedCount > 0 && onBatchDelete ? (
+    <Tooltip title={isDeleting ? 'Deleting...' : `Delete ${selectedCount} item(s)`}>
+      <Box component="span" sx={{ display: 'inline-block' }}>
+        <Button
+          variant="outlined"
+          color="error"
+          onClick={onBatchDelete}
+          disabled={isDeleting}
+          sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+        >
+          <DeleteIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+            {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
+          </Box>
+        </Button>
+      </Box>
+    </Tooltip>
+  ) : null;
+
+  const newFolderAction = (
+    <Tooltip title="New Folder">
+      <Button
+        variant="outlined"
+        onClick={onCreateFolderClick}
+        sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+      >
+        <CreateNewFolderIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+          New Folder
+        </Box>
+      </Button>
+    </Tooltip>
+  );
+
+  const uploadAction = (
+    <Tooltip title="Upload">
+      <Button
+        variant="contained"
+        onClick={onUploadClick}
+        sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+      >
+        <CloudUploadIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+          Upload
+        </Box>
+      </Button>
+    </Tooltip>
+  );
+
+  const manageConnectionsAction = (
+    <Tooltip title="Manage Connections">
+      <Button
+        variant="outlined"
+        onClick={handleManageConnections}
+        sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+      >
+        <SettingsIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+          Manage Connections
+        </Box>
+      </Button>
+    </Tooltip>
+  );
+
+  const signOutAction = (
+    <Tooltip title="Sign Out">
+      <IconButton onClick={handleDisconnect} color="error">
+        <LogoutIcon />
+      </IconButton>
+    </Tooltip>
+  );
+
   return (
     <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
       <Box
@@ -87,7 +179,7 @@ export function Toolbar({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          mb: 2,
+          mb: { xs: 1, sm: 2 },
         }}
       >
         <Tooltip title="Click to change bucket">
@@ -100,82 +192,20 @@ export function Toolbar({
           />
         </Tooltip>
 
-        <Box sx={{ display: 'flex', gap: { xs: 0.5, sm: 1 } }}>
-          <Tooltip title="Refresh">
-            <IconButton onClick={refresh} disabled={isLoading}>
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-          {onToggleSelection && (
-            <Tooltip title={selectionMode ? 'Cancel selection' : 'Select items'}>
-              <Button
-                variant={selectionMode ? 'contained' : 'outlined'}
-                onClick={onToggleSelection}
-                sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-              >
-                {selectionMode ? 'Cancel' : 'Select'}
-              </Button>
-            </Tooltip>
-          )}
-          {selectionMode && selectedCount > 0 && onBatchDelete && (
-            <Tooltip title={isDeleting ? 'Deleting...' : `Delete ${selectedCount} item(s)`}>
-              <Box component="span" sx={{ display: 'inline-block' }}>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={onBatchDelete}
-                  disabled={isDeleting}
-                  sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-                >
-                  <DeleteIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                    {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
-                  </Box>
-                </Button>
-              </Box>
-            </Tooltip>
-          )}
-          <Tooltip title="New Folder">
-            <Button
-              variant="outlined"
-              onClick={onCreateFolderClick}
-              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-            >
-              <CreateNewFolderIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                New Folder
-              </Box>
-            </Button>
-          </Tooltip>
-          <Tooltip title="Upload">
-            <Button
-              variant="contained"
-              onClick={onUploadClick}
-              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-            >
-              <CloudUploadIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                Upload
-              </Box>
-            </Button>
-          </Tooltip>
-          <Tooltip title="Manage Connections">
-            <Button
-              variant="outlined"
-              onClick={handleManageConnections}
-              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-            >
-              <SettingsIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                Manage Connections
-              </Box>
-            </Button>
-          </Tooltip>
-          <Tooltip title="Sign Out">
-            <IconButton onClick={handleDisconnect} color="error">
-              <LogoutIcon />
-            </IconButton>
-          </Tooltip>
+        <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5 }}>
+          {refreshAction}
+          {manageConnectionsAction}
+          {signOutAction}
+        </Box>
+
+        <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 1 }}>
+          {refreshAction}
+          {selectAction}
+          {batchDeleteAction}
+          {newFolderAction}
+          {uploadAction}
+          {manageConnectionsAction}
+          {signOutAction}
         </Box>
       </Box>
 

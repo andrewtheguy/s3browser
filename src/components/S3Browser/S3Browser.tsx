@@ -11,6 +11,9 @@ import {
   TextField,
   Button,
 } from '@mui/material';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Toolbar } from '../Toolbar';
 import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
@@ -370,25 +373,76 @@ export function S3Browser() {
           selectionMode={selectionMode}
           onToggleSelection={handleToggleSelection}
         />
-        <Box
-          sx={{
-            flexGrow: 1,
-            overflowY: 'scroll',
-            overflowX: 'hidden',
-            scrollbarGutter: 'stable',
-          }}
-        >
-          <FileList
-            onDeleteRequest={handleDeleteRequest}
-            onCopyUrl={handleCopyUrl}
-            onPreview={handlePreview}
-            selectedKeys={selectedKeys}
-            onSelectItem={handleSelectItem}
-            onSelectAll={handleSelectAll}
-            allowFolderSelect={allowRecursiveDelete}
-            allowRecursiveDelete={allowRecursiveDelete}
-            selectionMode={selectionMode}
-          />
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <Box
+            sx={{
+              flexGrow: 1,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              scrollbarGutter: 'stable',
+              minHeight: 0,
+            }}
+          >
+            <FileList
+              onDeleteRequest={handleDeleteRequest}
+              onCopyUrl={handleCopyUrl}
+              onPreview={handlePreview}
+              selectedKeys={selectedKeys}
+              onSelectItem={handleSelectItem}
+              onSelectAll={handleSelectAll}
+              allowFolderSelect={allowRecursiveDelete}
+              allowRecursiveDelete={allowRecursiveDelete}
+              selectionMode={selectionMode}
+            />
+          </Box>
+          <Box
+            sx={{
+              display: { xs: 'flex', sm: 'none' },
+              flexWrap: 'wrap',
+              gap: 1,
+              justifyContent: 'flex-start',
+              p: 1,
+              borderTop: 1,
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+            }}
+          >
+            <Button
+              variant={selectionMode ? 'contained' : 'outlined'}
+              onClick={handleToggleSelection}
+              sx={{ minWidth: 'auto' }}
+            >
+              {selectionMode ? 'Cancel' : 'Select'}
+            </Button>
+            {selectionMode && selectedKeys.size > 0 && (
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={handleBatchDeleteRequest}
+                disabled={isDeleting}
+                sx={{ minWidth: 'auto' }}
+              >
+                <DeleteIcon sx={{ mr: 0.5 }} />
+                {isDeleting ? 'Deleting...' : `Delete (${selectedKeys.size})`}
+              </Button>
+            )}
+            <Button
+              variant="outlined"
+              onClick={handleCreateFolderClick}
+              sx={{ minWidth: 'auto' }}
+            >
+              <CreateNewFolderIcon sx={{ mr: 0.5 }} />
+              New Folder
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleUploadClick}
+              sx={{ minWidth: 'auto' }}
+            >
+              <CloudUploadIcon sx={{ mr: 0.5 }} />
+              Upload
+            </Button>
+          </Box>
         </Box>
       </Paper>
 
