@@ -477,16 +477,16 @@ export function S3Browser() {
         const executeOp = copyMoveMode === 'copy' ? copyMany : moveMany;
         const result = await executeOp(copyMovePlan.operations);
 
-        setCopyMoveProgress({ completed: result.copied.length, total: copyMovePlan.operations.length });
+        setCopyMoveProgress({ completed: result.successful.length, total: copyMovePlan.operations.length });
 
         if (result.errors.length > 0) {
           showSnackbar(
-            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.copied.length} objects, ${result.errors.length} failed`,
+            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.successful.length} objects, ${result.errors.length} failed`,
             'warning'
           );
         } else {
           showSnackbar(
-            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.copied.length} objects successfully`,
+            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.successful.length} objects successfully`,
             'success'
           );
         }

@@ -88,7 +88,7 @@ export function useCopyMove() {
       signal?: AbortSignal
     ): Promise<BatchCopyMoveResponse> => {
       if (operations.length === 0) {
-        return { copied: [], errors: [] };
+        return { successful: [], errors: [] };
       }
 
       if (!isConnected || !activeConnectionId || !bucket) {
@@ -98,7 +98,7 @@ export function useCopyMove() {
       setIsCopying(true);
       setError(null);
 
-      const copied: string[] = [];
+      const successful: string[] = [];
       const errors: Array<{ sourceKey: string; message: string }> = [];
       let currentBatch: CopyMoveOperation[] = [];
 
@@ -108,12 +108,12 @@ export function useCopyMove() {
           const batch = operations.slice(i, i + MAX_BATCH_SIZE);
           currentBatch = batch;
           const result = await copyObjects(activeConnectionId, bucket, batch, signal);
-          copied.push(...result.copied);
+          successful.push(...result.successful);
           errors.push(...result.errors);
           currentBatch = [];
         }
 
-        return { copied, errors };
+        return { successful, errors };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Batch copy failed';
         setError(message);
@@ -125,7 +125,7 @@ export function useCopyMove() {
             }))
           );
         }
-        return { copied, errors };
+        return { successful, errors };
       } finally {
         setIsCopying(false);
       }
@@ -139,7 +139,7 @@ export function useCopyMove() {
       signal?: AbortSignal
     ): Promise<BatchCopyMoveResponse> => {
       if (operations.length === 0) {
-        return { copied: [], errors: [] };
+        return { successful: [], errors: [] };
       }
 
       if (!isConnected || !activeConnectionId || !bucket) {
@@ -149,7 +149,7 @@ export function useCopyMove() {
       setIsMoving(true);
       setError(null);
 
-      const copied: string[] = [];
+      const successful: string[] = [];
       const errors: Array<{ sourceKey: string; message: string }> = [];
       let currentBatch: CopyMoveOperation[] = [];
 
@@ -159,12 +159,12 @@ export function useCopyMove() {
           const batch = operations.slice(i, i + MAX_BATCH_SIZE);
           currentBatch = batch;
           const result = await moveObjects(activeConnectionId, bucket, batch, signal);
-          copied.push(...result.copied);
+          successful.push(...result.successful);
           errors.push(...result.errors);
           currentBatch = [];
         }
 
-        return { copied, errors };
+        return { successful, errors };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Batch move failed';
         setError(message);
@@ -176,7 +176,7 @@ export function useCopyMove() {
             }))
           );
         }
-        return { copied, errors };
+        return { successful, errors };
       } finally {
         setIsMoving(false);
       }

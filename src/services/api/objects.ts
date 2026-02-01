@@ -88,8 +88,8 @@ export interface CopyMoveOperation {
 }
 
 export interface BatchCopyMoveResponse {
-  copied: string[];
-  errors: Array<{ sourceKey: string; message: string }>;
+  successful: string[];
+  errors: Array<{ sourceKey: string; message: string; destinationKey?: string }>;
 }
 
 export async function copyObject(

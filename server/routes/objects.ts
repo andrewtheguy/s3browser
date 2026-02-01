@@ -37,9 +37,9 @@ interface BatchCopyRequestBody {
   operations?: Array<{ sourceKey: string; destinationKey: string }>;
 }
 
-interface BatchCopyResponse {
-  copied: string[];
-  errors: Array<{ sourceKey: string; message: string }>;
+interface BatchCopyMoveResponse {
+  successful: string[];
+  errors: Array<{ sourceKey: string; message: string; destinationKey?: string }>;
 }
 
 interface S3Object {
@@ -512,12 +512,12 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
     return;
   }
 
-  const result: BatchCopyResponse = { copied: [], errors: [] };
+  const result: BatchCopyMoveResponse = { successful: [], errors: [] };
 
   for (const op of operations) {
     try {
       await copyObject(client, bucket, op.sourceKey, op.destinationKey);
-      result.copied.push(op.sourceKey);
+      result.successful.push(op.sourceKey);
     } catch (err) {
       result.errors.push({
         sourceKey: op.sourceKey,
@@ -650,23 +650,35 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
     return;
   }
 
-  const result: BatchCopyResponse = { copied: [], errors: [] };
+  const result: BatchCopyMoveResponse = { successful: [], errors: [] };
 
   for (const op of operations) {
     try {
       // Copy first
       await copyObject(client, bucket, op.sourceKey, op.destinationKey);
-      // Delete source only if copy succeeded
-      const deleteCommand = new DeleteObjectCommand({
-        Bucket: bucket,
-        Key: op.sourceKey,
-      });
-      await client.send(deleteCommand);
-      result.copied.push(op.sourceKey);
+
+      // Attempt to delete source - separate try/catch for better error reporting
+      try {
+        const deleteCommand = new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: op.sourceKey,
+        });
+        await client.send(deleteCommand);
+        // Only mark as successful when both copy and delete succeed
+        result.successful.push(op.sourceKey);
+      } catch (deleteErr) {
+        // Copy succeeded but delete failed - include destinationKey for remediation
+        result.errors.push({
+          sourceKey: op.sourceKey,
+          destinationKey: op.destinationKey,
+          message: `Delete failed after successful copy; destination created: ${deleteErr instanceof Error ? deleteErr.message : String(deleteErr)}`,
+        });
+      }
     } catch (err) {
+      // Copy failed
       result.errors.push({
         sourceKey: op.sourceKey,
-        message: err instanceof Error ? err.message : 'Move failed',
+        message: err instanceof Error ? err.message : 'Copy failed',
       });
     }
   }
