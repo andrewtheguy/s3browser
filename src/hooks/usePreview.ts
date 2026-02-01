@@ -5,6 +5,9 @@ import { getPresignedUrl } from '../services/api';
 import { isPreviewableFile, getMimeType, type EmbedType } from '../utils/previewUtils';
 import type { S3Object } from '../types';
 
+// TTL for preview signed URLs (1 hour)
+const PREVIEW_TTL_SECONDS = 3600;
+
 interface PreviewState {
   isOpen: boolean;
   isLoading: boolean;
@@ -90,7 +93,7 @@ export function usePreview() {
           activeConnectionId,
           bucket,
           item.key,
-          3600, // 1 hour TTL for preview
+          PREVIEW_TTL_SECONDS,
           'inline',
           mimeType,
           abortController.signal

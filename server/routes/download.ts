@@ -15,6 +15,37 @@ function hasUnsafeChars(str: string): boolean {
   return false;
 }
 
+// Validate contentType for ResponseContentType header
+// Returns the contentType if valid, undefined otherwise
+function validateContentType(contentType: string | undefined): string | undefined {
+  if (!contentType || typeof contentType !== 'string') {
+    return undefined;
+  }
+
+  // Check for control characters
+  for (let i = 0; i < contentType.length; i++) {
+    const code = contentType.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      return undefined;
+    }
+  }
+
+  // Basic MIME type format validation: type/subtype with optional parameters
+  // Allow: letters, digits, hyphens, dots, plus signs, slashes, semicolons, equals, spaces
+  // Reject anything that doesn't match basic MIME structure
+  const mimePattern = /^[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&\-^_.+]*(?:;\s*[a-zA-Z0-9\-_.]+=[a-zA-Z0-9\-_.]+)*$/;
+  if (!mimePattern.test(contentType)) {
+    return undefined;
+  }
+
+  // Reject excessively long values
+  if (contentType.length > 256) {
+    return undefined;
+  }
+
+  return contentType;
+}
+
 // Sanitize filename for Content-Disposition header
 function sanitizeFilename(filename: string): string {
   // Remove control characters, double quotes, and semicolons; normalize whitespace
@@ -113,8 +144,8 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
   const rawFilename = keyValidation.validatedKey.split('/').pop() || 'download';
   const filename = sanitizeFilename(rawFilename);
 
-  // Parse contentType parameter for overriding S3 Content-Type
-  const contentType = req.query.contentType as string | undefined;
+  // Parse and validate contentType parameter for overriding S3 Content-Type
+  const contentType = validateContentType(req.query.contentType as string | undefined);
 
   const command = new GetObjectCommand({
     Bucket: bucket,

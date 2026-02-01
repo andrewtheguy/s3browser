@@ -54,13 +54,17 @@ export async function getPresignedUrl(
 
   const sanitizedTtl = Math.floor(ttl);
 
-  let url = `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`;
+  const basePath = `/download/${connectionId}/${encodeURIComponent(bucket)}/url`;
+  const params = new URLSearchParams();
+  params.append('key', key);
+  params.append('ttl', String(sanitizedTtl));
   if (disposition) {
-    url += `&disposition=${disposition}`;
+    params.append('disposition', disposition);
   }
   if (contentType) {
-    url += `&contentType=${encodeURIComponent(contentType)}`;
+    params.append('contentType', contentType);
   }
+  const url = `${basePath}?${params.toString()}`;
 
   const response = await apiGet<DownloadUrlResponse>(url, signal);
 
