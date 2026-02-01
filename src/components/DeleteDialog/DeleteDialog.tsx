@@ -129,7 +129,7 @@ export function DeleteDialog({
         )}
         {isBatch && !isResolving && !resolutionError && previewKeys.length > 0 && (
           <Box sx={{ mt: 2 }}>
-            <List dense sx={{ maxHeight: 220, overflow: 'hidden' }}>
+            <List dense sx={{ maxHeight: 320, overflow: 'auto' }}>
               {previewKeys.map((key) => (
                 <ListItem key={key} sx={{ py: 0 }}>
                   <ListItemText

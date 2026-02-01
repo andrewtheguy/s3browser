@@ -27,6 +27,7 @@ interface FileListItemProps {
   isSelected?: boolean;
   onSelect?: (key: string, checked: boolean) => void;
   allowFolderSelect?: boolean;
+  allowRecursiveDelete?: boolean;
 }
 
 const iconMap: Record<FileIconType, React.ElementType> = {
@@ -67,6 +68,7 @@ export function FileListItem({
   isSelected = false,
   onSelect,
   allowFolderSelect = false,
+  allowRecursiveDelete = false,
 }: FileListItemProps) {
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
@@ -168,7 +170,14 @@ export function FileListItem({
               </Tooltip>
             </>
           )}
-          <Tooltip title={item.isFolder ? "Delete folder (must be empty)" : "Delete"} placement="top-start">
+          <Tooltip
+            title={
+              item.isFolder
+                ? (allowRecursiveDelete ? 'Delete folder and contents' : 'Delete folder (must be empty)')
+                : 'Delete'
+            }
+            placement="top-start"
+          >
             <IconButton size="small" onClick={handleDelete} color="error">
               <DeleteIcon fontSize="small" />
             </IconButton>

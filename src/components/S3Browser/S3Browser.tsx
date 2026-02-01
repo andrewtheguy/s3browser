@@ -26,7 +26,7 @@ interface SnackbarState {
   severity: 'success' | 'error' | 'info' | 'warning';
 }
 
-const DELETE_PREVIEW_LIMIT = 6;
+const DELETE_PREVIEW_LIMIT = 50;
 const AWS_ENDPOINT_SUFFIX = 'amazonaws.com';
 
 function getEndpointHost(endpoint?: string | null): string | null {
@@ -141,12 +141,13 @@ export function S3Browser() {
   }, [objects, allowRecursiveDelete]);
 
   const handleDeleteRequest = useCallback((item: S3Object) => {
-    setDeleteMode('single');
+    const shouldDeleteRecursively = item.isFolder && allowRecursiveDelete;
+    setDeleteMode(shouldDeleteRecursively ? 'batch' : 'single');
     setItemsToDelete([item]);
     setDeletePlan(null);
     setDeleteResolveError(null);
     setDeleteDialogOpen(true);
-  }, []);
+  }, [allowRecursiveDelete]);
 
   const handleBatchDeleteRequest = useCallback(() => {
     const items = objects.filter((item) => selectedKeys.has(item.key));
@@ -356,6 +357,7 @@ export function S3Browser() {
             onSelectItem={handleSelectItem}
             onSelectAll={handleSelectAll}
             allowFolderSelect={allowRecursiveDelete}
+            allowRecursiveDelete={allowRecursiveDelete}
           />
         </Box>
       </Paper>
