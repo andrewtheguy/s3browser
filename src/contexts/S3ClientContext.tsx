@@ -187,10 +187,13 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const selectBucket = useCallback((bucket: string): boolean => {
+    if (!state.isConnected || !state.activeConnectionId) {
+      return false;
+    }
     // In stateless mode, just update local state - validation happens on first S3 request
     dispatch({ type: 'BUCKET_SELECTED', bucket });
     return true;
-  }, []);
+  }, [state.isConnected, state.activeConnectionId]);
 
   // Check session status on mount
   useEffect(() => {

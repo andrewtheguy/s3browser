@@ -184,9 +184,11 @@ All data is stored in `~/.s3browser/`:
 - Configuration files should be secured with 0600 permissions
 
 **Data transmission**:
-- S3 secret keys are transmitted to authenticated clients to enable saved connection form pre-filling
+- S3 secret keys are **never** transmitted from server to client
+- Secret keys are only sent from client to server when creating a new connection or changing an existing key
+- When using a saved connection, the secret key does not need to be re-entered (stored securely on server)
+- To change a saved connection's secret key, enter a new value in the form
 - All S3 operations (list, upload, download, delete) are performed server-side
-- S3 credentials are never exposed to unauthenticated requests
 
 **Not recommended for**:
 - Public internet deployment

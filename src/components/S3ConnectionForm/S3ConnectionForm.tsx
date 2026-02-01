@@ -147,7 +147,7 @@ export function S3ConnectionForm({
         accessKeyId: connection.accessKeyId,
         bucket: connection.bucket || '',
         region: connection.region || '',
-        secretAccessKey: connection.secretAccessKey,
+        secretAccessKey: '', // Secret key must be re-entered for security
       });
       setAutoDetectRegion(connection.autoDetectRegion);
       setEndpointTouched(false);
@@ -180,11 +180,13 @@ export function S3ConnectionForm({
     }
   };
 
+  // Secret key is optional when using an existing saved connection
+  const isExistingConnection = selectedConnectionName !== null;
   const isFormValid =
     (autoDetectRegion || formData.bucket || formData.region) &&
     formData.connectionName.trim() &&
     formData.accessKeyId &&
-    formData.secretAccessKey &&
+    (isExistingConnection || formData.secretAccessKey) &&
     endpointValid &&
     nameValid;
 
@@ -328,8 +330,10 @@ export function S3ConnectionForm({
           value={formData.secretAccessKey}
           onChange={handleChange('secretAccessKey')}
           margin="normal"
-          required
+          required={!isExistingConnection}
           autoComplete="off"
+          placeholder={isExistingConnection ? 'Leave empty to keep existing' : undefined}
+          helperText={isExistingConnection ? 'Leave empty to use saved key, or enter new key to update' : undefined}
         />
 
         <TextField

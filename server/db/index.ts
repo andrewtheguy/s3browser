@@ -192,12 +192,34 @@ export function saveConnection(
   name: string,
   endpoint: string,
   accessKeyId: string,
-  secretAccessKey: string,
+  secretAccessKey: string | null,
   bucket: string | null,
   region: string | null,
   autoDetectRegion: boolean
 ): DbS3Connection {
   const database = getDb();
+
+  // If no secret key provided, check if connection exists and keep existing key
+  if (!secretAccessKey) {
+    const existing = getConnectionByName(name);
+    if (!existing) {
+      throw new Error('Secret access key is required for new connections');
+    }
+    // Update without changing the secret key
+    const stmt = database.prepare(`
+      UPDATE s3_connections SET
+        endpoint = ?,
+        access_key_id = ?,
+        bucket = ?,
+        region = ?,
+        auto_detect_region = ?,
+        last_used_at = unixepoch()
+      WHERE name = ?
+      RETURNING *
+    `);
+    return stmt.get(endpoint, accessKeyId, bucket, region, autoDetectRegion ? 1 : 0, name) as DbS3Connection;
+  }
+
   const encryptedSecretAccessKey = encrypt(secretAccessKey);
 
   const stmt = database.prepare(`

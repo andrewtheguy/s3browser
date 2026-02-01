@@ -45,7 +45,7 @@ export interface ServerSavedConnection {
   name: string;
   endpoint: string;
   accessKeyId: string;
-  secretAccessKey: string;
+  // Note: secretAccessKey is never returned from server for security
   bucket: string | null;
   region: string | null;
   autoDetectRegion: boolean;

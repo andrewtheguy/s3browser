@@ -14,8 +14,9 @@ import {
   getAllConnections,
   saveConnection,
   deleteConnectionById,
-  decryptConnectionSecretKey,
   getConnectionById,
+  getConnectionByName,
+  decryptConnectionSecretKey,
 } from '../db/index.js';
 import { getLoginPassword, timingSafeCompare } from '../db/crypto.js';
 import { createAuthToken, verifyAuthToken, AUTH_COOKIE_OPTIONS } from '../auth/token.js';
@@ -91,19 +92,33 @@ router.get('/status', (req: Request, res: Response): void => {
   res.json({ authenticated: true });
 });
 
-// POST /api/auth/connections - Save a new S3 connection
+// POST /api/auth/connections - Save a new S3 connection or update existing
 router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as S3CredentialsRequestBody;
   const { accessKeyId, secretAccessKey, region, bucket, endpoint, connectionName, autoDetectRegion } = body;
 
-  if (!accessKeyId || !secretAccessKey) {
-    res.status(400).json({ error: 'Missing required credentials' });
+  if (!accessKeyId) {
+    res.status(400).json({ error: 'Access key ID is required' });
     return;
   }
 
   if (!connectionName) {
     res.status(400).json({ error: 'Connection name is required' });
     return;
+  }
+
+  // For existing connections, secret key is optional (use stored key if not provided)
+  // For new connections, secret key is required
+  const existingConnection = getConnectionByName(connectionName.trim());
+  let effectiveSecretKey = secretAccessKey;
+
+  if (!secretAccessKey) {
+    if (!existingConnection) {
+      res.status(400).json({ error: 'Secret access key is required for new connections' });
+      return;
+    }
+    // Use existing secret key for validation
+    effectiveSecretKey = decryptConnectionSecretKey(existingConnection);
   }
 
   // If bucket is provided, use existing flow with region detection
@@ -114,7 +129,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     // Auto-detect region from bucket if not provided
     if (!detectedRegion) {
       try {
-        detectedRegion = await getBucketRegion(accessKeyId, secretAccessKey, bucket, endpoint);
+        detectedRegion = await getBucketRegion(accessKeyId, effectiveSecretKey, bucket, endpoint);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to detect region';
         res.status(400).json({ error: message });
@@ -128,7 +143,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
 
   const credentials: S3Credentials = {
     accessKeyId,
-    secretAccessKey,
+    secretAccessKey: effectiveSecretKey,
     region: detectedRegion,
     bucket: bucket || undefined,
     endpoint: endpoint || undefined,
@@ -140,7 +155,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     if (bucket) {
       validation = await validateCredentials(credentials);
     } else {
-      validation = await validateCredentialsOnly(accessKeyId, secretAccessKey, detectedRegion, endpoint);
+      validation = await validateCredentialsOnly(accessKeyId, effectiveSecretKey, detectedRegion, endpoint);
     }
   } catch (error) {
     console.error('Credential validation failed:', error);
@@ -153,14 +168,14 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     return;
   }
 
-  // Save the connection
+  // Save the connection (secretAccessKey is null if not provided - keeps existing)
   let savedConnection;
   try {
     savedConnection = saveConnection(
       connectionName.trim(),
       endpoint || 'https://s3.amazonaws.com',
       accessKeyId,
-      secretAccessKey,
+      secretAccessKey || null,
       bucket || null,
       detectedRegion,
       autoDetectRegion !== false
@@ -181,25 +196,26 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
 });
 
 // GET /api/auth/connections - List saved S3 connections
+// Note: secretAccessKey is never returned to client for security
 router.get('/connections', loginMiddleware, (_req: AuthenticatedRequest, res: Response): void => {
   const connections = getAllConnections();
 
-  const decryptedConnections = connections.map(conn => ({
+  const sanitizedConnections = connections.map(conn => ({
     id: conn.id,
     name: conn.name,
     endpoint: conn.endpoint,
     accessKeyId: conn.access_key_id,
-    secretAccessKey: decryptConnectionSecretKey(conn),
     bucket: conn.bucket,
     region: conn.region,
     autoDetectRegion: conn.auto_detect_region === 1,
     lastUsedAt: conn.last_used_at * 1000, // Convert to ms
   }));
 
-  res.json({ connections: decryptedConnections });
+  res.json({ connections: sanitizedConnections });
 });
 
 // GET /api/auth/connections/:id - Get a specific connection by ID
+// Note: secretAccessKey is never returned to client for security
 router.get('/connections/:id', loginMiddleware, (req: AuthenticatedRequest, res: Response): void => {
   const connectionId = parseInt(req.params.id as string, 10);
 
@@ -219,7 +235,6 @@ router.get('/connections/:id', loginMiddleware, (req: AuthenticatedRequest, res:
     name: connection.name,
     endpoint: connection.endpoint,
     accessKeyId: connection.access_key_id,
-    secretAccessKey: decryptConnectionSecretKey(connection),
     bucket: connection.bucket,
     region: connection.region,
     autoDetectRegion: connection.auto_detect_region === 1,
