@@ -39,6 +39,17 @@ interface SelectBucketRequestBody {
   bucket?: string;
 }
 
+interface DbConnectionRow {
+  id: number;
+  name: string;
+  endpoint: string;
+  access_key_id: string;
+  bucket: string | null;
+  region: string;
+  auto_detect_region: number;
+  last_used_at: number;
+}
+
 const router = Router();
 
 // POST /api/auth/login - Authenticate with password
@@ -200,7 +211,8 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
 // GET /api/auth/connections - List saved S3 connections
 // Note: secretAccessKey is never returned to client for security
 router.get('/connections', loginMiddleware, (_req: AuthenticatedRequest, res: Response): void => {
-  const connections = getAllConnections();
+  const fetchAllConnections = getAllConnections as () => DbConnectionRow[];
+  const connections = fetchAllConnections();
 
   const sanitizedConnections = connections.map(conn => ({
     id: conn.id,
