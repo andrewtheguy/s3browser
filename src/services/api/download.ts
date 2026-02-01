@@ -4,9 +4,9 @@ interface DownloadUrlResponse {
   url: string;
 }
 
-export async function getDownloadUrl(key: string): Promise<string> {
+export async function getDownloadUrl(connectionId: number, bucket: string, key: string): Promise<string> {
   const response = await apiGet<DownloadUrlResponse>(
-    `/download/url?key=${encodeURIComponent(key)}`
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}`
   );
   if (!response) {
     throw new Error('Failed to get download URL: empty response');
@@ -27,12 +27,12 @@ export async function getDownloadUrl(key: string): Promise<string> {
   return url;
 }
 
-export async function getPresignedUrl(key: string, ttl: number = 86400): Promise<string> {
+export async function getPresignedUrl(connectionId: number, bucket: string, key: string, ttl: number = 86400): Promise<string> {
   // Validate ttl is a finite positive integer, fallback to default if invalid
   const sanitizedTtl = Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : 86400;
 
   const response = await apiGet<DownloadUrlResponse>(
-    `/download/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`
   );
   if (!response) {
     throw new Error('Failed to get presigned URL: empty response');
@@ -53,8 +53,8 @@ export async function getPresignedUrl(key: string, ttl: number = 86400): Promise
   return url;
 }
 
-export async function downloadFile(key: string): Promise<void> {
-  const url = await getDownloadUrl(key);
+export async function downloadFile(connectionId: number, bucket: string, key: string): Promise<void> {
+  const url = await getDownloadUrl(connectionId, bucket, key);
 
   // Extract filename from key
   const filename = key.split('/').pop() || 'download';

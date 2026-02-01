@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { createFolder } from '../services/api';
 import {
@@ -19,7 +20,9 @@ import { UPLOAD_CONFIG } from '../config/upload';
 import type { UploadProgress } from '../types';
 
 export function useUpload() {
-  const { isConnected } = useS3ClientContext();
+  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
+  const { bucket: urlBucket } = useParams<{ bucket: string }>();
+  const bucket = urlBucket || credentials?.bucket;
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [pendingResumable, setPendingResumable] = useState<PersistedUpload[]>([]);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -90,10 +93,15 @@ export function useUpload() {
 
   const uploadSingleFileWithProxy = useCallback(
     async (uploadItem: UploadProgress, abortController: AbortController) => {
+      if (!activeConnectionId || !bucket) {
+        throw new Error('Not connected to S3');
+      }
       const { file, key } = uploadItem;
 
       // Upload through server proxy
       await uploadSingleFile(
+        activeConnectionId,
+        bucket,
         key,
         file,
         (loaded, total) => {
@@ -106,7 +114,7 @@ export function useUpload() {
         abortController.signal
       );
     },
-    [updateUpload]
+    [updateUpload, activeConnectionId, bucket]
   );
 
   const uploadMultipartFile = useCallback(
@@ -117,6 +125,9 @@ export function useUpload() {
       existingParts?: CompletedPart[],
       persistenceId?: string
     ) => {
+      if (!activeConnectionId || !bucket) {
+        throw new Error('Not connected to S3');
+      }
       const { file, key } = uploadItem;
       const totalParts = Math.ceil(file.size / UPLOAD_CONFIG.PART_SIZE);
 
@@ -153,6 +164,8 @@ export function useUpload() {
       const completedPartsAccumulator: CompletedPart[] = existingParts ? [...existingParts] : [];
 
       const result = await uploadFileMultipart({
+        connectionId: activeConnectionId,
+        bucket,
         file,
         key,
         existingUploadId,
@@ -215,12 +228,12 @@ export function useUpload() {
 
       return result;
     },
-    [updateUpload]
+    [updateUpload, activeConnectionId, bucket]
   );
 
   const upload = useCallback(
     async (files: File[], prefix: string = ''): Promise<void> => {
-      if (!isConnected) {
+      if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -318,7 +331,7 @@ export function useUpload() {
       // Refresh pending resumable list
       void refreshPendingUploads();
     },
-    [isConnected, updateUpload, uploadSingleFileWithProxy, uploadMultipartFile, refreshPendingUploads]
+    [isConnected, activeConnectionId, bucket, updateUpload, uploadSingleFileWithProxy, uploadMultipartFile, refreshPendingUploads]
   );
 
   const cancelUpload = useCallback(async (id: string) => {
@@ -330,10 +343,10 @@ export function useUpload() {
 
     // Find the upload to get details for cleanup (read from ref to avoid stale closure)
     const uploadItem = uploadsRef.current.find((u) => u.id === id);
-    if (uploadItem?.uploadId && uploadItem.isMultipart) {
+    if (uploadItem?.uploadId && uploadItem.isMultipart && activeConnectionId && bucket) {
       // Abort the S3 multipart upload
       try {
-        await abortUpload(uploadItem.uploadId, uploadItem.key);
+        await abortUpload(activeConnectionId, bucket, uploadItem.uploadId, uploadItem.key);
       } catch (err) {
         console.error('Failed to abort S3 upload:', err);
       }
@@ -348,7 +361,7 @@ export function useUpload() {
 
     // Refresh pending resumable list
     void refreshPendingUploads();
-  }, [refreshPendingUploads]);
+  }, [refreshPendingUploads, activeConnectionId, bucket]);
 
   const pauseUpload = useCallback((id: string) => {
     const controller = abortControllersRef.current.get(id);
@@ -487,9 +500,9 @@ export function useUpload() {
   const removePendingResumable = useCallback(async (persistenceId: string) => {
     // Get the persisted upload to abort S3 if needed (read from ref to avoid stale closure)
     const pending = pendingResumableRef.current.find((p) => p.id === persistenceId);
-    if (pending?.uploadId) {
+    if (pending?.uploadId && activeConnectionId && bucket) {
       try {
-        await abortUpload(pending.uploadId, pending.key);
+        await abortUpload(activeConnectionId, bucket, pending.uploadId, pending.key);
       } catch (err) {
         console.error('Failed to abort S3 upload:', err);
       }
@@ -497,18 +510,18 @@ export function useUpload() {
 
     await deleteUploadState(persistenceId);
     setPendingResumable((prev) => prev.filter((p) => p.id !== persistenceId));
-  }, []);
+  }, [activeConnectionId, bucket]);
 
   const createNewFolder = useCallback(
     async (folderName: string, prefix: string = ''): Promise<void> => {
-      if (!isConnected) {
+      if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
       const folderPath = prefix + folderName;
-      await createFolder(folderPath);
+      await createFolder(activeConnectionId, bucket, folderPath);
     },
-    [isConnected]
+    [isConnected, activeConnectionId, bucket]
   );
 
   return {

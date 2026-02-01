@@ -1,17 +1,15 @@
 import { apiPost, apiGet, apiDelete } from './client';
 import type { BucketInfo } from '../../types';
 
-export interface UserLoginCredentials {
-  username: string;
+export interface LoginCredentials {
   password: string;
 }
 
-export interface UserLoginResponse {
+export interface LoginResponse {
   success: boolean;
-  username: string;
 }
 
-export interface LoginCredentials {
+export interface S3ConnectionCredentials {
   accessKeyId: string;
   secretAccessKey: string;
   region?: string;
@@ -21,31 +19,23 @@ export interface LoginCredentials {
   autoDetectRegion?: boolean;
 }
 
-export interface LoginResponse {
+export interface SaveConnectionResponse {
   success: boolean;
   connectionId: number;
   region: string;
   bucket: string | null;
-  endpoint?: string;
-  requiresBucketSelection: boolean;
+  endpoint: string | null;
 }
 
 export interface AuthStatus {
   authenticated: boolean;
-  userLoggedIn: boolean;
-  username?: string;
-  activeConnectionId?: number | null;
-  region?: string;
-  bucket?: string | null;
-  endpoint?: string;
-  requiresBucketSelection?: boolean;
 }
 
 export interface BucketsResponse {
   buckets: BucketInfo[];
 }
 
-export interface SelectBucketResponse {
+export interface ValidateBucketResponse {
   success: boolean;
   bucket: string;
 }
@@ -64,15 +54,6 @@ export interface ServerSavedConnection {
 
 export interface ConnectionsResponse {
   connections: ServerSavedConnection[];
-}
-
-
-export async function userLogin(credentials: UserLoginCredentials): Promise<UserLoginResponse> {
-  const response = await apiPost<UserLoginResponse>('/auth/user-login', credentials);
-  if (!response) {
-    throw new Error('Login failed: empty response');
-  }
-  return response;
 }
 
 export async function login(credentials: LoginCredentials): Promise<LoginResponse> {
@@ -95,18 +76,26 @@ export async function getAuthStatus(signal?: AbortSignal): Promise<AuthStatus> {
   return response;
 }
 
-export async function listBuckets(): Promise<BucketInfo[]> {
-  const response = await apiGet<BucketsResponse>('/auth/buckets');
+export async function saveConnection(credentials: S3ConnectionCredentials): Promise<SaveConnectionResponse> {
+  const response = await apiPost<SaveConnectionResponse>('/auth/connections', credentials);
+  if (!response) {
+    throw new Error('Failed to save connection: empty response');
+  }
+  return response;
+}
+
+export async function listBuckets(connectionId: number): Promise<BucketInfo[]> {
+  const response = await apiGet<BucketsResponse>(`/auth/buckets/${connectionId}`);
   if (!response) {
     throw new Error('Failed to list buckets: empty response');
   }
   return response.buckets;
 }
 
-export async function selectBucket(bucket: string): Promise<SelectBucketResponse> {
-  const response = await apiPost<SelectBucketResponse>('/auth/select-bucket', { bucket });
+export async function validateBucket(connectionId: number, bucket: string): Promise<ValidateBucketResponse> {
+  const response = await apiPost<ValidateBucketResponse>(`/auth/validate-bucket/${connectionId}`, { bucket });
   if (!response) {
-    throw new Error('Failed to select bucket: empty response');
+    throw new Error('Failed to validate bucket: empty response');
   }
   return response;
 }
@@ -127,24 +116,6 @@ export async function getConnection(connectionId: number): Promise<ServerSavedCo
   return response;
 }
 
-export interface ActivateConnectionResponse {
-  success: boolean;
-  connectionId: number;
-  region: string;
-  bucket: string | null;
-  endpoint: string | null;
-  requiresBucketSelection: boolean;
-}
-
-export async function activateConnection(connectionId: number, bucket?: string): Promise<ActivateConnectionResponse> {
-  const response = await apiPost<ActivateConnectionResponse>(`/auth/activate-connection/${connectionId}`, { bucket });
-  if (!response) {
-    throw new Error('Failed to activate connection: empty response');
-  }
-  return response;
-}
-
 export async function deleteConnectionFromServer(connectionId: number): Promise<void> {
   await apiDelete(`/auth/connections/${connectionId}`);
 }
-

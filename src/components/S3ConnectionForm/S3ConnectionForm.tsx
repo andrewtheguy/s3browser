@@ -23,7 +23,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useS3Client, useConnectionHistory } from '../../hooks';
 import { buildBrowseUrl, buildSelectBucketUrl } from '../../utils/urlEncoding';
-import type { LoginCredentials } from '../../types';
+import type { S3ConnectionCredentials } from '../../types';
 
 function isValidUrl(value: string): boolean {
   if (!value) return true;
@@ -44,7 +44,6 @@ function isValidConnectionName(value: string): boolean {
 }
 
 interface S3ConnectionFormProps {
-  username: string;
   error: string | null;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
@@ -52,15 +51,14 @@ interface S3ConnectionFormProps {
 }
 
 export function S3ConnectionForm({
-  username,
   error,
   isLoading,
   setIsLoading,
   onLogout,
 }: S3ConnectionFormProps) {
   const navigate = useNavigate();
-  const { connect, isUserLoggedIn, activeConnectionId, credentials: activeCredentials, isConnected } = useS3Client();
-  const { connections, deleteConnection, isLoading: connectionsLoading } = useConnectionHistory(isUserLoggedIn);
+  const { connect, isLoggedIn, activeConnectionId, credentials: activeCredentials, isConnected } = useS3Client();
+  const { connections, deleteConnection, isLoading: connectionsLoading } = useConnectionHistory(isLoggedIn);
 
   // Check if we can continue browsing (have an active connection)
   const canContinueBrowsing = isConnected && activeConnectionId;
@@ -88,7 +86,7 @@ export function S3ConnectionForm({
     setIsLoading(true);
 
     try {
-      const credentials: LoginCredentials = {
+      const credentials: S3ConnectionCredentials = {
         accessKeyId: formData.accessKeyId,
         secretAccessKey: formData.secretAccessKey,
         bucket: formData.bucket || undefined,
@@ -192,15 +190,11 @@ export function S3ConnectionForm({
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="body2" color="text.secondary">
-          Signed in as <strong>{username}</strong>
-        </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mb: 2 }}>
         <Button
           size="small"
           startIcon={<LogoutIcon />}
           onClick={onLogout}
-          sx={{ ml: 1 }}
         >
           Sign Out
         </Button>

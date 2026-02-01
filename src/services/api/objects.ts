@@ -20,8 +20,14 @@ export interface S3ListResult {
   isTruncated: boolean;
 }
 
-export async function listObjects(prefix: string = '', continuationToken?: string, signal?: AbortSignal): Promise<S3ListResult> {
-  let url = `/objects?prefix=${encodeURIComponent(prefix)}`;
+export async function listObjects(
+  connectionId: number,
+  bucket: string,
+  prefix: string = '',
+  continuationToken?: string,
+  signal?: AbortSignal
+): Promise<S3ListResult> {
+  let url = `/objects/${connectionId}/${encodeURIComponent(bucket)}?prefix=${encodeURIComponent(prefix)}`;
   if (continuationToken) {
     url += `&continuationToken=${encodeURIComponent(continuationToken)}`;
   }
@@ -44,8 +50,8 @@ export async function listObjects(prefix: string = '', continuationToken?: strin
   };
 }
 
-export async function deleteObject(key: string): Promise<void> {
-  await apiDelete(`/objects/${encodeURIComponent(key)}`);
+export async function deleteObject(connectionId: number, bucket: string, key: string): Promise<void> {
+  await apiDelete(`/objects/${connectionId}/${encodeURIComponent(bucket)}/${encodeURIComponent(key)}`);
 }
 
 export interface BatchDeleteResponse {
@@ -53,8 +59,17 @@ export interface BatchDeleteResponse {
   errors: Array<{ key: string; message: string }>;
 }
 
-export async function deleteObjects(keys: string[], signal?: AbortSignal): Promise<BatchDeleteResponse> {
-  const response = await apiPost<BatchDeleteResponse>('/objects/batch-delete', { keys }, signal);
+export async function deleteObjects(
+  connectionId: number,
+  bucket: string,
+  keys: string[],
+  signal?: AbortSignal
+): Promise<BatchDeleteResponse> {
+  const response = await apiPost<BatchDeleteResponse>(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/batch-delete`,
+    { keys },
+    signal
+  );
 
   if (!response) {
     throw new Error('Failed to delete objects: missing response');
@@ -63,6 +78,6 @@ export async function deleteObjects(keys: string[], signal?: AbortSignal): Promi
   return response;
 }
 
-export async function createFolder(path: string): Promise<void> {
-  await apiPost('/objects/folder', { path });
+export async function createFolder(connectionId: number, bucket: string, path: string): Promise<void> {
+  await apiPost(`/objects/${connectionId}/${encodeURIComponent(bucket)}/folder`, { path });
 }

@@ -1,18 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { S3Client, HeadBucketCommand, GetBucketLocationCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
-import crypto from 'crypto';
-import bcrypt from 'bcrypt';
+import { verifyAuthToken } from '../auth/token.js';
 import {
-  getSession as getDbSession,
-  createSession as createDbSession,
-  deleteSession as deleteDbSession,
-  setSessionActiveConnection,
-  setSessionActiveBucket,
-  cleanupExpiredSessions,
-  getUserByUsername,
   getConnectionById,
   updateConnectionLastUsed,
+  decryptConnectionSecretKey,
+  type DbS3Connection,
 } from '../db/index.js';
 
 export interface S3Credentials {
@@ -23,38 +17,9 @@ export interface S3Credentials {
   endpoint?: string;
 }
 
-export interface LoginInput {
-  accessKeyId: string;
-  secretAccessKey: string;
-  region?: string;
-  bucket?: string;
-  endpoint?: string;
-}
-
 export interface BucketInfo {
   name: string;
   creationDate?: string;
-}
-
-export interface SessionData {
-  userId: number;
-  username: string;
-  activeConnectionId: number | null;
-  credentials: S3Credentials | null;
-  client: S3Client | null;
-  createdAt: number;
-}
-
-// Clean up expired sessions periodically
-setInterval(() => {
-  const deleted = cleanupExpiredSessions();
-  if (deleted > 0) {
-    console.log(`Cleaned up ${deleted} expired sessions`);
-  }
-}, 60 * 1000); // Check every minute
-
-export function generateSessionId(): string {
-  return crypto.randomBytes(32).toString('hex');
 }
 
 export function normalizeEndpoint(endpoint?: string): string | undefined {
@@ -63,25 +28,6 @@ export function normalizeEndpoint(endpoint?: string): string | undefined {
     return endpoint;
   }
   return `https://${endpoint}`;
-}
-
-// Verify user credentials and create a session (no S3 credentials yet)
-export async function verifyUserAndCreateSession(
-  username: string,
-  password: string
-): Promise<{ sessionId: string; username: string } | null> {
-  const user = getUserByUsername(username);
-  if (!user) {
-    return null;
-  }
-
-  const passwordValid = await bcrypt.compare(password, user.password_hash);
-  if (!passwordValid) {
-    return null;
-  }
-
-  const sessionId = createDbSession(user.id);
-  return { sessionId, username: user.username };
 }
 
 // Create S3 client from credentials
@@ -101,59 +47,21 @@ function createS3Client(credentials: S3Credentials): S3Client {
   });
 }
 
-// Activate a connection on an existing session
-export function activateConnectionOnSession(
-  sessionId: string,
-  connectionId: number,
-  bucket?: string
-): boolean {
-  const session = getDbSession(sessionId);
-  if (!session) return false;
+// Create S3 client from a database connection
+export function createS3ClientFromConnection(connection: DbS3Connection, bucket?: string): { client: S3Client; credentials: S3Credentials } {
+  const secretAccessKey = decryptConnectionSecretKey(connection);
+  const endpoint = normalizeEndpoint(connection.endpoint);
 
-  setSessionActiveConnection(sessionId, connectionId);
-  if (bucket) {
-    setSessionActiveBucket(sessionId, bucket);
-  }
-  updateConnectionLastUsed(connectionId, session.user_id);
-
-  return true;
-}
-
-export function getSession(sessionId: string): SessionData | undefined {
-  const dbSession = getDbSession(sessionId);
-  if (!dbSession) {
-    return undefined;
-  }
-
-  // Build session data
-  let credentials: S3Credentials | null = null;
-  let client: S3Client | null = null;
-
-  // If we have an active connection, use its credentials
-  if (dbSession.active_connection_id && dbSession.connection_access_key_id && dbSession.connection_secret_access_key) {
-    const endpoint = normalizeEndpoint(dbSession.connection_endpoint || undefined);
-    credentials = {
-      accessKeyId: dbSession.connection_access_key_id,
-      secretAccessKey: dbSession.connection_secret_access_key,
-      region: dbSession.connection_region || 'us-east-1',
-      bucket: dbSession.active_bucket || undefined,
-      endpoint,
-    };
-    client = createS3Client(credentials);
-  }
-
-  return {
-    userId: dbSession.user_id,
-    username: dbSession.username,
-    activeConnectionId: dbSession.active_connection_id,
-    credentials,
-    client,
-    createdAt: dbSession.created_at * 1000, // Convert to ms
+  const credentials: S3Credentials = {
+    accessKeyId: connection.access_key_id,
+    secretAccessKey,
+    region: connection.region || 'us-east-1',
+    bucket: bucket || connection.bucket || undefined,
+    endpoint,
   };
-}
 
-export function deleteSession(sessionId: string): boolean {
-  return deleteDbSession(sessionId);
+  const client = createS3Client(credentials);
+  return { client, credentials };
 }
 
 export async function getBucketRegion(
@@ -343,85 +251,88 @@ export async function validateCredentialsOnly(
 
 // Express middleware types
 export interface AuthenticatedRequest extends Request {
-  session?: SessionData;
-  sessionId?: string;
+  connectionId?: number;
+  s3Connection?: DbS3Connection;
+  s3Client?: S3Client;
+  s3Credentials?: S3Credentials;
 }
 
-// Narrowed types for use after specific middleware
-// After userAuthMiddleware: session and sessionId are guaranteed
-export interface UserAuthenticatedRequest extends Request {
-  session: SessionData;
-  sessionId: string;
-}
-
-// After authMiddleware: credentials and client are also guaranteed
+// Request with S3 client and credentials guaranteed
 export interface S3AuthenticatedRequest extends Request {
-  session: SessionData & {
-    credentials: S3Credentials;
-    client: S3Client;
-  };
-  sessionId: string;
+  connectionId: number;
+  s3Connection: DbS3Connection;
+  s3Client: S3Client;
+  s3Credentials: S3Credentials;
 }
 
-// After requireBucket: bucket is also guaranteed
+// Request with bucket guaranteed
 export interface S3AuthenticatedRequestWithBucket extends Request {
-  session: SessionData & {
-    credentials: S3Credentials & { bucket: string };
-    client: S3Client;
-  };
-  sessionId: string;
+  connectionId: number;
+  s3Connection: DbS3Connection;
+  s3Client: S3Client;
+  s3Credentials: S3Credentials & { bucket: string };
 }
 
-// Middleware that requires user authentication (but not necessarily S3 credentials)
-export function userAuthMiddleware(
+// Simple login middleware - just checks authToken cookie
+export function loginMiddleware(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): void {
-  const sessionId = req.cookies?.sessionId as string | undefined;
+  const token = req.cookies?.authToken as string | undefined;
 
-  if (!sessionId) {
+  if (!token || !verifyAuthToken(token)) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }
 
-  const session = getSession(sessionId);
-  if (!session) {
-    res.status(401).json({ error: 'Session expired or invalid' });
-    return;
-  }
-
-  req.session = session;
-  req.sessionId = sessionId;
   next();
 }
 
-// Middleware that requires both user auth AND S3 credentials
-export function authMiddleware(
+// S3 middleware - creates S3 client from connection ID in URL params
+export function s3Middleware(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): void {
-  // Delegate to userAuthMiddleware for basic session validation
-  userAuthMiddleware(req, res, () => {
-    // userAuthMiddleware has validated the session and set req.session/req.sessionId
-    // Now check for S3 credentials
-    if (!req.session?.credentials || !req.session?.client) {
-      res.status(401).json({ error: 'S3 credentials not configured' });
+  // First check login
+  loginMiddleware(req, res, () => {
+    const connectionId = parseInt(req.params.connectionId as string, 10);
+    const bucket = req.params.bucket as string | undefined;
+
+    if (isNaN(connectionId) || connectionId <= 0) {
+      res.status(400).json({ error: 'Valid connection ID is required' });
       return;
     }
+
+    const connection = getConnectionById(connectionId);
+    if (!connection) {
+      res.status(404).json({ error: 'Connection not found' });
+      return;
+    }
+
+    // Create S3 client from connection
+    const { client, credentials } = createS3ClientFromConnection(connection, bucket);
+
+    req.connectionId = connectionId;
+    req.s3Connection = connection;
+    req.s3Client = client;
+    req.s3Credentials = credentials;
+
+    // Update last used timestamp
+    updateConnectionLastUsed(connectionId);
 
     next();
   });
 }
 
-// Middleware that requires a bucket to be selected (use after authMiddleware)
+// Middleware that requires a bucket to be selected (use after s3Middleware)
 export function requireBucket(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): void {
-  if (!req.session?.credentials?.bucket) {
+  if (!req.s3Credentials?.bucket) {
     res.status(400).json({ error: 'No bucket selected. Please select a bucket first.' });
     return;
   }
@@ -437,20 +348,6 @@ export async function listUserBuckets(client: S3Client): Promise<BucketInfo[]> {
     name: bucket.Name || '',
     creationDate: bucket.CreationDate?.toISOString(),
   })).filter(b => b.name);
-}
-
-// Update session bucket after selection
-export function updateSessionBucket(sessionId: string, bucket: string): boolean {
-  const session = getSession(sessionId);
-  if (!session) return false;
-
-  setSessionActiveBucket(sessionId, bucket);
-  return true;
-}
-
-// Get connection by ID (for activation endpoint)
-export function getConnectionForSession(connectionId: number, userId: number) {
-  return getConnectionById(connectionId, userId);
 }
 
 // Validate a specific bucket for an existing session

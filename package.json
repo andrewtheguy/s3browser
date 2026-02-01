@@ -13,8 +13,7 @@
     "start": "bun dist-server/index.js",
     "lint": "eslint .",
     "preview": "vite preview",
-    "build:standalone": "bun run scripts/build-standalone.ts",
-    "register": "bun server/cli/register.ts"
+    "build:standalone": "bun run scripts/build-standalone.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.978.0",
@@ -25,7 +24,6 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.7",
     "@mui/material": "^7.3.7",
-    "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
     "express": "^5.2.1",
     "multer": "^1.4.5-lts.1",
@@ -35,7 +33,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@types/bcrypt": "^5.0.2",
     "@types/bun": "^1.2.13",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.1",

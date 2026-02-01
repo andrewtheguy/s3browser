@@ -45,7 +45,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
     setAccessDenied(false);
 
     try {
-      const bucketList = await listBuckets();
+      const bucketList = await listBuckets(connectionId);
       // Sort buckets alphabetically by name
       const sortedBuckets = [...bucketList].sort((a, b) =>
         a.name.localeCompare(b.name)
@@ -71,12 +71,12 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
     void fetchBuckets();
   }, []);
 
-  const handleSelectBucket = async (bucketName: string) => {
+  const handleSelectBucket = (bucketName: string) => {
     setIsSelecting(true);
     setError(null);
 
     try {
-      const success = await selectBucket(bucketName);
+      const success = selectBucket(bucketName);
       if (success) {
         // Navigate to the browse page for this bucket
         void navigate(buildBrowseUrl(connectionId, bucketName, ''));
@@ -91,10 +91,10 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
     }
   };
 
-  const handleManualSubmit = async (e: FormEvent) => {
+  const handleManualSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!manualBucket.trim()) return;
-    await handleSelectBucket(manualBucket.trim());
+    handleSelectBucket(manualBucket.trim());
   };
 
   const displayError = error || contextError;

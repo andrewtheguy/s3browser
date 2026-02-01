@@ -23,7 +23,7 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { isConnected, isCheckingSession, credentials, activeConnectionId, activateConnection, isUserLoggedIn } = useS3ClientContext();
+  const { isConnected, isCheckingSession, credentials, activeConnectionId, activateConnection, isLoggedIn } = useS3ClientContext();
   const { connectionId: urlConnectionId, bucket } = useParams<{ connectionId: string; bucket?: string }>();
   const activatingRef = useRef(false);
   const [activationError, setActivationError] = useState(false);
@@ -33,7 +33,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   // Activate connection if URL connectionId differs from active
   useEffect(() => {
     if (
-      isUserLoggedIn &&
+      isLoggedIn &&
       !isCheckingSession &&
       connectionId &&
       !isNaN(connectionId) &&
@@ -50,7 +50,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
           activatingRef.current = false;
         });
     }
-  }, [isUserLoggedIn, isCheckingSession, connectionId, activeConnectionId, activateConnection, bucket]);
+  }, [isLoggedIn, isCheckingSession, connectionId, activeConnectionId, activateConnection, bucket]);
 
   // Show loading state while checking session status
   if (isCheckingSession) {
@@ -58,7 +58,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   }
 
   // Not logged in at all - redirect to home
-  if (!isUserLoggedIn) {
+  if (!isLoggedIn) {
     return <Navigate to="/" replace />;
   }
 
