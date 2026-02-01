@@ -110,7 +110,7 @@ export function PreviewDialog({
             fontSize: '0.875rem',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
-            bgcolor: 'grey.50',
+            bgcolor: (theme) => theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
             minHeight: '100%',
           }}
         >

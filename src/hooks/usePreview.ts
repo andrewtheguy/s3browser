@@ -51,11 +51,7 @@ export function usePreview() {
         abortControllerRef.current.abort();
       }
 
-      // Increment request ID to track this specific request
-      const currentRequestId = ++requestIdRef.current;
-      const abortController = new AbortController();
-      abortControllerRef.current = abortController;
-
+      // Check previewability before allocating resources
       const previewability = isPreviewableFile(item.name, item.size);
 
       if (!previewability.canPreview) {
@@ -69,6 +65,11 @@ export function usePreview() {
         });
         return;
       }
+
+      // Increment request ID to track this specific request
+      const currentRequestId = ++requestIdRef.current;
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
 
       setState({
         isOpen: true,
