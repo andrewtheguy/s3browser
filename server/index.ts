@@ -19,7 +19,18 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(express.json());
+app.use(express.json({
+  type: (req) => {
+    const rawUrl = typeof req.url === 'string' ? req.url : '';
+    const path = rawUrl.split('?')[0] || '';
+    if (path.startsWith('/api/upload/') && (path.endsWith('/single') || path.endsWith('/part'))) {
+      return false;
+    }
+    const contentType = req.headers['content-type'];
+    if (typeof contentType !== 'string') return false;
+    return contentType.includes('application/json') || contentType.includes('+json');
+  },
+}));
 app.use(cookieParser());
 
 // Routes

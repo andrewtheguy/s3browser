@@ -26,6 +26,7 @@ import { useUpload } from '../../hooks';
 import { DropZone } from './DropZone';
 import { UploadProgress } from './UploadProgress';
 import { formatFileSize } from '../../utils/formatters';
+import type { UploadCandidate } from '../../types';
 
 interface UploadDialogProps {
   open: boolean;
@@ -44,9 +45,11 @@ export function UploadDialog({
     pendingResumable,
     upload,
     cancelUpload,
+    cancelAll,
     pauseUpload,
     resumeUpload,
     retryUpload,
+    clearCompleted,
     clearAll,
     removePendingResumable,
     isUploading,
@@ -58,7 +61,7 @@ export function UploadDialog({
   const [resumeError, setResumeError] = useState<string | null>(null);
 
   const handleFilesSelected = useCallback(
-    async (files: File[]) => {
+    async (files: UploadCandidate[]) => {
       await upload(files, currentPath);
     },
     [upload, currentPath]
@@ -103,19 +106,19 @@ export function UploadDialog({
       // File matches - upload will automatically detect and resume the pending upload
       setResumeError(null);
       setPendingToResume(null);
-      await upload([file], ''); // Use the key from pending upload (already includes path)
+      await upload([{ file, key: pendingToResume.key }], ''); // Use the key from pending upload (already includes path)
     },
     [pendingToResume, upload]
   );
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
     if (isUploading) {
       // Optionally show a confirmation
       const confirmed = window.confirm(
         'Uploads are in progress. Are you sure you want to close?'
       );
       if (!confirmed) return;
-      clearAll();
+      await clearAll();
     }
     onClose();
   }, [isUploading, clearAll, onClose]);
@@ -145,6 +148,7 @@ export function UploadDialog({
 
   const completedCount = uploads.filter((u) => u.status === 'completed').length;
   const hasCompletedUploads = completedCount > 0;
+  const hasCancelableUploads = uploads.some((u) => u.status !== 'completed');
 
   return (
     <Dialog
@@ -194,20 +198,24 @@ export function UploadDialog({
                   secondaryAction={
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
                       <Tooltip title="Re-select file to resume upload">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleResumeFromPending(pending)}
-                        >
-                          <CloudUploadIcon fontSize="small" />
-                        </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleResumeFromPending(pending)}
+                          >
+                            <CloudUploadIcon fontSize="small" />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                       <Tooltip title="Discard">
-                        <IconButton
-                          size="small"
-                          onClick={() => removePendingResumable(pending.id)}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => removePendingResumable(pending.id)}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                     </Box>
                   }
@@ -218,7 +226,7 @@ export function UploadDialog({
                   <ListItemText
                     primary={
                       <Typography variant="body2" noWrap sx={{ maxWidth: { xs: 120, sm: 200, md: 280 } }}>
-                        {pending.fileName}
+                        {pending.key || pending.fileName}
                       </Typography>
                     }
                     secondary={
@@ -256,8 +264,13 @@ export function UploadDialog({
         />
       </DialogContent>
       <DialogActions>
+        {hasCancelableUploads && (
+          <Button onClick={cancelAll} color="error">
+            Cancel All
+          </Button>
+        )}
         {hasCompletedUploads && (
-          <Button onClick={clearAll} color="inherit">
+          <Button onClick={clearCompleted} color="inherit">
             Clear Completed
           </Button>
         )}

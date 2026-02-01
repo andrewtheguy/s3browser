@@ -10,6 +10,9 @@ import {
 import { s3Middleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 import { UPLOAD_CONFIG } from '../config/upload.js';
 
+const RAW_SINGLE_LIMIT = Math.max(UPLOAD_CONFIG.MULTIPART_THRESHOLD, UPLOAD_CONFIG.PART_SIZE);
+const RAW_PART_LIMIT = Math.max(UPLOAD_CONFIG.PART_SIZE, UPLOAD_CONFIG.MULTIPART_THRESHOLD);
+
 // Check for control characters (0x00-0x1f, 0x7f) or backslashes
 function hasUnsafeChars(str: string): boolean {
   for (let i = 0; i < str.length; i++) {
@@ -44,6 +47,136 @@ function validateAndSanitizeKey(key: string): { valid: false; error: string } | 
   }
 
   return { valid: true, sanitizedKey: normalized };
+}
+
+interface NodeReadableStreamLike {
+  on: (event: 'data' | 'end' | 'error', handler: (chunk?: unknown) => void) => void;
+  off?: (event: 'data' | 'end' | 'error', handler: (chunk?: unknown) => void) => void;
+  removeListener?: (event: 'data' | 'end' | 'error', handler: (chunk?: unknown) => void) => void;
+  resume?: () => void;
+}
+
+interface WebReadableStreamReaderLike {
+  read: () => Promise<{ done: boolean; value?: Uint8Array }>;
+  cancel?: (reason?: unknown) => Promise<void>;
+  releaseLock?: () => void;
+}
+
+interface WebReadableStreamLike {
+  getReader: () => WebReadableStreamReaderLike;
+}
+
+function isNodeReadableStream(value: unknown): value is NodeReadableStreamLike {
+  return typeof value === 'object' &&
+    value !== null &&
+    'on' in value &&
+    typeof (value as { on?: unknown }).on === 'function';
+}
+
+function isWebReadableStream(value: unknown): value is WebReadableStreamLike {
+  return typeof value === 'object' &&
+    value !== null &&
+    'getReader' in value &&
+    typeof (value as { getReader?: unknown }).getReader === 'function';
+}
+
+async function readNodeStream(stream: NodeReadableStreamLike): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  return await new Promise<Buffer>((resolve, reject) => {
+    const onData = (chunk?: unknown) => {
+      if (chunk instanceof Uint8Array) {
+        chunks.push(Buffer.from(chunk));
+        return;
+      }
+      if (typeof chunk === 'string') {
+        chunks.push(Buffer.from(chunk));
+        return;
+      }
+      if (chunk && typeof chunk === 'object') {
+        chunks.push(Buffer.from(JSON.stringify(chunk)));
+        return;
+      }
+      if (typeof chunk === 'number' || typeof chunk === 'boolean' || typeof chunk === 'bigint') {
+        chunks.push(Buffer.from(String(chunk)));
+      }
+    };
+
+    const cleanup = () => {
+      stream.off?.('data', onData);
+      stream.off?.('end', onEnd);
+      stream.off?.('error', onError);
+      stream.removeListener?.('data', onData);
+      stream.removeListener?.('end', onEnd);
+      stream.removeListener?.('error', onError);
+    };
+
+    const onEnd = () => {
+      cleanup();
+      resolve(Buffer.concat(chunks));
+    };
+
+    const onError = (error?: unknown) => {
+      cleanup();
+      reject(error instanceof Error ? error : new Error('Failed to read stream'));
+    };
+
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    stream.resume?.();
+  });
+}
+
+async function readWebStream(stream: WebReadableStreamLike): Promise<Buffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      if (result.value) {
+        chunks.push(result.value);
+      }
+    }
+  } catch (error) {
+    if (reader.cancel) {
+      try {
+        await reader.cancel(error);
+      } catch {
+        // Ignore cancel errors and rethrow the original error.
+      }
+    }
+    throw error;
+  } finally {
+    reader.releaseLock?.();
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+}
+
+async function resolveBodyBuffer(req: AuthenticatedRequest): Promise<Buffer> {
+  const body = req.body as unknown;
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (typeof body === 'string') {
+    return Buffer.from(body);
+  }
+  if (isNodeReadableStream(body)) {
+    return await readNodeStream(body);
+  }
+  if (isWebReadableStream(body)) {
+    return await readWebStream(body);
+  }
+  if (body && typeof body === 'object') {
+    return Buffer.from(JSON.stringify(body));
+  }
+  if (isNodeReadableStream(req)) {
+    return await readNodeStream(req);
+  }
+  throw new Error('Unexpected request body type in upload handler');
 }
 
 const router = Router();
@@ -109,7 +242,7 @@ router.post(
   '/:connectionId/:bucket/single',
   s3Middleware,
   requireBucket,
-  express.raw({ limit: '10mb', type: '*/*' }),
+  express.raw({ limit: RAW_SINGLE_LIMIT, type: '*/*' }),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const key = req.query.key as string;
     const bucket = req.s3Credentials?.bucket;
@@ -134,14 +267,14 @@ router.post(
 
     const contentType = req.headers['content-type'] || 'application/octet-stream';
 
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: keyValidation.sanitizedKey,
-      Body: req.body as Buffer,
-      ContentType: contentType,
-    });
-
     try {
+      const bodyBuffer = await resolveBodyBuffer(req);
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: keyValidation.sanitizedKey,
+        Body: bodyBuffer,
+        ContentType: contentType,
+      });
       await client.send(command);
       res.json({ success: true, key: keyValidation.sanitizedKey });
     } catch (error) {
@@ -157,7 +290,7 @@ router.post(
   '/:connectionId/:bucket/part',
   s3Middleware,
   requireBucket,
-  express.raw({ limit: '15mb', type: '*/*' }),
+  express.raw({ limit: RAW_PART_LIMIT, type: '*/*' }),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const uploadId = req.query.uploadId as string;
     const partNumber = req.query.partNumber as string;
@@ -208,15 +341,15 @@ router.post(
       return;
     }
 
-    const command = new UploadPartCommand({
-      Bucket: bucket,
-      Key: tracked.sanitizedKey,
-      UploadId: uploadId,
-      PartNumber: partNum,
-      Body: req.body as Buffer,
-    });
-
     try {
+      const bodyBuffer = await resolveBodyBuffer(req);
+      const command = new UploadPartCommand({
+        Bucket: bucket,
+        Key: tracked.sanitizedKey,
+        UploadId: uploadId,
+        PartNumber: partNum,
+        Body: bodyBuffer,
+      });
       const result = await client.send(command);
       res.json({ etag: result.ETag });
     } catch (error) {
