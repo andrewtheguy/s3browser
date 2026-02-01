@@ -49,12 +49,8 @@ export interface LoginCredentials {
   password: string;
 }
 
-export interface S3ConnectionCredentials {
-  accessKeyId: string;
-  secretAccessKey: string;
+export interface S3ConnectionCredentials extends Omit<S3Credentials, 'region'> {
   region?: string;
-  bucket?: string;  // Optional - can be selected after login
-  endpoint?: string;
   connectionName: string;
   autoDetectRegion?: boolean;
 }
