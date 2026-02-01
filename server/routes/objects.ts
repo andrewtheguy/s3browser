@@ -488,6 +488,10 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
       res.status(400).json({ error: 'Each operation must have sourceKey and destinationKey' });
       return;
     }
+    if (op.sourceKey === op.destinationKey) {
+      res.status(400).json({ error: `sourceKey and destinationKey must differ for operation with key "${op.sourceKey}"` });
+      return;
+    }
     const sourceValidation = validateKey(op.sourceKey);
     if (!sourceValidation.valid) {
       res.status(400).json({ error: `Invalid sourceKey "${op.sourceKey}": ${sourceValidation.error}` });
@@ -563,11 +567,40 @@ router.post('/:connectionId/:bucket/move', s3Middleware, requireBucket, async (r
   // Copy first, then delete
   await copyObject(client, bucket, sourceKey, destinationKey);
 
-  const deleteCommand = new DeleteObjectCommand({
-    Bucket: bucket,
-    Key: sourceKey,
-  });
-  await client.send(deleteCommand);
+  // Attempt to delete the source
+  try {
+    const deleteCommand = new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: sourceKey,
+    });
+    await client.send(deleteCommand);
+  } catch (deleteErr) {
+    // Copy succeeded but delete failed - attempt rollback
+    try {
+      const rollbackCommand = new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: destinationKey,
+      });
+      await client.send(rollbackCommand);
+    } catch {
+      // Rollback also failed - return partial success with destination key for remediation
+      res.status(500).json({
+        success: false,
+        partial: true,
+        message: 'Move failed: copy succeeded but source delete failed, and rollback failed',
+        destinationKey,
+        error: deleteErr instanceof Error ? deleteErr.message : 'Delete failed',
+      });
+      return;
+    }
+    // Rollback succeeded - return error indicating the move was aborted
+    res.status(500).json({
+      success: false,
+      message: 'Move failed: copy succeeded but source delete failed (copy was rolled back)',
+      error: deleteErr instanceof Error ? deleteErr.message : 'Delete failed',
+    });
+    return;
+  }
 
   res.json({ success: true });
 });
@@ -591,6 +624,10 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
   for (const op of operations) {
     if (!op.sourceKey || !op.destinationKey) {
       res.status(400).json({ error: 'Each operation must have sourceKey and destinationKey' });
+      return;
+    }
+    if (op.sourceKey === op.destinationKey) {
+      res.status(400).json({ error: `sourceKey and destinationKey must differ for operation with key "${op.sourceKey}"` });
       return;
     }
     const sourceValidation = validateKey(op.sourceKey);
