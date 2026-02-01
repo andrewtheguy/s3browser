@@ -91,6 +91,7 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         isCheckingSession: false,
         isLoggingIn: false,
         error: null,
+        serverError: null,
       };
     case 'BUCKET_SELECTED':
       if (!state.session) {
