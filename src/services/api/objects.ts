@@ -51,7 +51,7 @@ export async function listObjects(
 }
 
 export async function deleteObject(connectionId: number, bucket: string, key: string): Promise<void> {
-  await apiDelete(`/objects/${connectionId}/${encodeURIComponent(bucket)}/${encodeURIComponent(key)}`);
+  await apiDelete(`/objects/${connectionId}/${encodeURIComponent(bucket)}?key=${encodeURIComponent(key)}`);
 }
 
 export interface BatchDeleteResponse {
