@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { S3Client, HeadBucketCommand, GetBucketLocationCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
-import { verifyAuthToken } from '../auth/token.js';
+import { verifyAuthToken, createAuthToken, AUTH_COOKIE_OPTIONS } from '../auth/token.js';
 import {
   getConnectionById,
   updateConnectionLastUsed,
@@ -273,7 +273,7 @@ export interface S3AuthenticatedRequestWithBucket extends Request {
   s3Credentials: S3Credentials & { bucket: string };
 }
 
-// Simple login middleware - just checks authToken cookie
+// Simple login middleware - checks authToken cookie and refreshes it on activity
 export function loginMiddleware(
   req: AuthenticatedRequest,
   res: Response,
@@ -285,6 +285,10 @@ export function loginMiddleware(
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }
+
+  // Refresh token on each authenticated request (sliding expiration)
+  // Session only expires after 4 hours of inactivity
+  res.cookie('authToken', createAuthToken(), AUTH_COOKIE_OPTIONS);
 
   next();
 }

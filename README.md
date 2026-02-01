@@ -2,6 +2,8 @@
 
 A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, DigitalOcean Spaces, etc.).
 
+> **Security Notice**: This application is designed for use on **private networks** or **trusted devices** only. It uses a single shared password for authentication and is not intended for public internet deployment. Do not expose this application to untrusted networks.
+
 ## Features
 
 - Browse S3 buckets with folder navigation
@@ -11,9 +13,7 @@ A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, D
 - Delete files
 - Auto-detect bucket region or specify manually
 - Support for custom S3-compatible endpoints
-- User authentication with username/password
 - Save and manage multiple S3 connection profiles
-- Persistent sessions across server restarts
 
 ## Quick Install (Linux & macOS)
 
@@ -49,33 +49,31 @@ bun install
 
 ### Configuration
 
-An encryption key is required to securely store S3 credentials. Provide it via one of:
+Create the configuration directory and set up required credentials:
 
-**Option 1: Environment variable**
-```bash
-export S3BROWSER_ENCRYPTION_KEY=$(openssl rand -hex 32)
-```
-
-**Option 2: Key file** (recommended for standalone)
 ```bash
 mkdir -p ~/.s3browser
-openssl rand -hex 32 > ~/.s3browser/encryption.key
+chmod 700 ~/.s3browser
+```
+
+**Login Password** (required):
+```bash
+# Option 1: Generate random password
+openssl rand -base64 32 > ~/.s3browser/login.password
+chmod 600 ~/.s3browser/login.password
+
+# Option 2: Use environment variable
+export S3BROWSER_LOGIN_PASSWORD="your-password-here"
+```
+
+**Encryption Key** (required - encrypts saved S3 credentials):
+```bash
+# Option 1: Key file (recommended)
+openssl rand -base64 32 > ~/.s3browser/encryption.key
 chmod 600 ~/.s3browser/encryption.key
-```
 
-You can also copy `.env.example` to `.env` for development:
-```bash
-cp .env.example .env
-# Edit .env and set your encryption key
-```
-
-### Register a User
-
-Users are registered via the CLI (for security):
-
-```bash
-bun run register -u myusername
-# Enter password when prompted (min 8 characters)
+# Option 2: Environment variable
+export S3BROWSER_ENCRYPTION_KEY=$(openssl rand -hex 32)
 ```
 
 ### Development
@@ -117,14 +115,14 @@ Run `./s3browser --help` for all options.
 
 ### Login Flow
 
-1. **Sign in** with your username and password
+1. **Sign in** with your password (from `~/.s3browser/login.password` or environment variable)
 2. **Enter S3 credentials** (Access Key ID, Secret Access Key, endpoint)
 3. **Select or enter a bucket** to browse
 4. Optionally **save the connection** with a name for quick access later
 
 ### Connecting to AWS S3
 
-1. Sign in with your user account
+1. Sign in with your password
 2. Enter your AWS Access Key ID and Secret Access Key
 3. Enter the bucket name (or leave empty to list available buckets)
 4. Optionally check "Auto-detect region" or enter the region manually (e.g., `us-east-1`)
@@ -133,7 +131,7 @@ Run `./s3browser --help` for all options.
 
 For MinIO, DigitalOcean Spaces, or other S3-compatible services:
 
-1. Sign in with your user account
+1. Sign in with your password
 2. Enter your access credentials
 3. Enter the custom endpoint URL (e.g., `http://localhost:9000` for local MinIO)
 4. Enter the bucket name
@@ -153,24 +151,35 @@ All data is stored in `~/.s3browser/`:
 
 | File | Purpose |
 |------|---------|
-| `s3browser.db` | SQLite database (users, sessions, saved connections) |
-| `encryption.key` | Optional encryption key file |
+| `s3browser.db` | SQLite database (saved connections) |
+| `encryption.key` | Encryption key for S3 credentials |
+| `login.password` | Login password |
+
+## Session Behavior
+
+- Session expires after **4 hours of inactivity**
+- Each authenticated request refreshes the session timer
+- Active users stay logged in indefinitely
 
 ## Limitations
 
 - Maximum file size: 5GB
-- Session expires after 4 hours
 
 ## Security
 
-- User passwords hashed with bcrypt (12 rounds)
+> **Important**: This application is intended for **private network** or **personal/trusted device** use only.
+
+- Single-user authentication with password
 - S3 secret access keys encrypted with AES-256-GCM at rest
 - Encryption key required via environment variable or key file
-- Sessions stored in SQLite (persistent across restarts)
-- HTTP-only secure cookies for session management
+- HTTP-only cookies with sliding 4-hour expiration
 - Path traversal protection on all file operations
-- CLI-only user registration prevents unauthorized account creation
-- Encryption key file should be secured with 0600 permissions
+- Configuration files should be secured with 0600 permissions
+
+**Not recommended for**:
+- Public internet deployment
+- Multi-tenant environments
+- Untrusted networks
 
 ## License
 

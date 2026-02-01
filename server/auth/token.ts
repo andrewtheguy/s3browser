@@ -3,6 +3,19 @@ import { getLoginPassword, createHmacSignature, timingSafeCompare } from '../db/
 
 const TOKEN_EXPIRATION_HOURS = 4;
 
+// Cookie options for auth token
+export const AUTH_COOKIE_OPTIONS: {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'lax' | 'strict' | 'none';
+  maxAge: number;
+} = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  maxAge: TOKEN_EXPIRATION_HOURS * 60 * 60 * 1000, // 4 hours in milliseconds
+};
+
 interface TokenPayload {
   iat: number; // Issued at (Unix timestamp)
   exp: number; // Expires at (Unix timestamp)

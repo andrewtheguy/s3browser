@@ -18,7 +18,7 @@ import {
   getConnectionById,
 } from '../db/index.js';
 import { getLoginPassword, timingSafeCompare } from '../db/crypto.js';
-import { createAuthToken, verifyAuthToken } from '../auth/token.js';
+import { createAuthToken, verifyAuthToken, AUTH_COOKIE_OPTIONS } from '../auth/token.js';
 
 interface LoginRequestBody {
   password?: string;
@@ -66,13 +66,8 @@ router.post('/login', (req: Request, res: Response): void => {
 
   const token = createAuthToken();
 
-  // Set HTTP-only cookie with 4 hour expiry
-  res.cookie('authToken', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 4 * 60 * 60 * 1000, // 4 hours
-  });
+  // Set HTTP-only cookie with sliding 4 hour expiry
+  res.cookie('authToken', token, AUTH_COOKIE_OPTIONS);
 
   res.json({ success: true });
 });
