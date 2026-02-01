@@ -193,11 +193,7 @@ export function saveConnection(
 
   if (connectionId !== null) {
     // UPDATE existing connection by ID
-    const existing = getConnectionById(connectionId);
-    if (!existing) {
-      throw new Error('Connection not found');
-    }
-
+    let result;
     if (secretAccessKey !== null) {
       // Update with new secret key
       const encryptedSecretAccessKey = encrypt(secretAccessKey);
@@ -213,7 +209,7 @@ export function saveConnection(
           last_used_at = unixepoch()
         WHERE id = ?
       `);
-      stmt.run(name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
+      result = stmt.run(name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
     } else {
       // Update without changing the secret key
       const stmt = database.prepare(`
@@ -227,7 +223,11 @@ export function saveConnection(
           last_used_at = unixepoch()
         WHERE id = ?
       `);
-      stmt.run(name, endpoint, accessKeyId, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
+      result = stmt.run(name, endpoint, accessKeyId, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
+    }
+    // Check that the update affected a row (avoids TOCTOU race condition)
+    if (result.changes === 0) {
+      throw new Error('Connection not found');
     }
     return getConnectionById(connectionId)!;
   } else {
