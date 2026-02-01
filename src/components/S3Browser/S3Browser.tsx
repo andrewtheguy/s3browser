@@ -79,7 +79,7 @@ export function S3Browser() {
 
   const endpointHost = useMemo(() => getEndpointHost(credentials?.endpoint), [credentials?.endpoint]);
   const allowRecursiveDelete = useMemo(
-    () => Boolean(endpointHost) && !endpointHost.endsWith(AWS_ENDPOINT_SUFFIX),
+    () => (endpointHost ? !endpointHost.endsWith(AWS_ENDPOINT_SUFFIX) : false),
     [endpointHost]
   );
   const isDeleting = isDeletingBatch || isDeletingHook;
