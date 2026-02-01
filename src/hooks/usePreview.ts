@@ -71,7 +71,7 @@ export function usePreview() {
       });
 
       try {
-        const content = await getFilePreview(activeConnectionId, bucket, item.key);
+        const content = await getFilePreview(activeConnectionId, bucket, item.key, abortController.signal);
 
         // Verify this request is still the active one before updating state
         if (currentRequestId !== requestIdRef.current) {

@@ -69,14 +69,14 @@ export async function downloadFile(connectionId: number, bucket: string, key: st
   document.body.removeChild(link);
 }
 
-export async function getFilePreview(connectionId: number, bucket: string, key: string): Promise<string> {
+export async function getFilePreview(connectionId: number, bucket: string, key: string, signal?: AbortSignal): Promise<string> {
   if (!Number.isInteger(connectionId) || connectionId < 1) {
     throw new Error('Invalid connection ID');
   }
 
   const response = await fetch(
     `/api/download/${connectionId}/${encodeURIComponent(bucket)}/preview?key=${encodeURIComponent(key)}`,
-    { credentials: 'include' }
+    { credentials: 'include', signal }
   );
 
   if (!response.ok) {
