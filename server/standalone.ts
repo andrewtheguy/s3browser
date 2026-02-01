@@ -112,7 +112,17 @@ const embeddedAssets: Record<string, { content: string; mime: string }> = {
 const app = express();
 
 // Middleware
-app.use(express.json());
+app.use(express.json({
+  type: (req) => {
+    const url = typeof req.url === 'string' ? req.url : '';
+    if (url.startsWith('/api/upload/') && (url.endsWith('/single') || url.endsWith('/part'))) {
+      return false;
+    }
+    const contentType = req.headers['content-type'];
+    if (typeof contentType !== 'string') return false;
+    return contentType.includes('application/json') || contentType.includes('+json');
+  },
+}));
 app.use(cookieParser());
 
 // API Routes
