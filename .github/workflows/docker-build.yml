@@ -1,6 +1,8 @@
 name: Build Docker Image
 
 on:
+  release:
+    types: [created]
   workflow_dispatch:
     inputs:
       tag:
@@ -14,6 +16,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,7 +29,9 @@ jobs:
       - name: Determine tag
         id: tag
         run: |
-          if [ -n "${{ inputs.tag }}" ]; then
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ inputs.tag }}" ]; then
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
           else
             echo "tag=$(date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
