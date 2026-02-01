@@ -81,3 +81,79 @@ export async function deleteObjects(
 export async function createFolder(connectionId: number, bucket: string, path: string): Promise<void> {
   await apiPost(`/objects/${connectionId}/${encodeURIComponent(bucket)}/folder`, { path });
 }
+
+export interface CopyMoveOperation {
+  sourceKey: string;
+  destinationKey: string;
+}
+
+export interface BatchCopyMoveResponse {
+  successful: string[];
+  errors: Array<{ sourceKey: string; message: string; destinationKey?: string }>;
+}
+
+export async function copyObject(
+  connectionId: number,
+  bucket: string,
+  sourceKey: string,
+  destinationKey: string,
+  signal?: AbortSignal
+): Promise<void> {
+  await apiPost(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/copy`,
+    { sourceKey, destinationKey },
+    signal
+  );
+}
+
+export async function copyObjects(
+  connectionId: number,
+  bucket: string,
+  operations: CopyMoveOperation[],
+  signal?: AbortSignal
+): Promise<BatchCopyMoveResponse> {
+  const response = await apiPost<BatchCopyMoveResponse>(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/batch-copy`,
+    { operations },
+    signal
+  );
+
+  if (!response) {
+    throw new Error('Failed to copy objects: missing response');
+  }
+
+  return response;
+}
+
+export async function moveObject(
+  connectionId: number,
+  bucket: string,
+  sourceKey: string,
+  destinationKey: string,
+  signal?: AbortSignal
+): Promise<void> {
+  await apiPost(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/move`,
+    { sourceKey, destinationKey },
+    signal
+  );
+}
+
+export async function moveObjects(
+  connectionId: number,
+  bucket: string,
+  operations: CopyMoveOperation[],
+  signal?: AbortSignal
+): Promise<BatchCopyMoveResponse> {
+  const response = await apiPost<BatchCopyMoveResponse>(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/batch-move`,
+    { operations },
+    signal
+  );
+
+  if (!response) {
+    throw new Error('Failed to move objects: missing response');
+  }
+
+  return response;
+}

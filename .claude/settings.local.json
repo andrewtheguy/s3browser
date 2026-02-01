@@ -9,7 +9,8 @@
       "Bash(bun run lint:*)",
       "Bash(bun install:*)",
       "Bash(bun run build)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

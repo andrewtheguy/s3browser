@@ -21,6 +21,8 @@ import type { S3Object } from '../../types';
 
 interface FileListProps {
   onDeleteRequest: (item: S3Object) => void;
+  onCopyRequest: (item: S3Object) => void;
+  onMoveRequest: (item: S3Object) => void;
   onCopyUrl: (key: string) => void;
   onPreview: (item: S3Object) => void;
   selectedKeys: Set<string>;
@@ -33,6 +35,8 @@ interface FileListProps {
 
 export function FileList({
   onDeleteRequest,
+  onCopyRequest,
+  onMoveRequest,
   onCopyUrl,
   onPreview,
   selectedKeys,
@@ -77,7 +81,7 @@ export function FileList({
               <TableCell sx={{ minWidth: 120, whiteSpace: 'nowrap' }}>Name</TableCell>
               <TableCell sx={{ width: { xs: 72, sm: 100 }, whiteSpace: 'nowrap' }}>Size</TableCell>
               <TableCell sx={{ width: { xs: 120, sm: 180 }, whiteSpace: 'nowrap' }}>Last Modified</TableCell>
-              <TableCell sx={{ width: 100 }} />
+              <TableCell sx={{ width: 160 }} />
             </TableRow>
           </TableHead>
         <TableBody>
@@ -153,7 +157,7 @@ export function FileList({
             <TableCell sx={{ minWidth: 120, whiteSpace: 'nowrap' }}>Name</TableCell>
             <TableCell sx={{ width: { xs: 72, sm: 100 }, whiteSpace: 'nowrap' }}>Size</TableCell>
             <TableCell sx={{ width: { xs: 120, sm: 180 }, whiteSpace: 'nowrap' }}>Last Modified</TableCell>
-            <TableCell sx={{ width: 100 }} align="right">
+            <TableCell sx={{ width: 160 }} align="right">
               Actions
             </TableCell>
           </TableRow>
@@ -167,6 +171,8 @@ export function FileList({
               onDownload={handleDownload}
               onCopyUrl={onCopyUrl}
               onDelete={onDeleteRequest}
+              onCopy={onCopyRequest}
+              onMove={onMoveRequest}
               onPreview={onPreview}
               isSelected={selectedKeys.has(item.key)}
               onSelect={onSelectItem}

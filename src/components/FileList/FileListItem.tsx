@@ -13,6 +13,8 @@ import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import DownloadIcon from '@mui/icons-material/Download';
 import LinkIcon from '@mui/icons-material/Link';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import type { S3Object } from '../../types';
 import { formatFileSize, formatDate } from '../../utils/formatters';
 import { getFileIconType, type FileIconType } from '../../utils/fileIcons';
@@ -23,6 +25,8 @@ interface FileListItemProps {
   onDownload: (key: string) => void;
   onCopyUrl: (key: string) => void;
   onDelete: (item: S3Object) => void;
+  onCopy: (item: S3Object) => void;
+  onMove: (item: S3Object) => void;
   onPreview: (item: S3Object) => void;
   isSelected?: boolean;
   onSelect?: (key: string, checked: boolean) => void;
@@ -65,6 +69,8 @@ export function FileListItem({
   onDownload,
   onCopyUrl,
   onDelete,
+  onCopy,
+  onMove,
   onPreview,
   isSelected = false,
   onSelect,
@@ -97,6 +103,16 @@ export function FileListItem({
   const handleCopyUrl = (e: React.MouseEvent) => {
     e.stopPropagation();
     onCopyUrl(item.key);
+  };
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onCopy(item);
+  };
+
+  const handleMove = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onMove(item);
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -163,7 +179,7 @@ export function FileListItem({
           {formatDate(item.lastModified)}
         </Typography>
       </TableCell>
-      <TableCell sx={{ width: 100 }} align="right">
+      <TableCell sx={{ width: 160 }} align="right">
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           {!item.isFolder && (
             <>
@@ -179,6 +195,16 @@ export function FileListItem({
               </Tooltip>
             </>
           )}
+          <Tooltip title="Copy to..." placement="top-start">
+            <IconButton size="small" onClick={handleCopy}>
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Move to..." placement="top-start">
+            <IconButton size="small" onClick={handleMove}>
+              <DriveFileMoveIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           <Tooltip
             title={
               item.isFolder

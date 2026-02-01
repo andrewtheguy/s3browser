@@ -23,9 +23,12 @@ import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
 import { DeleteDialog } from '../DeleteDialog';
 import { PreviewDialog } from '../PreviewDialog';
+import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDialog';
+import { CopyMoveDialog } from '../CopyMoveDialog';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
-import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview } from '../../hooks';
+import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove } from '../../hooks';
 import type { S3Object } from '../../types';
+import type { CopyMoveOperation } from '../../services/api/objects';
 
 interface SnackbarState {
   open: boolean;
@@ -58,6 +61,15 @@ export function S3Browser() {
   const { copyPresignedUrl } = usePresignedUrl();
   const { download } = useDownload();
   const preview = usePreview();
+  const {
+    copy,
+    move,
+    copyMany,
+    moveMany,
+    resolveCopyMovePlan,
+    isCopying,
+    isMoving,
+  } = useCopyMove();
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -77,6 +89,18 @@ export function S3Browser() {
     message: '',
     severity: 'success',
   });
+
+  // Copy/Move state
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [copyMoveDialogOpen, setCopyMoveDialogOpen] = useState(false);
+  const [copyMoveItem, setCopyMoveItem] = useState<S3Object | null>(null);
+  const [copyMoveMode, setCopyMoveMode] = useState<'copy' | 'move'>('copy');
+  const [copyMoveDestination, setCopyMoveDestination] = useState('');
+  const [copyMovePlan, setCopyMovePlan] = useState<{ operations: CopyMoveOperation[]; folderKeys: string[] } | null>(null);
+  const [isResolvingCopyMove, setIsResolvingCopyMove] = useState(false);
+  const [copyMoveResolveError, setCopyMoveResolveError] = useState<string | null>(null);
+  const [copyMoveProgress, setCopyMoveProgress] = useState<{ completed: number; total: number } | undefined>(undefined);
+  const [copyMoveNewName, setCopyMoveNewName] = useState('');
 
   const showSnackbar = useCallback(
     (message: string, severity: SnackbarState['severity']) => {
@@ -358,6 +382,176 @@ export function S3Browser() {
     }
   }, [download, showSnackbar]);
 
+  // Copy/Move handlers
+  const handleCopyRequest = useCallback((item: S3Object) => {
+    setCopyMoveItem(item);
+    setCopyMoveMode('copy');
+    setFolderPickerOpen(true);
+  }, []);
+
+  const handleMoveRequest = useCallback((item: S3Object) => {
+    setCopyMoveItem(item);
+    setCopyMoveMode('move');
+    setFolderPickerOpen(true);
+  }, []);
+
+  const handleFolderPickerCancel = useCallback(() => {
+    setFolderPickerOpen(false);
+    setCopyMoveItem(null);
+  }, []);
+
+  const handleDestinationSelected = useCallback((result: FolderPickerResult) => {
+    setFolderPickerOpen(false);
+    setCopyMoveDestination(result.destinationPath);
+    setCopyMoveNewName(result.newName);
+    setCopyMovePlan(null);
+    setCopyMoveResolveError(null);
+    setCopyMoveProgress(undefined);
+    setCopyMoveDialogOpen(true);
+  }, []);
+
+  // Resolve copy/move plan when dialog opens
+  useEffect(() => {
+    if (!copyMoveDialogOpen || !copyMoveItem) {
+      setCopyMovePlan(null);
+      setIsResolvingCopyMove(false);
+      setCopyMoveResolveError(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    if (copyMoveItem.isFolder) {
+      setIsResolvingCopyMove(true);
+      setCopyMoveResolveError(null);
+
+      void (async () => {
+        try {
+          const plan = await resolveCopyMovePlan(copyMoveItem, copyMoveDestination, {
+            signal: abortController.signal,
+            newName: copyMoveNewName,
+          });
+          if (!abortController.signal.aborted) {
+            setCopyMovePlan(plan);
+          }
+        } catch (err) {
+          if (!abortController.signal.aborted) {
+            const message = err instanceof Error ? err.message : 'Failed to list items';
+            setCopyMoveResolveError(message);
+          }
+        } finally {
+          if (!abortController.signal.aborted) {
+            setIsResolvingCopyMove(false);
+          }
+        }
+      })();
+    } else {
+      // For single files, create a simple plan using the new name
+      // Normalize: treat '/' as root (empty string), strip leading slashes
+      let normalizedDest = copyMoveDestination === '/' ? '' : copyMoveDestination;
+      normalizedDest = normalizedDest.replace(/^\/+/, '').replace(/\/+$/, '');
+      if (normalizedDest) {
+        normalizedDest = normalizedDest + '/';
+      }
+
+      // Strip leading slashes from name
+      let normalizedName = copyMoveNewName.replace(/^\/+/, '');
+
+      // If name is empty, fallback to basename of source key
+      if (!normalizedName) {
+        const sourceBasename = copyMoveItem.key.split('/').filter(Boolean).pop();
+        if (!sourceBasename) {
+          setCopyMoveResolveError('Invalid source key: cannot determine filename');
+          return;
+        }
+        normalizedName = sourceBasename;
+      }
+
+      // Build destination key and collapse any duplicate slashes
+      const destinationKey = (normalizedDest + normalizedName).replace(/\/+/g, '/');
+
+      // Final validation: destinationKey should not be empty or start with '/'
+      if (!destinationKey || destinationKey.startsWith('/')) {
+        setCopyMoveResolveError('Invalid destination: path cannot be empty or start with /');
+        return;
+      }
+
+      setCopyMovePlan({
+        operations: [{
+          sourceKey: copyMoveItem.key,
+          destinationKey,
+        }],
+        folderKeys: [],
+      });
+    }
+
+    return () => {
+      abortController.abort();
+    };
+  }, [copyMoveDialogOpen, copyMoveItem, copyMoveDestination, copyMoveNewName, resolveCopyMovePlan]);
+
+  const handleCopyMoveConfirm = useCallback(async () => {
+    if (!copyMoveItem || !copyMovePlan) return;
+
+    setCopyMoveProgress({ completed: 0, total: copyMovePlan.operations.length });
+
+    try {
+      if (copyMoveItem.isFolder) {
+        // Batch operation for folders
+        const executeOp = copyMoveMode === 'copy' ? copyMany : moveMany;
+        const result = await executeOp(copyMovePlan.operations);
+
+        setCopyMoveProgress({ completed: result.successful.length, total: copyMovePlan.operations.length });
+
+        if (result.errors.length > 0) {
+          showSnackbar(
+            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.successful.length} objects, ${result.errors.length} failed`,
+            'warning'
+          );
+        } else {
+          showSnackbar(
+            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.successful.length} objects successfully`,
+            'success'
+          );
+        }
+      } else {
+        // Single file operation
+        const op = copyMovePlan.operations[0];
+        if (copyMoveMode === 'copy') {
+          await copy(op.sourceKey, op.destinationKey);
+        } else {
+          await move(op.sourceKey, op.destinationKey);
+        }
+        setCopyMoveProgress({ completed: 1, total: 1 });
+        showSnackbar(
+          `File ${copyMoveMode === 'copy' ? 'copied' : 'moved'} successfully`,
+          'success'
+        );
+      }
+
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `${copyMoveMode === 'copy' ? 'Copy' : 'Move'} failed`;
+      showSnackbar(message, 'error');
+    } finally {
+      setCopyMoveDialogOpen(false);
+      setCopyMoveItem(null);
+      setCopyMovePlan(null);
+      setCopyMoveProgress(undefined);
+      setCopyMoveNewName('');
+    }
+  }, [copyMoveItem, copyMovePlan, copyMoveMode, copy, move, copyMany, moveMany, refresh, showSnackbar]);
+
+  const handleCopyMoveCancel = useCallback(() => {
+    setCopyMoveDialogOpen(false);
+    setCopyMoveItem(null);
+    setCopyMoveDestination('');
+    setCopyMovePlan(null);
+    setCopyMoveResolveError(null);
+    setCopyMoveProgress(undefined);
+    setCopyMoveNewName('');
+  }, []);
+
   return (
     <Box
       sx={{
@@ -389,6 +583,8 @@ export function S3Browser() {
           >
             <FileList
               onDeleteRequest={handleDeleteRequest}
+              onCopyRequest={handleCopyRequest}
+              onMoveRequest={handleMoveRequest}
               onCopyUrl={handleCopyUrl}
               onPreview={handlePreview}
               selectedKeys={selectedKeys}
@@ -469,6 +665,31 @@ export function S3Browser() {
         cannotPreviewReason={preview.cannotPreviewReason}
         onClose={preview.closePreview}
         onDownload={handlePreviewDownload}
+      />
+
+      <FolderPickerDialog
+        open={folderPickerOpen}
+        title={copyMoveMode === 'copy' ? 'Copy to...' : 'Move to...'}
+        sourceItem={copyMoveItem}
+        currentSourcePath={currentPath}
+        mode={copyMoveMode}
+        onConfirm={handleDestinationSelected}
+        onCancel={handleFolderPickerCancel}
+      />
+
+      <CopyMoveDialog
+        open={copyMoveDialogOpen}
+        mode={copyMoveMode}
+        sourceItem={copyMoveItem}
+        destinationPath={copyMoveDestination}
+        newName={copyMoveNewName}
+        isResolving={isResolvingCopyMove}
+        isExecuting={isCopying || isMoving}
+        resolutionError={copyMoveResolveError}
+        plan={copyMovePlan}
+        progress={copyMoveProgress}
+        onConfirm={handleCopyMoveConfirm}
+        onCancel={handleCopyMoveCancel}
       />
 
       <Dialog
