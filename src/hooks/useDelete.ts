@@ -64,22 +64,33 @@ export function useDelete() {
       setIsDeleting(true);
       setError(null);
 
-      try {
-        const deleted: string[] = [];
-        const errors: Array<{ key: string; message: string }> = [];
+      const deleted: string[] = [];
+      const errors: Array<{ key: string; message: string }> = [];
+      let currentBatch: string[] = [];
 
+      try {
         for (let i = 0; i < keys.length; i += MAX_BATCH_DELETE) {
           const batch = keys.slice(i, i + MAX_BATCH_DELETE);
+          currentBatch = batch;
           const result = await deleteObjects(activeConnectionId, bucket, batch);
           deleted.push(...result.deleted);
           errors.push(...result.errors);
+          currentBatch = [];
         }
 
         return { deleted, errors };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Batch delete failed';
         setError(message);
-        throw err;
+        if (currentBatch.length > 0) {
+          errors.push(
+            ...currentBatch.map((key) => ({
+              key,
+              message,
+            }))
+          );
+        }
+        return { deleted, errors };
       } finally {
         setIsDeleting(false);
       }

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -96,6 +96,22 @@ export function S3Browser() {
     };
   }, [deleteMode, deletePlan]);
 
+  const itemsToDeleteKey = useMemo(() => {
+    if (itemsToDelete.length === 0) {
+      return '';
+    }
+    return itemsToDelete
+      .map((item) => item.key)
+      .sort((a, b) => a.localeCompare(b))
+      .join('|');
+  }, [itemsToDelete]);
+
+  const itemsToDeleteRef = useRef<S3Object[]>([]);
+
+  useEffect(() => {
+    itemsToDeleteRef.current = itemsToDelete;
+  }, [itemsToDelete]);
+
   const handleSnackbarClose = useCallback(() => {
     setSnackbar((prev) => ({ ...prev, open: false }));
   }, []);
@@ -174,7 +190,7 @@ export function S3Browser() {
 
     void (async () => {
       try {
-        const plan = await resolveDeletePlan(itemsToDelete, {
+        const plan = await resolveDeletePlan(itemsToDeleteRef.current, {
           includeFolderContents: allowRecursiveDelete,
           signal: abortController.signal,
         });
@@ -196,7 +212,7 @@ export function S3Browser() {
     return () => {
       abortController.abort();
     };
-  }, [deleteDialogOpen, deleteMode, itemsToDelete, allowRecursiveDelete, resolveDeletePlan]);
+  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, allowRecursiveDelete, resolveDeletePlan]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
