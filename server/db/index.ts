@@ -194,7 +194,7 @@ export function saveConnection(
   if (connectionId !== null) {
     // UPDATE existing connection by ID
     let result;
-    if (secretAccessKey !== null) {
+    if (secretAccessKey) {
       // Update with new secret key
       const encryptedSecretAccessKey = encrypt(secretAccessKey);
       const stmt = database.prepare(`
