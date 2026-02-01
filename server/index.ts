@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import path from 'path';
 import cookieParser from 'cookie-parser';
 import { getDb, closeDb } from './db/index.js';
 import authRoutes from './routes/auth.js';
@@ -39,6 +40,18 @@ app.use('/api/auth', authRoutes);
 app.use('/api/objects', objectsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/download', downloadRoutes);
+
+// Serve static frontend assets (production build)
+const distPath = path.resolve(process.cwd(), 'dist');
+app.use(express.static(distPath));
+
+// SPA fallback: serve index.html for non-API routes
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  return res.sendFile(path.join(distPath, 'index.html'));
+});
 
 // Health check
 app.get('/api/health', (_req, res) => {
