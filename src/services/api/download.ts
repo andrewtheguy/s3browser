@@ -5,6 +5,10 @@ interface DownloadUrlResponse {
 }
 
 export async function getDownloadUrl(connectionId: number, bucket: string, key: string): Promise<string> {
+  if (!Number.isFinite(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+
   const response = await apiGet<DownloadUrlResponse>(
     `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}`
   );
@@ -28,6 +32,10 @@ export async function getDownloadUrl(connectionId: number, bucket: string, key: 
 }
 
 export async function getPresignedUrl(connectionId: number, bucket: string, key: string, ttl: number = 86400): Promise<string> {
+  if (!Number.isFinite(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+
   // Validate ttl is a finite positive integer, fallback to default if invalid
   const sanitizedTtl = Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : 86400;
 

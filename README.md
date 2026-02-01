@@ -57,22 +57,28 @@ chmod 700 ~/.s3browser
 ```
 
 **Login Password** (required):
+
+The password must be at least 8 characters. Environment variable takes precedence over file.
+
 ```bash
-# Option 1: Generate random password
+# Option 1: Password file (recommended for persistence)
 openssl rand -base64 32 > ~/.s3browser/login.password
 chmod 600 ~/.s3browser/login.password
 
-# Option 2: Use environment variable
+# Option 2: Environment variable (takes precedence if both are set)
 export S3BROWSER_LOGIN_PASSWORD="your-password-here"
 ```
 
-**Encryption Key** (required - encrypts saved S3 credentials):
+**Encryption Key** (required - encrypts saved S3 credentials at rest):
+
+The encryption key must be at least 32 characters. Environment variable takes precedence over file.
+
 ```bash
-# Option 1: Key file (recommended)
+# Option 1: Key file (recommended for persistence)
 openssl rand -base64 32 > ~/.s3browser/encryption.key
 chmod 600 ~/.s3browser/encryption.key
 
-# Option 2: Environment variable
+# Option 2: Environment variable (takes precedence if both are set)
 export S3BROWSER_ENCRYPTION_KEY=$(openssl rand -hex 32)
 ```
 
@@ -160,6 +166,7 @@ All data is stored in `~/.s3browser/`:
 - Session expires after **4 hours of inactivity**
 - Each authenticated request refreshes the session timer
 - Active users stay logged in indefinitely
+- To invalidate all sessions: change the login password and restart the server
 
 ## Limitations
 
