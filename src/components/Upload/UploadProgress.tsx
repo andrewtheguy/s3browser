@@ -121,9 +121,11 @@ export function UploadProgress({
               <ListItemText
                 primary={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    <Typography variant="body2" noWrap sx={{ maxWidth: 180 }}>
-                      {displayName}
-                    </Typography>
+                    <Tooltip title={displayName} placement="top" arrow>
+                      <Typography variant="body2" noWrap sx={{ maxWidth: 180 }}>
+                        {displayName}
+                      </Typography>
+                    </Tooltip>
                     <Chip
                       size="small"
                       label={formatFileSize(upload.total)}

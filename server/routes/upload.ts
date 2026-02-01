@@ -48,11 +48,14 @@ function validateAndSanitizeKey(key: string): { valid: false; error: string } | 
 
 interface NodeReadableStreamLike {
   on: (event: 'data' | 'end' | 'error', handler: (chunk?: unknown) => void) => void;
-  pause?: () => void;
+  off?: (event: 'data' | 'end' | 'error', handler: (chunk?: unknown) => void) => void;
+  removeListener?: (event: 'data' | 'end' | 'error', handler: (chunk?: unknown) => void) => void;
+  resume?: () => void;
 }
 
 interface WebReadableStreamReaderLike {
   read: () => Promise<{ done: boolean; value?: Uint8Array }>;
+  cancel?: (reason?: unknown) => Promise<void>;
   releaseLock?: () => void;
 }
 
@@ -76,9 +79,8 @@ function isWebReadableStream(value: unknown): value is WebReadableStreamLike {
 
 async function readNodeStream(stream: NodeReadableStreamLike): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  stream.pause?.();
   return await new Promise<Buffer>((resolve, reject) => {
-    stream.on('data', (chunk) => {
+    const onData = (chunk?: unknown) => {
       if (chunk instanceof Uint8Array) {
         chunks.push(Buffer.from(chunk));
         return;
@@ -94,25 +96,57 @@ async function readNodeStream(stream: NodeReadableStreamLike): Promise<Buffer> {
       if (typeof chunk === 'number' || typeof chunk === 'boolean' || typeof chunk === 'bigint') {
         chunks.push(Buffer.from(String(chunk)));
       }
-    });
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', (error) => {
+    };
+
+    const cleanup = () => {
+      stream.off?.('data', onData);
+      stream.off?.('end', onEnd);
+      stream.off?.('error', onError);
+      stream.removeListener?.('data', onData);
+      stream.removeListener?.('end', onEnd);
+      stream.removeListener?.('error', onError);
+    };
+
+    const onEnd = () => {
+      cleanup();
+      resolve(Buffer.concat(chunks));
+    };
+
+    const onError = (error?: unknown) => {
+      cleanup();
       reject(error instanceof Error ? error : new Error('Failed to read stream'));
-    });
+    };
+
+    stream.on('data', onData);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    stream.resume?.();
   });
 }
 
 async function readWebStream(stream: WebReadableStreamLike): Promise<Buffer> {
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
-  while (true) {
-    const result = await reader.read();
-    if (result.done) break;
-    if (result.value) {
-      chunks.push(result.value);
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      if (result.value) {
+        chunks.push(result.value);
+      }
     }
+  } catch (error) {
+    if (reader.cancel) {
+      try {
+        await reader.cancel(error);
+      } catch {
+        // Ignore cancel errors and rethrow the original error.
+      }
+    }
+    throw error;
+  } finally {
+    reader.releaseLock?.();
   }
-  reader.releaseLock?.();
   return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
 }
 
