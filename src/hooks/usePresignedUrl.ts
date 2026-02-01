@@ -32,7 +32,8 @@ export function usePresignedUrl() {
 
       // Clipboard unavailable - return URL for manual copy dialog
       return { success: false, url };
-    } catch {
+    } catch (err) {
+      console.error('usePresignedUrl: failed to get presigned URL', err);
       return { success: false };
     } finally {
       setIsLoading(false);

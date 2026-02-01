@@ -246,7 +246,7 @@ router.post('/:connectionId/:bucket/initiate', s3Middleware, requireBucket, asyn
     return;
   }
 
-  if (typeof fileSize !== 'number' || fileSize <= 0) {
+  if (typeof fileSize !== 'number' || !Number.isInteger(fileSize) || fileSize <= 0) {
     res.status(400).json({ error: 'Valid fileSize is required' });
     return;
   }
@@ -432,16 +432,22 @@ router.post('/:connectionId/:bucket/abort', s3Middleware, requireBucket, async (
   const trackingKey = `${connectionId}:${bucket}:${uploadId}`;
   const tracked = uploadTracker.get(trackingKey);
 
-  // Use tracked key if available, otherwise validate the provided key
+  // Validate the provided key
+  const keyValidation = validateAndSanitizeKey(key);
+  if (!keyValidation.valid) {
+    res.status(400).json({ error: keyValidation.error });
+    return;
+  }
+
+  // If tracked, verify the key matches
   let sanitizedKey: string;
   if (tracked) {
-    sanitizedKey = tracked.sanitizedKey;
-  } else {
-    const keyValidation = validateAndSanitizeKey(key);
-    if (!keyValidation.valid) {
-      res.status(400).json({ error: keyValidation.error });
+    if (keyValidation.sanitizedKey !== tracked.sanitizedKey) {
+      res.status(400).json({ error: 'Key does not match the upload' });
       return;
     }
+    sanitizedKey = tracked.sanitizedKey;
+  } else {
     sanitizedKey = keyValidation.sanitizedKey;
   }
 

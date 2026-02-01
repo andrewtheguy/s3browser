@@ -39,6 +39,46 @@ function extractFileName(key: string): string {
   return segments[segments.length - 1] || cleanKey;
 }
 
+function sanitizeFolderPath(path: string): { valid: true; path: string } | { valid: false; error: string } {
+  // Trim whitespace
+  let sanitized = path.trim();
+
+  // Check for path traversal
+  if (sanitized.includes('../')) {
+    return { valid: false, error: 'Path traversal is not allowed' };
+  }
+
+  // Remove leading slashes
+  sanitized = sanitized.replace(/^\/+/, '');
+
+  // Collapse repeated slashes into single slash
+  sanitized = sanitized.replace(/\/+/g, '/');
+
+  // Remove trailing slash for processing, we'll add it back
+  sanitized = sanitized.replace(/\/+$/, '');
+
+  // Check if empty after sanitization
+  if (sanitized.length === 0) {
+    return { valid: false, error: 'Folder path cannot be empty' };
+  }
+
+  // Check for empty segments (would result from paths like "a//b" after collapse, but we handle that above)
+  const segments = sanitized.split('/');
+  if (segments.some(seg => seg.length === 0)) {
+    return { valid: false, error: 'Folder path contains empty segments' };
+  }
+
+  // Add trailing slash for S3 folder convention
+  const folderPath = sanitized + '/';
+
+  // Validate byte length (S3 key limit is 1024 bytes)
+  if (Buffer.byteLength(folderPath, 'utf8') > 1024) {
+    return { valid: false, error: 'Folder path exceeds maximum length of 1024 bytes' };
+  }
+
+  return { valid: true, path: folderPath };
+}
+
 // All routes use s3Middleware which checks auth and creates S3 client from connectionId
 // Routes: /api/objects/:connectionId/:bucket/...
 
@@ -110,12 +150,17 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
 
 // DELETE /api/objects/:connectionId/:bucket/*key
 router.delete('/:connectionId/:bucket/*key', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  // Get the key from the URL path (everything after /api/objects/:connectionId/:bucket/)
-  const keyParam = req.params.key;
-  const key = Array.isArray(keyParam) ? keyParam.join('/') : keyParam;
+  // Express wildcard routes (*key) always return a string
+  const key = req.params.key as string;
 
   if (!key) {
     res.status(400).json({ error: 'Object key is required' });
+    return;
+  }
+
+  // Validate key to prevent path traversal and invalid paths
+  if (key.includes('../') || key.startsWith('/')) {
+    res.status(400).json({ error: 'Invalid object key' });
     return;
   }
 
@@ -220,10 +265,18 @@ router.post('/:connectionId/:bucket/folder', s3Middleware, requireBucket, async 
   const body = req.body as FolderRequestBody;
   const { path } = body;
 
-  if (typeof path !== 'string' || path.trim().length === 0) {
-    res.status(400).json({ error: 'Folder path must be a non-empty string' });
+  if (typeof path !== 'string') {
+    res.status(400).json({ error: 'Folder path must be a string' });
     return;
   }
+
+  const sanitizeResult = sanitizeFolderPath(path);
+  if (!sanitizeResult.valid) {
+    res.status(400).json({ error: sanitizeResult.error });
+    return;
+  }
+
+  const folderPath = sanitizeResult.path;
 
   const bucket = req.s3Credentials?.bucket;
   const client = req.s3Client;
@@ -233,8 +286,6 @@ router.post('/:connectionId/:bucket/folder', s3Middleware, requireBucket, async 
     res.status(500).json({ error: 'Internal server error' });
     return;
   }
-
-  const folderPath = path.endsWith('/') ? path : `${path}/`;
 
   const command = new PutObjectCommand({
     Bucket: bucket,

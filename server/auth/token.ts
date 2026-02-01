@@ -2,6 +2,7 @@ import { scryptSync } from 'crypto';
 import { getLoginPassword, createHmacSignature, timingSafeCompare } from '../db/crypto.js';
 
 const TOKEN_EXPIRATION_HOURS = 4;
+const CLOCK_SKEW_SECONDS = 30;
 
 // Cookie options for auth token
 export const AUTH_COOKIE_OPTIONS: {
@@ -80,8 +81,8 @@ export function verifyAuthToken(token: string): boolean {
     return false;
   }
 
-  // Check issued at is valid (not in the future)
-  if (typeof payload.iat !== 'number' || payload.iat > now) {
+  // Check issued at is valid (not in the future, with clock skew tolerance)
+  if (typeof payload.iat !== 'number' || payload.iat > now + CLOCK_SKEW_SECONDS) {
     return false;
   }
 

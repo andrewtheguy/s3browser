@@ -104,7 +104,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
                   color="error"
                   onClick={onBatchDelete}
                   disabled={isDeleting}
-                  sx={{ minWidth: { xs: 'auto', sm: 'auto' }, px: { xs: 1, sm: 2 } }}
+                  sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
                 >
                   <DeleteIcon sx={{ mr: { xs: 0, sm: 1 } }} />
                   <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
@@ -118,7 +118,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
             <Button
               variant="outlined"
               onClick={onCreateFolderClick}
-              sx={{ minWidth: { xs: 'auto', sm: 'auto' }, px: { xs: 1, sm: 2 } }}
+              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
             >
               <CreateNewFolderIcon sx={{ mr: { xs: 0, sm: 1 } }} />
               <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
@@ -130,7 +130,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
             <Button
               variant="contained"
               onClick={onUploadClick}
-              sx={{ minWidth: { xs: 'auto', sm: 'auto' }, px: { xs: 1, sm: 2 } }}
+              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
             >
               <CloudUploadIcon sx={{ mr: { xs: 0, sm: 1 } }} />
               <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
@@ -142,7 +142,7 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
             <Button
               variant="outlined"
               onClick={handleManageConnections}
-              sx={{ minWidth: { xs: 'auto', sm: 'auto' }, px: { xs: 1, sm: 2 } }}
+              sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
             >
               <SettingsIcon sx={{ mr: { xs: 0, sm: 1 } }} />
               <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
