@@ -114,8 +114,9 @@ const app = express();
 // Middleware
 app.use(express.json({
   type: (req) => {
-    const url = typeof req.url === 'string' ? req.url : '';
-    if (url.startsWith('/api/upload/') && (url.endsWith('/single') || url.endsWith('/part'))) {
+    const rawUrl = typeof req.url === 'string' ? req.url : '';
+    const path = rawUrl.split('?')[0] || '';
+    if (path.startsWith('/api/upload/') && (path.endsWith('/single') || path.endsWith('/part'))) {
       return false;
     }
     const contentType = req.headers['content-type'];
