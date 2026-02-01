@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import { parseArgs } from 'util';
 import { getDb, closeDb } from './db/index.js';
+import { acquireLock, releaseLock } from './lock.js';
 import authRoutes from './routes/auth.js';
 import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
@@ -101,15 +102,6 @@ function parseBindAddress(bind: string | undefined): { host: string | undefined;
 
 const { host: HOST, port: PORT } = parseBindAddress(values.bind);
 
-// Initialize database (validates encryption key and creates tables)
-try {
-  getDb();
-  console.log('Database initialized successfully');
-} catch (error) {
-  console.error('Failed to initialize database:', error instanceof Error ? error.message : error);
-  process.exit(1);
-}
-
 // Asset map for serving
 const embeddedAssets: Record<string, { content: string; mime: string }> = {
   '/index.html': { content: indexHtml as string, mime: 'text/html' },
@@ -168,6 +160,25 @@ app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// Acquire instance lock to prevent multiple instances
+try {
+  acquireLock();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : 'Failed to acquire lock');
+  process.exit(1);
+}
+
+// Initialize database (validates encryption key and creates tables)
+try {
+  getDb();
+  console.log('Database initialized successfully');
+} catch (error) {
+  console.error('Failed to initialize database:', error instanceof Error ? error.message : error);
+  releaseLock();
+  process.exit(1);
+}
+
+// Start server
 const server = HOST
   ? app.listen(PORT, HOST, () => {
       const displayHost = HOST.includes(':') ? `[${HOST}]` : HOST;
@@ -212,6 +223,12 @@ function shutdown() {
     closeDb();
   } catch (err) {
     console.error('Error closing database:', err);
+  }
+
+  try {
+    releaseLock();
+  } catch (err) {
+    console.error('Error releasing lock:', err);
   }
 
   if (!server.listening) {
