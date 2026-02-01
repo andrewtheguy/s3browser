@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Box,
@@ -39,7 +39,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const [manualBucket, setManualBucket] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
 
-  const fetchBuckets = async () => {
+  const fetchBuckets = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setAccessDenied(false);
@@ -65,11 +65,11 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [connectionId]);
 
   useEffect(() => {
     void fetchBuckets();
-  }, []);
+  }, [fetchBuckets]);
 
   const handleSelectBucket = (bucketName: string) => {
     setIsSelecting(true);

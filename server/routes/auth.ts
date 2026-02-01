@@ -15,8 +15,8 @@ import {
   saveConnection,
   deleteConnectionById,
   getConnectionById,
-  getConnectionByName,
   decryptConnectionSecretKey,
+  isUniqueConstraintError,
 } from '../db/index.js';
 import { getLoginPassword, timingSafeCompare } from '../db/crypto.js';
 import { createAuthToken, verifyAuthToken, AUTH_COOKIE_OPTIONS } from '../auth/token.js';
@@ -26,6 +26,7 @@ interface LoginRequestBody {
 }
 
 interface S3CredentialsRequestBody {
+  connectionId?: number;
   accessKeyId?: string;
   secretAccessKey?: string;
   region?: string;
@@ -106,7 +107,7 @@ router.get('/status', (req: Request, res: Response): void => {
 // POST /api/auth/connections - Save a new S3 connection or update existing
 router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as S3CredentialsRequestBody;
-  const { accessKeyId, secretAccessKey, region, bucket, endpoint, connectionName, autoDetectRegion } = body;
+  const { connectionId, accessKeyId, secretAccessKey, region, bucket, endpoint, connectionName, autoDetectRegion } = body;
 
   if (!accessKeyId) {
     res.status(400).json({ error: 'Access key ID is required' });
@@ -118,9 +119,22 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     return;
   }
 
+  // Look up existing connection by ID if provided
+  let existingConnection;
+  if (connectionId !== undefined) {
+    if (typeof connectionId !== 'number' || !Number.isInteger(connectionId) || connectionId <= 0) {
+      res.status(400).json({ error: 'Invalid connection ID' });
+      return;
+    }
+    existingConnection = getConnectionById(connectionId);
+    if (!existingConnection) {
+      res.status(404).json({ error: 'Connection not found' });
+      return;
+    }
+  }
+
   // For existing connections, secret key is optional (use stored key if not provided)
   // For new connections, secret key is required
-  const existingConnection = getConnectionByName(connectionName.trim());
   let effectiveSecretKey: string;
 
   if (secretAccessKey === undefined || secretAccessKey === '') {
@@ -185,6 +199,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
   let savedConnection;
   try {
     savedConnection = saveConnection(
+      connectionId ?? null,
       connectionName.trim(),
       endpoint || 'https://s3.amazonaws.com',
       accessKeyId,
@@ -194,6 +209,10 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
       autoDetectRegion !== false
     );
   } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      res.status(400).json({ error: 'Connection name already exists' });
+      return;
+    }
     console.error('saveConnection failed:', error);
     res.status(500).json({ error: 'Failed to save connection' });
     return;

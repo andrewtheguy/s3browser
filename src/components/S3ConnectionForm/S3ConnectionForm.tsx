@@ -65,7 +65,7 @@ export function S3ConnectionForm({
   const [autoDetectRegion, setAutoDetectRegion] = useState(true);
   const [endpointTouched, setEndpointTouched] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
-  const [selectedConnectionName, setSelectedConnectionName] = useState<string | null>(null);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<number | null>(null);
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     connectionName: '',
@@ -94,6 +94,7 @@ export function S3ConnectionForm({
         endpoint: formData.endpoint || undefined,
         connectionName: formData.connectionName.trim(),
         autoDetectRegion,
+        connectionId: selectedConnectionId ?? undefined,
       };
       const result = await connect(credentials);
 
@@ -121,9 +122,9 @@ export function S3ConnectionForm({
   };
 
   const handleConnectionChange = (e: SelectChangeEvent<string>) => {
-    const name = e.target.value;
-    if (name === 'new') {
-      setSelectedConnectionName(null);
+    const value = e.target.value;
+    if (value === 'new') {
+      setSelectedConnectionId(null);
       setFormData({
         connectionName: '',
         endpoint: 'https://s3.amazonaws.com',
@@ -138,9 +139,10 @@ export function S3ConnectionForm({
       return;
     }
 
-    const connection = connections.find((c) => c.name === name);
+    const id = parseInt(value, 10);
+    const connection = connections.find((c) => c.id === id);
     if (connection) {
-      setSelectedConnectionName(connection.name);
+      setSelectedConnectionId(connection.id);
       setFormData({
         connectionName: connection.name,
         endpoint: connection.endpoint,
@@ -161,8 +163,8 @@ export function S3ConnectionForm({
     setDeletionError(null);
     try {
       await deleteConnection(connectionId);
-      if (selectedConnectionName === name) {
-        setSelectedConnectionName(null);
+      if (selectedConnectionId === connectionId) {
+        setSelectedConnectionId(null);
         setFormData({
           connectionName: '',
           endpoint: 'https://s3.amazonaws.com',
@@ -181,7 +183,7 @@ export function S3ConnectionForm({
   };
 
   // Secret key is optional when using an existing saved connection
-  const isExistingConnection = selectedConnectionName !== null;
+  const isExistingConnection = selectedConnectionId !== null;
   const isFormValid =
     (autoDetectRegion || formData.bucket || formData.region) &&
     formData.connectionName.trim() &&
@@ -243,19 +245,19 @@ export function S3ConnectionForm({
         <InputLabel id="connection-select-label">Saved Connection</InputLabel>
         <Select
           labelId="connection-select-label"
-          value={selectedConnectionName || 'new'}
+          value={selectedConnectionId !== null ? String(selectedConnectionId) : 'new'}
           label="Saved Connection"
           onChange={handleConnectionChange}
           disabled={connectionsLoading}
           renderValue={(value) => {
             if (value === 'new') return 'New Connection';
-            const conn = connections.find((c) => c.name === value);
+            const conn = connections.find((c) => c.id === parseInt(value, 10));
             return conn?.name || 'New Connection';
           }}
         >
           <MenuItem value="new">New Connection</MenuItem>
           {connections.map((connection) => (
-            <MenuItem key={connection.name} value={connection.name}>
+            <MenuItem key={connection.id} value={String(connection.id)}>
               <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
                 <ListItemText
                   primary={connection.name}

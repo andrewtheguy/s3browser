@@ -53,6 +53,7 @@ export interface S3ConnectionCredentials extends Omit<S3Credentials, 'region'> {
   region?: string;
   connectionName: string;
   autoDetectRegion?: boolean;
+  connectionId?: number;
 }
 
 export interface S3ClientContextValue {
