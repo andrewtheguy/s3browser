@@ -46,6 +46,102 @@ function validateAndSanitizeKey(key: string): { valid: false; error: string } | 
   return { valid: true, sanitizedKey: normalized };
 }
 
+interface NodeReadableStreamLike {
+  on: (event: 'data' | 'end' | 'error', handler: (chunk?: unknown) => void) => void;
+  pause?: () => void;
+}
+
+interface WebReadableStreamReaderLike {
+  read: () => Promise<{ done: boolean; value?: Uint8Array }>;
+  releaseLock?: () => void;
+}
+
+interface WebReadableStreamLike {
+  getReader: () => WebReadableStreamReaderLike;
+}
+
+function isNodeReadableStream(value: unknown): value is NodeReadableStreamLike {
+  return typeof value === 'object' &&
+    value !== null &&
+    'on' in value &&
+    typeof (value as { on?: unknown }).on === 'function';
+}
+
+function isWebReadableStream(value: unknown): value is WebReadableStreamLike {
+  return typeof value === 'object' &&
+    value !== null &&
+    'getReader' in value &&
+    typeof (value as { getReader?: unknown }).getReader === 'function';
+}
+
+async function readNodeStream(stream: NodeReadableStreamLike): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  stream.pause?.();
+  return await new Promise<Buffer>((resolve, reject) => {
+    stream.on('data', (chunk) => {
+      if (chunk instanceof Uint8Array) {
+        chunks.push(Buffer.from(chunk));
+        return;
+      }
+      if (typeof chunk === 'string') {
+        chunks.push(Buffer.from(chunk));
+        return;
+      }
+      if (chunk && typeof chunk === 'object') {
+        chunks.push(Buffer.from(JSON.stringify(chunk)));
+        return;
+      }
+      if (typeof chunk === 'number' || typeof chunk === 'boolean' || typeof chunk === 'bigint') {
+        chunks.push(Buffer.from(String(chunk)));
+      }
+    });
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', (error) => {
+      reject(error instanceof Error ? error : new Error('Failed to read stream'));
+    });
+  });
+}
+
+async function readWebStream(stream: WebReadableStreamLike): Promise<Buffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  while (true) {
+    const result = await reader.read();
+    if (result.done) break;
+    if (result.value) {
+      chunks.push(result.value);
+    }
+  }
+  reader.releaseLock?.();
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+}
+
+async function resolveBodyBuffer(req: AuthenticatedRequest): Promise<Buffer> {
+  const body = req.body as unknown;
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (typeof body === 'string') {
+    return Buffer.from(body);
+  }
+  if (isNodeReadableStream(body)) {
+    return await readNodeStream(body);
+  }
+  if (isWebReadableStream(body)) {
+    return await readWebStream(body);
+  }
+  if (body && typeof body === 'object') {
+    return Buffer.from(JSON.stringify(body));
+  }
+  if (isNodeReadableStream(req)) {
+    return await readNodeStream(req);
+  }
+  return Buffer.from('');
+}
+
 const router = Router();
 
 // In-memory tracking for multipart uploads
@@ -134,14 +230,14 @@ router.post(
 
     const contentType = req.headers['content-type'] || 'application/octet-stream';
 
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: keyValidation.sanitizedKey,
-      Body: req.body as Buffer,
-      ContentType: contentType,
-    });
-
     try {
+      const bodyBuffer = await resolveBodyBuffer(req);
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: keyValidation.sanitizedKey,
+        Body: bodyBuffer,
+        ContentType: contentType,
+      });
       await client.send(command);
       res.json({ success: true, key: keyValidation.sanitizedKey });
     } catch (error) {
@@ -208,15 +304,15 @@ router.post(
       return;
     }
 
-    const command = new UploadPartCommand({
-      Bucket: bucket,
-      Key: tracked.sanitizedKey,
-      UploadId: uploadId,
-      PartNumber: partNum,
-      Body: req.body as Buffer,
-    });
-
     try {
+      const bodyBuffer = await resolveBodyBuffer(req);
+      const command = new UploadPartCommand({
+        Bucket: bucket,
+        Key: tracked.sanitizedKey,
+        UploadId: uploadId,
+        PartNumber: partNum,
+        Body: bodyBuffer,
+      });
       const result = await client.send(command);
       res.json({ etag: result.ETag });
     } catch (error) {
