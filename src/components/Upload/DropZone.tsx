@@ -156,9 +156,8 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
       }
 
       if (fileItems.every((item) => hasFileSystemHandle(item))) {
-        const handleItems = fileItems.filter(hasFileSystemHandle);
         const files = await Promise.all(
-          handleItems.map(async (item) => {
+          fileItems.map(async (item) => {
             const handle = await item.getAsFileSystemHandle();
             return handle ? collectFilesFromHandle(handle) : [];
           })

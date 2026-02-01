@@ -173,7 +173,7 @@ async function resolveBodyBuffer(req: AuthenticatedRequest): Promise<Buffer> {
   if (isNodeReadableStream(req)) {
     return await readNodeStream(req);
   }
-  return Buffer.from('');
+  throw new Error('Unexpected request body type in upload handler');
 }
 
 const router = Router();

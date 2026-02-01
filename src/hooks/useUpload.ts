@@ -395,7 +395,8 @@ export function useUpload() {
         const resolvedRelativePath = normalizeRelativePath(
           candidate.relativePath || webkitRelativePath || file.name
         );
-        const computedKey = `${normalizedPrefix}${resolvedRelativePath}`;
+        const explicitKey = candidate.key ? normalizeRelativePath(candidate.key) : '';
+        const computedKey = explicitKey || `${normalizedPrefix}${resolvedRelativePath}`;
 
         const existingUpload = await getUploadByFile(
           file.name,
@@ -508,6 +509,7 @@ export function useUpload() {
       abortControllersRef.current.delete(id);
     }
 
+    // inFlight cleanup happens in runUpload/processQueue finally after AbortError.
     updateUpload(id, {
       status: 'paused',
     });

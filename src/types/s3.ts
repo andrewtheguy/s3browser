@@ -48,6 +48,7 @@ export interface UploadProgress {
 
 export interface UploadCandidate {
   file: File;
+  key?: string;
   relativePath?: string;
 }
 

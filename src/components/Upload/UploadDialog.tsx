@@ -106,7 +106,7 @@ export function UploadDialog({
       // File matches - upload will automatically detect and resume the pending upload
       setResumeError(null);
       setPendingToResume(null);
-      await upload([{ file }], ''); // Use the key from pending upload (already includes path)
+      await upload([{ file, key: pendingToResume.key }], ''); // Use the key from pending upload (already includes path)
     },
     [pendingToResume, upload]
   );
