@@ -60,7 +60,8 @@ const MIME_TYPES: Record<string, string> = {
   txt: 'text/plain',
   md: 'text/markdown',
   json: 'application/json',
-  xml: 'application/xml',
+  // Force XML previews to render as plain text to avoid inline rendering in the preview dialog.
+  xml: 'text/plain',
   // Force HTML previews to render as plain text to avoid executing markup in the preview dialog.
   html: 'text/plain',
   htm: 'text/plain',
