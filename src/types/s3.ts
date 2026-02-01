@@ -30,6 +30,7 @@ export interface UploadProgress {
   id: string;
   file: File;
   key: string;
+  relativePath?: string;
   loaded: number;
   total: number;
   percentage: number;
@@ -43,6 +44,11 @@ export interface UploadProgress {
   canResume?: boolean;
   // Persistence ID for IndexedDB
   persistenceId?: string;
+}
+
+export interface UploadCandidate {
+  file: File;
+  relativePath?: string;
 }
 
 export interface LoginCredentials {
