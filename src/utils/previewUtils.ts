@@ -1,6 +1,8 @@
 import { getFileExtension } from './formatters';
 
-export const PREVIEWABLE_EXTENSIONS = new Set([
+export type EmbedType = 'text' | 'pdf' | 'image' | 'unsupported';
+
+export const TEXT_EXTENSIONS = new Set([
   // Code files
   'js', 'ts', 'tsx', 'jsx', 'html', 'css', 'scss', 'less', 'json', 'xml',
   'yaml', 'yml', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs',
@@ -9,36 +11,49 @@ export const PREVIEWABLE_EXTENSIONS = new Set([
   'txt', 'md', 'log', 'csv', 'toml', 'ini', 'env',
 ]);
 
+export const IMAGE_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico',
+]);
+
+export const PDF_EXTENSIONS = new Set(['pdf']);
+
 export const PREVIEWABLE_FILENAMES = new Set([
   'Makefile', 'Dockerfile', 'LICENSE', 'README', 'CHANGELOG',
   '.gitignore', '.gitattributes', '.editorconfig', '.prettierrc',
   '.eslintrc', '.babelrc', '.env', '.env.local', '.env.example',
 ]);
 
-export const MAX_PREVIEW_SIZE = 262144; // 256KB
-
-export interface PreviewabilityResult {
-  canPreview: boolean;
-  reason?: string;
-}
-
-export function isPreviewableFile(filename: string, size?: number): PreviewabilityResult {
+export function getEmbedType(filename: string): EmbedType {
   const ext = getFileExtension(filename);
   const basename = filename.split('/').pop() || filename;
 
-  const isPreviewableType = PREVIEWABLE_EXTENSIONS.has(ext) || PREVIEWABLE_FILENAMES.has(basename);
-
-  if (!isPreviewableType) {
-    return { canPreview: false, reason: 'File type not supported for preview' };
+  if (PDF_EXTENSIONS.has(ext)) {
+    return 'pdf';
   }
 
-  if (size === undefined) {
-    return { canPreview: false, reason: 'File size unknown' };
+  if (IMAGE_EXTENSIONS.has(ext)) {
+    return 'image';
   }
 
-  if (size > MAX_PREVIEW_SIZE) {
-    return { canPreview: false, reason: 'File is too large to preview (max 256KB)' };
+  if (TEXT_EXTENSIONS.has(ext) || PREVIEWABLE_FILENAMES.has(basename)) {
+    return 'text';
   }
 
-  return { canPreview: true };
+  return 'unsupported';
+}
+
+export interface PreviewabilityResult {
+  canPreview: boolean;
+  embedType: EmbedType;
+  reason?: string;
+}
+
+export function isPreviewableFile(filename: string): PreviewabilityResult {
+  const embedType = getEmbedType(filename);
+
+  if (embedType === 'unsupported') {
+    return { canPreview: false, embedType, reason: 'File type not supported for preview' };
+  }
+
+  return { canPreview: true, embedType };
 }

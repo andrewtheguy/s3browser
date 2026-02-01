@@ -50,89 +50,7 @@ const router = Router();
 // All routes use s3Middleware which checks auth and creates S3 client from connectionId
 // Routes: /api/download/:connectionId/:bucket/...
 
-// GET /api/download/:connectionId/:bucket/preview?key= (proxied content for preview)
-router.get('/:connectionId/:bucket/preview', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const bucket = req.s3Credentials?.bucket;
-  const client = req.s3Client;
-
-  if (!bucket || !client) {
-    console.error('Download preview route missing S3 context:', {
-      route: 'GET /api/download/:connectionId/:bucket/preview',
-      method: req.method,
-      path: req.path,
-      hasBucket: !!bucket,
-      hasClient: !!client,
-    });
-    res.status(500).json({ error: 'Internal server error' });
-    return;
-  }
-
-  const keyValidation = validateKey(req.query.key);
-  if (!keyValidation.valid) {
-    res.status(400).json({ error: keyValidation.error });
-    return;
-  }
-
-  // Limit content size for preview (256KB) as defense against file replacement
-  const MAX_PREVIEW_SIZE = 262144;
-
-  const command = new GetObjectCommand({
-    Bucket: bucket,
-    Key: keyValidation.validatedKey,
-    Range: `bytes=0-${MAX_PREVIEW_SIZE - 1}`,
-  });
-
-  try {
-    const response = await client.send(command);
-    const bodyStream = response.Body;
-
-    if (!bodyStream) {
-      res.status(404).json({ error: 'File not found or empty' });
-      return;
-    }
-
-    // Layer 1: Early reject using headers if ContentLength exceeds limit
-    if (response.ContentLength !== undefined && response.ContentLength > MAX_PREVIEW_SIZE) {
-      if ('destroy' in bodyStream && typeof bodyStream.destroy === 'function') {
-        bodyStream.destroy();
-      }
-      res.status(413).json({ error: 'File too large to preview' });
-      return;
-    }
-
-    // Layer 2: Hard stop while streaming - count bytes and abort if limit exceeded
-    const chunks: Uint8Array[] = [];
-    let totalBytes = 0;
-
-    for await (const chunk of bodyStream as AsyncIterable<Uint8Array>) {
-      totalBytes += chunk.length;
-      if (totalBytes > MAX_PREVIEW_SIZE) {
-        if ('destroy' in bodyStream && typeof bodyStream.destroy === 'function') {
-          bodyStream.destroy();
-        }
-        res.status(413).json({ error: 'File too large to preview' });
-        return;
-      }
-      chunks.push(chunk);
-    }
-
-    const buffer = Buffer.concat(chunks);
-    const content = buffer.toString('utf-8');
-
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.send(content);
-  } catch (error) {
-    const s3Error = error as { name?: string; code?: string };
-    if (s3Error.name === 'NoSuchKey' || s3Error.code === 'NoSuchKey') {
-      res.status(404).json({ error: 'File not found' });
-      return;
-    }
-    console.error('Failed to fetch file content:', error);
-    res.status(500).json({ error: 'Failed to fetch file content' });
-  }
-});
-
-// GET /api/download/:connectionId/:bucket/url?key=
+// GET /api/download/:connectionId/:bucket/url?key=&disposition=inline|attachment
 router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const bucket = req.s3Credentials?.bucket;
   const client = req.s3Client;
@@ -171,9 +89,17 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
     ttl = parsedTtl;
   }
 
+  // Parse disposition parameter for Content-Disposition header
+  const disposition = req.query.disposition as string | undefined;
+  const filename = keyValidation.validatedKey.split('/').pop() || 'download';
+
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: keyValidation.validatedKey,
+    ...(disposition === 'inline' && { ResponseContentDisposition: 'inline' }),
+    ...(disposition === 'attachment' && {
+      ResponseContentDisposition: `attachment; filename="${filename}"`,
+    }),
   });
 
   try {

@@ -14,12 +14,14 @@ import CloseIcon from '@mui/icons-material/Close';
 import DownloadIcon from '@mui/icons-material/Download';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import type { S3Object } from '../../types';
+import type { EmbedType } from '../../utils/previewUtils';
 
 interface PreviewDialogProps {
   open: boolean;
   isLoading: boolean;
   error: string | null;
-  content: string | null;
+  signedUrl: string | null;
+  embedType: EmbedType;
   item: S3Object | null;
   cannotPreviewReason: string | null;
   onClose: () => void;
@@ -30,7 +32,8 @@ export function PreviewDialog({
   open,
   isLoading,
   error,
-  content,
+  signedUrl,
+  embedType,
   item,
   cannotPreviewReason,
   onClose,
@@ -99,23 +102,45 @@ export function PreviewDialog({
       );
     }
 
-    if (content !== null) {
+    if (signedUrl !== null) {
+      if (embedType === 'image') {
+        return (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              p: 2,
+              bgcolor: (theme) => theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
+            }}
+          >
+            <Box
+              component="img"
+              src={signedUrl}
+              alt={item?.name || 'Preview'}
+              sx={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+              }}
+            />
+          </Box>
+        );
+      }
+
+      // For text and PDF, use iframe
       return (
         <Box
-          component="pre"
+          component="iframe"
+          src={signedUrl}
+          title={item?.name || 'Preview'}
           sx={{
-            m: 0,
-            p: 2,
-            fontFamily: 'monospace',
-            fontSize: '0.875rem',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            bgcolor: (theme) => theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
-            minHeight: '100%',
+            width: '100%',
+            height: '100%',
+            border: 'none',
           }}
-        >
-          {content}
-        </Box>
+        />
       );
     }
 

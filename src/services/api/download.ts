@@ -1,4 +1,4 @@
-import { apiGet, apiGetText } from './client';
+import { apiGet } from './client';
 
 interface DownloadUrlResponse {
   url: string;
@@ -29,13 +29,20 @@ export async function getDownloadUrl(connectionId: number, bucket: string, key: 
   }
 
   const response = await apiGet<DownloadUrlResponse>(
-    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}`
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&disposition=attachment`
   );
 
   return validateDownloadUrlResponse(response, 'Failed to get download URL');
 }
 
-export async function getPresignedUrl(connectionId: number, bucket: string, key: string, ttl: number = 86400): Promise<string> {
+export async function getPresignedUrl(
+  connectionId: number,
+  bucket: string,
+  key: string,
+  ttl: number = 86400,
+  disposition?: 'inline' | 'attachment',
+  signal?: AbortSignal
+): Promise<string> {
   if (!Number.isInteger(connectionId) || connectionId < 1) {
     throw new Error('Invalid connection ID');
   }
@@ -46,9 +53,12 @@ export async function getPresignedUrl(connectionId: number, bucket: string, key:
 
   const sanitizedTtl = Math.floor(ttl);
 
-  const response = await apiGet<DownloadUrlResponse>(
-    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`
-  );
+  let url = `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&ttl=${sanitizedTtl}`;
+  if (disposition) {
+    url += `&disposition=${disposition}`;
+  }
+
+  const response = await apiGet<DownloadUrlResponse>(url, signal);
 
   return validateDownloadUrlResponse(response, 'Failed to get presigned URL');
 }
@@ -67,17 +77,4 @@ export async function downloadFile(connectionId: number, bucket: string, key: st
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-}
-
-export async function getFilePreview(connectionId: number, bucket: string, key: string, signal?: AbortSignal): Promise<string> {
-  if (!Number.isInteger(connectionId) || connectionId < 1) {
-    throw new Error('Invalid connection ID');
-  }
-
-  const content = await apiGetText(
-    `/download/${connectionId}/${encodeURIComponent(bucket)}/preview?key=${encodeURIComponent(key)}`,
-    signal
-  );
-
-  return content ?? '';
 }
