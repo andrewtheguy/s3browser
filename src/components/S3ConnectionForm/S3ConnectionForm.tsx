@@ -16,6 +16,7 @@ import {
   IconButton,
   ListItemText,
   Divider,
+  InputAdornment,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -67,6 +68,7 @@ export function S3ConnectionForm({
   const [nameTouched, setNameTouched] = useState(false);
   const [selectedConnectionId, setSelectedConnectionId] = useState<number | null>(null);
   const [deletionError, setDeletionError] = useState<string | null>(null);
+  const [wantsToChangeSecretKey, setWantsToChangeSecretKey] = useState(false);
   const [formData, setFormData] = useState({
     connectionName: '',
     region: '',
@@ -136,6 +138,7 @@ export function S3ConnectionForm({
       setAutoDetectRegion(true);
       setEndpointTouched(false);
       setNameTouched(false);
+      setWantsToChangeSecretKey(false);
       return;
     }
 
@@ -149,11 +152,12 @@ export function S3ConnectionForm({
         accessKeyId: connection.accessKeyId,
         bucket: connection.bucket || '',
         region: connection.region || '',
-        secretAccessKey: '', // Secret key must be re-entered for security
+        secretAccessKey: '',
       });
       setAutoDetectRegion(connection.autoDetectRegion);
       setEndpointTouched(false);
       setNameTouched(false);
+      setWantsToChangeSecretKey(false);
     }
   };
 
@@ -174,6 +178,7 @@ export function S3ConnectionForm({
           secretAccessKey: '',
         });
         setAutoDetectRegion(true);
+        setWantsToChangeSecretKey(false);
       }
     } catch (err) {
       console.error('Failed to delete connection:', err);
@@ -182,13 +187,14 @@ export function S3ConnectionForm({
     }
   };
 
-  // Secret key is optional when using an existing saved connection
+  // Secret key is optional when using an existing saved connection (unless user wants to change it)
   const isExistingConnection = selectedConnectionId !== null;
+  const secretKeyRequired = !isExistingConnection || wantsToChangeSecretKey;
   const isFormValid =
     (autoDetectRegion || formData.bucket || formData.region) &&
     formData.connectionName.trim() &&
     formData.accessKeyId &&
-    (isExistingConnection || formData.secretAccessKey) &&
+    (!secretKeyRequired || formData.secretAccessKey) &&
     endpointValid &&
     nameValid;
 
@@ -325,18 +331,53 @@ export function S3ConnectionForm({
           autoComplete="off"
         />
 
-        <TextField
-          fullWidth
-          label="Secret Access Key"
-          type="password"
-          value={formData.secretAccessKey}
-          onChange={handleChange('secretAccessKey')}
-          margin="normal"
-          required={!isExistingConnection}
-          autoComplete="off"
-          placeholder={isExistingConnection ? 'Leave empty to keep existing' : undefined}
-          helperText={isExistingConnection ? 'Leave empty to use saved key, or enter new key to update' : undefined}
-        />
+        {isExistingConnection && !wantsToChangeSecretKey ? (
+          <Box sx={{ mt: 2, mb: 1 }}>
+            <TextField
+              fullWidth
+              label="Secret Access Key"
+              type="password"
+              value="••••••••••••••••"
+              disabled
+              helperText="Key is stored securely on the server"
+            />
+            <Button
+              size="small"
+              onClick={() => setWantsToChangeSecretKey(true)}
+              sx={{ mt: 1 }}
+            >
+              Change Secret Key
+            </Button>
+          </Box>
+        ) : (
+          <TextField
+            fullWidth
+            label={isExistingConnection ? 'New Secret Access Key' : 'Secret Access Key'}
+            type="password"
+            value={formData.secretAccessKey}
+            onChange={handleChange('secretAccessKey')}
+            margin="normal"
+            required
+            autoComplete="off"
+            slotProps={isExistingConnection ? {
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setWantsToChangeSecretKey(false);
+                        setFormData((prev) => ({ ...prev, secretAccessKey: '' }));
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </InputAdornment>
+                ),
+              },
+            } : undefined}
+          />
+        )}
 
         <TextField
           fullWidth
