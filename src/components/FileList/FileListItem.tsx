@@ -26,6 +26,7 @@ interface FileListItemProps {
   onPreview: (item: S3Object) => void;
   isSelected?: boolean;
   onSelect?: (key: string, checked: boolean) => void;
+  allowFolderSelect?: boolean;
 }
 
 const iconMap: Record<FileIconType, React.ElementType> = {
@@ -65,6 +66,7 @@ export function FileListItem({
   onPreview,
   isSelected = false,
   onSelect,
+  allowFolderSelect = false,
 }: FileListItemProps) {
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
@@ -114,7 +116,7 @@ export function FileListItem({
       }}
     >
       <TableCell sx={{ width: 48, padding: '0 8px' }}>
-        {!item.isFolder && onSelect ? (
+        {(onSelect && (allowFolderSelect || !item.isFolder)) ? (
           <Checkbox
             size="small"
             checked={isSelected}

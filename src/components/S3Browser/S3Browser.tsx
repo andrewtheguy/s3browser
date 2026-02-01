@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Box,
   Paper,
@@ -16,7 +16,7 @@ import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
 import { DeleteDialog } from '../DeleteDialog';
 import { PreviewDialog } from '../PreviewDialog';
-import { useBrowserContext } from '../../contexts';
+import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview } from '../../hooks';
 import type { S3Object } from '../../types';
 
@@ -26,9 +26,27 @@ interface SnackbarState {
   severity: 'success' | 'error' | 'info' | 'warning';
 }
 
+const DELETE_PREVIEW_LIMIT = 6;
+const AWS_ENDPOINT_SUFFIX = 'amazonaws.com';
+
+function getEndpointHost(endpoint?: string | null): string | null {
+  if (!endpoint) {
+    return null;
+  }
+  try {
+    return new URL(endpoint).hostname.toLowerCase();
+  } catch {
+    return endpoint
+      .replace(/^https?:\/\//i, '')
+      .split('/')[0]
+      .toLowerCase();
+  }
+}
+
 export function S3Browser() {
   const { refresh, currentPath, objects } = useBrowserContext();
-  const { remove, removeMany, isDeleting } = useDelete();
+  const { credentials } = useS3ClientContext();
+  const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl } = usePresignedUrl();
   const { download } = useDownload();
@@ -37,6 +55,11 @@ export function S3Browser() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemsToDelete, setItemsToDelete] = useState<S3Object[]>([]);
+  const [deleteMode, setDeleteMode] = useState<'single' | 'batch'>('single');
+  const [deletePlan, setDeletePlan] = useState<{ fileKeys: string[]; folderKeys: string[] } | null>(null);
+  const [isResolvingDelete, setIsResolvingDelete] = useState(false);
+  const [deleteResolveError, setDeleteResolveError] = useState<string | null>(null);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -53,6 +76,25 @@ export function S3Browser() {
     },
     []
   );
+
+  const endpointHost = useMemo(() => getEndpointHost(credentials?.endpoint), [credentials?.endpoint]);
+  const allowRecursiveDelete = useMemo(
+    () => Boolean(endpointHost) && !endpointHost.endsWith(AWS_ENDPOINT_SUFFIX),
+    [endpointHost]
+  );
+  const isDeleting = isDeletingBatch || isDeletingHook;
+
+  const deletePreview = useMemo(() => {
+    if (deleteMode !== 'batch' || !deletePlan) {
+      return null;
+    }
+    const sortedKeys = [...deletePlan.fileKeys].sort((a, b) => a.localeCompare(b));
+    return {
+      previewKeys: sortedKeys.slice(0, DELETE_PREVIEW_LIMIT),
+      totalKeys: sortedKeys.length,
+      folderCount: deletePlan.folderKeys.length,
+    };
+  }, [deleteMode, deletePlan]);
 
   const handleSnackbarClose = useCallback(() => {
     setSnackbar((prev) => ({ ...prev, open: false }));
@@ -90,44 +132,122 @@ export function S3Browser() {
 
   const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
-      const fileKeys = objects.filter((item) => !item.isFolder).map((item) => item.key);
-      setSelectedKeys(new Set(fileKeys));
+      const selectableItems = allowRecursiveDelete ? objects : objects.filter((item) => !item.isFolder);
+      const keys = selectableItems.map((item) => item.key);
+      setSelectedKeys(new Set(keys));
     } else {
       setSelectedKeys(new Set());
     }
-  }, [objects]);
+  }, [objects, allowRecursiveDelete]);
 
   const handleDeleteRequest = useCallback((item: S3Object) => {
+    setDeleteMode('single');
     setItemsToDelete([item]);
+    setDeletePlan(null);
+    setDeleteResolveError(null);
     setDeleteDialogOpen(true);
   }, []);
 
   const handleBatchDeleteRequest = useCallback(() => {
     const items = objects.filter((item) => selectedKeys.has(item.key));
     if (items.length > 0) {
+      setDeleteMode('batch');
       setItemsToDelete(items);
+      setDeletePlan(null);
+      setDeleteResolveError(null);
       setDeleteDialogOpen(true);
     }
   }, [objects, selectedKeys]);
 
+  useEffect(() => {
+    if (!deleteDialogOpen || deleteMode !== 'batch') {
+      setDeletePlan(null);
+      setIsResolvingDelete(false);
+      setDeleteResolveError(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+    setIsResolvingDelete(true);
+    setDeleteResolveError(null);
+
+    void (async () => {
+      try {
+        const plan = await resolveDeletePlan(itemsToDelete, {
+          includeFolderContents: allowRecursiveDelete,
+          signal: abortController.signal,
+        });
+        if (!abortController.signal.aborted) {
+          setDeletePlan(plan);
+        }
+      } catch (err) {
+        if (!abortController.signal.aborted) {
+          const message = err instanceof Error ? err.message : 'Failed to list items for deletion';
+          setDeleteResolveError(message);
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsResolvingDelete(false);
+        }
+      }
+    })();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [deleteDialogOpen, deleteMode, itemsToDelete, allowRecursiveDelete, resolveDeletePlan]);
+
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
+    if (deleteMode === 'batch' && !deletePlan) {
+      showSnackbar('Delete list is still loading', 'warning');
+      return;
+    }
 
+    setIsDeletingBatch(true);
     try {
-      if (itemsToDelete.length === 1) {
+      if (deleteMode === 'single') {
         const item = itemsToDelete[0];
         await remove(item.key);
         showSnackbar(item.isFolder ? 'Folder deleted successfully' : 'File deleted successfully', 'success');
       } else {
-        const keys = itemsToDelete.map((item) => item.key);
-        const result = await removeMany(keys);
-        if (result.errors.length > 0) {
-          showSnackbar(
-            `Deleted ${result.deleted.length} files, ${result.errors.length} failed`,
-            'warning'
-          );
+        const plan = deletePlan ?? { fileKeys: [], folderKeys: [] };
+        const result = await removeMany(plan.fileKeys);
+
+        let folderFailures = 0;
+        const orderedFolders = [...plan.folderKeys].sort((a, b) => b.length - a.length);
+        for (const folderKey of orderedFolders) {
+          try {
+            await remove(folderKey);
+          } catch {
+            folderFailures += 1;
+          }
+        }
+
+        const folderRemoved = plan.folderKeys.length - folderFailures;
+        const hasFileFailures = result.errors.length > 0;
+        const hasFolderFailures = folderFailures > 0;
+
+        if (hasFileFailures || hasFolderFailures) {
+          const parts: string[] = [];
+          if (plan.fileKeys.length > 0) {
+            parts.push(`Deleted ${result.deleted.length} files, ${result.errors.length} failed`);
+          }
+          if (plan.folderKeys.length > 0) {
+            parts.push(hasFolderFailures
+              ? `Removed ${folderRemoved} folders, ${folderFailures} failed`
+              : `${folderRemoved} folders removed`);
+          }
+          showSnackbar(parts.join('. '), 'warning');
         } else {
-          showSnackbar(`${result.deleted.length} files deleted successfully`, 'success');
+          const parts: string[] = [];
+          if (plan.fileKeys.length > 0) {
+            parts.push(`${result.deleted.length} files deleted`);
+          }
+          if (plan.folderKeys.length > 0) {
+            parts.push(`${folderRemoved} folders removed`);
+          }
+          showSnackbar(parts.length > 0 ? parts.join('. ') : 'Nothing to delete', 'success');
         }
       }
       setSelectedKeys(new Set());
@@ -136,14 +256,20 @@ export function S3Browser() {
       const message = err instanceof Error ? err.message : 'Delete failed';
       showSnackbar(message, 'error');
     } finally {
+      setIsDeletingBatch(false);
       setDeleteDialogOpen(false);
       setItemsToDelete([]);
+      setDeletePlan(null);
+      setDeleteResolveError(null);
     }
-  }, [itemsToDelete, remove, removeMany, refresh, showSnackbar]);
+  }, [itemsToDelete, deleteMode, deletePlan, remove, removeMany, refresh, showSnackbar]);
 
   const handleDeleteCancel = useCallback(() => {
     setDeleteDialogOpen(false);
     setItemsToDelete([]);
+    setDeletePlan(null);
+    setDeleteResolveError(null);
+    setDeleteMode('single');
   }, []);
 
   const handleCreateFolderClick = useCallback(() => {
@@ -229,6 +355,7 @@ export function S3Browser() {
             selectedKeys={selectedKeys}
             onSelectItem={handleSelectItem}
             onSelectAll={handleSelectAll}
+            allowFolderSelect={allowRecursiveDelete}
           />
         </Box>
       </Paper>
@@ -243,6 +370,12 @@ export function S3Browser() {
         open={deleteDialogOpen}
         items={itemsToDelete}
         isDeleting={isDeleting}
+        isResolving={isResolvingDelete}
+        previewKeys={deletePreview?.previewKeys}
+        totalKeys={deletePreview?.totalKeys}
+        folderCount={deletePreview?.folderCount}
+        isBatch={deleteMode === 'batch'}
+        resolutionError={deleteResolveError}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
       />
