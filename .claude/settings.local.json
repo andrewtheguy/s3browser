@@ -8,7 +8,8 @@
       "Bash(npm run lint:*)",
       "Bash(bun run lint:*)",
       "Bash(bun install:*)",
-      "Bash(bun run build)"
+      "Bash(bun run build)",
+      "Bash(xargs:*)"
     ]
   }
 }
