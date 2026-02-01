@@ -148,10 +148,9 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
   });
 });
 
-// DELETE /api/objects/:connectionId/:bucket/*key
-router.delete('/:connectionId/:bucket/*key', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  // Express wildcard routes (*key) always return a string
-  const key = req.params.key as string;
+// DELETE /api/objects/:connectionId/:bucket?key=...
+router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const key = req.query.key as string | undefined;
 
   if (!key) {
     res.status(400).json({ error: 'Object key is required' });
