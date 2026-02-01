@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -71,6 +71,9 @@ export function FolderPickerDialog({
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newName, setNewName] = useState('');
 
+  // Ref for aborting create folder listObjects call
+  const createFolderControllerRef = useRef<AbortController | null>(null);
+
   // Reset state when dialog opens
   useEffect(() => {
     if (open && sourceItem) {
@@ -85,6 +88,13 @@ export function FolderPickerDialog({
       setNewName(sourceItem.name);
     }
   }, [open, sourceItem, currentSourcePath]);
+
+  // Cleanup: abort pending create folder operations when dialog closes or unmounts
+  useEffect(() => {
+    return () => {
+      createFolderControllerRef.current?.abort();
+    };
+  }, [open]);
 
   // Load folders when path changes
   useEffect(() => {
@@ -145,19 +155,37 @@ export function FolderPickerDialog({
   const handleCreateFolder = useCallback(async () => {
     if (!newFolderName.trim() || !activeConnectionId || !bucket) return;
 
+    // Abort any pending create folder operation
+    createFolderControllerRef.current?.abort();
+    const controller = new AbortController();
+    createFolderControllerRef.current = controller;
+
     setIsCreatingFolder(true);
     try {
       const fullPath = browsePath + newFolderName.trim();
       await createFolder(activeConnectionId, bucket, fullPath);
+
+      // Check if aborted before refreshing
+      if (controller.signal.aborted) return;
+
       // Refresh folder list
-      const result = await listObjects(activeConnectionId, bucket, browsePath);
+      const result = await listObjects(activeConnectionId, bucket, browsePath, undefined, controller.signal);
+
+      // Check if aborted before updating state
+      if (controller.signal.aborted) return;
+
       setFolders(result.objects.filter((obj) => obj.isFolder));
       setNewFolderName('');
       setShowNewFolderInput(false);
     } catch (err) {
+      // Don't update error state if aborted
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : 'Failed to create folder');
     } finally {
-      setIsCreatingFolder(false);
+      // Only update isCreatingFolder if not aborted
+      if (!controller.signal.aborted) {
+        setIsCreatingFolder(false);
+      }
     }
   }, [newFolderName, browsePath, activeConnectionId, bucket]);
 

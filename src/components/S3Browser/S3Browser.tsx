@@ -447,10 +447,15 @@ export function S3Browser() {
       })();
     } else {
       // For single files, create a simple plan using the new name
+      // Normalize path: ensure destination ends with exactly one '/' and name has no leading '/'
+      const normalizedDest = copyMoveDestination.endsWith('/')
+        ? copyMoveDestination
+        : (copyMoveDestination ? copyMoveDestination + '/' : '');
+      const normalizedName = copyMoveNewName.replace(/^\/+/, '');
       setCopyMovePlan({
         operations: [{
           sourceKey: copyMoveItem.key,
-          destinationKey: copyMoveDestination + copyMoveNewName,
+          destinationKey: normalizedDest + normalizedName,
         }],
         folderKeys: [],
       });
@@ -516,6 +521,7 @@ export function S3Browser() {
   const handleCopyMoveCancel = useCallback(() => {
     setCopyMoveDialogOpen(false);
     setCopyMoveItem(null);
+    setCopyMoveDestination('');
     setCopyMovePlan(null);
     setCopyMoveResolveError(null);
     setCopyMoveProgress(undefined);

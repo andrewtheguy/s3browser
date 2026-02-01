@@ -139,7 +139,7 @@ export function CopyMoveDialog({
           <Box sx={{ mt: 2 }}>
             <LinearProgress
               variant="determinate"
-              value={(progress.completed / progress.total) * 100}
+              value={progress.total > 0 ? Math.min((progress.completed / progress.total) * 100, 100) : 0}
             />
             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
               {progress.completed} / {progress.total} objects
