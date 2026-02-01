@@ -61,6 +61,7 @@ export function S3Browser() {
   const [deleteResolveError, setDeleteResolveError] = useState<string | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -155,6 +156,16 @@ export function S3Browser() {
       setSelectedKeys(new Set());
     }
   }, [objects, allowRecursiveDelete]);
+
+  const handleToggleSelection = useCallback(() => {
+    setSelectionMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        setSelectedKeys(new Set());
+      }
+      return next;
+    });
+  }, []);
 
   const handleDeleteRequest = useCallback((item: S3Object) => {
     const shouldDeleteRecursively = item.isFolder && allowRecursiveDelete;
@@ -356,6 +367,8 @@ export function S3Browser() {
           selectedCount={selectedKeys.size}
           onBatchDelete={handleBatchDeleteRequest}
           isDeleting={isDeleting}
+          selectionMode={selectionMode}
+          onToggleSelection={handleToggleSelection}
         />
         <Box
           sx={{
@@ -374,6 +387,7 @@ export function S3Browser() {
             onSelectAll={handleSelectAll}
             allowFolderSelect={allowRecursiveDelete}
             allowRecursiveDelete={allowRecursiveDelete}
+            selectionMode={selectionMode}
           />
         </Box>
       </Paper>

@@ -28,6 +28,7 @@ interface FileListItemProps {
   onSelect?: (key: string, checked: boolean) => void;
   allowFolderSelect?: boolean;
   allowRecursiveDelete?: boolean;
+  selectionMode?: boolean;
 }
 
 const iconMap: Record<FileIconType, React.ElementType> = {
@@ -69,6 +70,7 @@ export function FileListItem({
   onSelect,
   allowFolderSelect = false,
   allowRecursiveDelete = false,
+  selectionMode = false,
 }: FileListItemProps) {
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
@@ -117,16 +119,18 @@ export function FileListItem({
         },
       }}
     >
-      <TableCell sx={{ width: 48, padding: '0 8px' }}>
-        {(onSelect && (allowFolderSelect || !item.isFolder)) ? (
-          <Checkbox
-            size="small"
-            checked={isSelected}
-            onChange={handleCheckboxChange}
-            onClick={handleCheckboxClick}
-          />
-        ) : null}
-      </TableCell>
+      {selectionMode && (
+        <TableCell sx={{ width: 48, padding: '0 8px' }}>
+          {(onSelect && (allowFolderSelect || !item.isFolder)) ? (
+            <Checkbox
+              size="small"
+              checked={isSelected}
+              onChange={handleCheckboxChange}
+              onClick={handleCheckboxClick}
+            />
+          ) : null}
+        </TableCell>
+      )}
       <TableCell sx={{ width: 48 }}>
         <IconComponent sx={{ color: iconColor, fontSize: 24 }} />
       </TableCell>

@@ -26,9 +26,19 @@ interface ToolbarProps {
   selectedCount?: number;
   onBatchDelete?: () => void;
   isDeleting?: boolean;
+  selectionMode?: boolean;
+  onToggleSelection?: () => void;
 }
 
-export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0, onBatchDelete, isDeleting = false }: ToolbarProps) {
+export function Toolbar({
+  onUploadClick,
+  onCreateFolderClick,
+  selectedCount = 0,
+  onBatchDelete,
+  isDeleting = false,
+  selectionMode = false,
+  onToggleSelection,
+}: ToolbarProps) {
   const navigate = useNavigate();
   const { connectionId } = useParams<{ connectionId?: string }>();
   const { credentials, disconnect, activeConnectionId } = useS3ClientContext();
@@ -96,7 +106,18 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
               <RefreshIcon />
             </IconButton>
           </Tooltip>
-          {selectedCount > 0 && onBatchDelete && (
+          {onToggleSelection && (
+            <Tooltip title={selectionMode ? 'Cancel selection' : 'Select items'}>
+              <Button
+                variant={selectionMode ? 'contained' : 'outlined'}
+                onClick={onToggleSelection}
+                sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
+              >
+                {selectionMode ? 'Cancel' : 'Select'}
+              </Button>
+            </Tooltip>
+          )}
+          {selectionMode && selectedCount > 0 && onBatchDelete && (
             <Tooltip title={isDeleting ? 'Deleting...' : `Delete ${selectedCount} item(s)`}>
               <Box component="span" sx={{ display: 'inline-block' }}>
                 <Button
