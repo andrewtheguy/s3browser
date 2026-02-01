@@ -1,0 +1,1 @@
+{"root":["./server/index.ts","./server/lock.ts","./server/auth/token.ts","./server/config/upload.ts","./server/db/crypto.ts","./server/db/index.ts","./server/middleware/auth.ts","./server/routes/auth.ts","./server/routes/download.ts","./server/routes/objects.ts","./server/routes/upload.ts"],"version":"5.9.3"}
