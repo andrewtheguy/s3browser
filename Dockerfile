@@ -1,28 +1,28 @@
 # Build stage
-FROM node:24-alpine AS builder
+FROM oven/bun:alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY package.json bun.lock ./
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci
+RUN bun install --frozen-lockfile
 
 # Copy source files
 COPY . .
 
 # Build frontend and server
-RUN npm run build
+RUN bun run build
 
 # Production stage
-FROM node:24-alpine AS runner
+FROM oven/bun:alpine AS runner
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY package.json bun.lock ./
 
 # Install production dependencies only
-RUN npm ci --omit=dev
+RUN bun install --frozen-lockfile --production
 
 # Copy built frontend from builder
 COPY --from=builder /app/dist ./dist
@@ -34,4 +34,4 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+CMD ["bun", "run", "start"]
