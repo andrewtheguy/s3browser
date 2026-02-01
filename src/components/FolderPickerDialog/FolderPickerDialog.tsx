@@ -51,7 +51,7 @@ export function FolderPickerDialog({
   open,
   title,
   sourceItem,
-  currentSourcePath: _currentSourcePath,
+  currentSourcePath,
   mode,
   onConfirm,
   onCancel,
@@ -74,8 +74,9 @@ export function FolderPickerDialog({
   // Reset state when dialog opens
   useEffect(() => {
     if (open && sourceItem) {
-      setBrowsePath('');
-      setManualPath('');
+      // Default to current directory
+      setBrowsePath(currentSourcePath);
+      setManualPath(currentSourcePath);
       setIsManualInput(false);
       setShowNewFolderInput(false);
       setNewFolderName('');
@@ -83,7 +84,7 @@ export function FolderPickerDialog({
       // Initialize new name from source item
       setNewName(sourceItem.name);
     }
-  }, [open, sourceItem]);
+  }, [open, sourceItem, currentSourcePath]);
 
   // Load folders when path changes
   useEffect(() => {
