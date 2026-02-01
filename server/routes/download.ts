@@ -73,7 +73,7 @@ router.get('/:connectionId/:bucket/preview', s3Middleware, requireBucket, async 
     return;
   }
 
-  // Limit content size for preview (256KB)
+  // Limit content size for preview (256KB) as defense against file replacement
   const MAX_PREVIEW_SIZE = 262144;
 
   const command = new GetObjectCommand({

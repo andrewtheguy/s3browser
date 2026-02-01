@@ -23,7 +23,11 @@ export function isPreviewableFile(filename: string, size?: number): Previewabili
     return { canPreview: false, reason: 'File type not supported for preview' };
   }
 
-  if (size !== undefined && size > MAX_PREVIEW_SIZE) {
+  if (size === undefined) {
+    return { canPreview: false, reason: 'File size unknown' };
+  }
+
+  if (size > MAX_PREVIEW_SIZE) {
     return { canPreview: false, reason: 'File is too large to preview (max 256KB)' };
   }
 
