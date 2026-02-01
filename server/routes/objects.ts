@@ -582,8 +582,15 @@ router.post('/:connectionId/:bucket/move', s3Middleware, requireBucket, async (r
         Key: destinationKey,
       });
       await client.send(rollbackCommand);
-    } catch {
-      // Rollback also failed - return partial success with destination key for remediation
+    } catch (rollbackErr) {
+      // Rollback also failed - log for observability and return partial success
+      console.error('Move rollback failed', {
+        destinationKey,
+        sourceKey,
+        bucket,
+        deleteError: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
+        rollbackError: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr),
+      });
       res.status(500).json({
         success: false,
         partial: true,

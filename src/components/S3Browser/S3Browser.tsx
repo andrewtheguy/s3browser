@@ -447,15 +447,39 @@ export function S3Browser() {
       })();
     } else {
       // For single files, create a simple plan using the new name
-      // Normalize path: ensure destination ends with exactly one '/' and name has no leading '/'
-      const normalizedDest = copyMoveDestination.endsWith('/')
-        ? copyMoveDestination
-        : (copyMoveDestination ? copyMoveDestination + '/' : '');
-      const normalizedName = copyMoveNewName.replace(/^\/+/, '');
+      // Normalize: treat '/' as root (empty string), strip leading slashes
+      let normalizedDest = copyMoveDestination === '/' ? '' : copyMoveDestination;
+      normalizedDest = normalizedDest.replace(/^\/+/, '').replace(/\/+$/, '');
+      if (normalizedDest) {
+        normalizedDest = normalizedDest + '/';
+      }
+
+      // Strip leading slashes from name
+      let normalizedName = copyMoveNewName.replace(/^\/+/, '');
+
+      // If name is empty, fallback to basename of source key
+      if (!normalizedName) {
+        const sourceBasename = copyMoveItem.key.split('/').filter(Boolean).pop();
+        if (!sourceBasename) {
+          setCopyMoveResolveError('Invalid source key: cannot determine filename');
+          return;
+        }
+        normalizedName = sourceBasename;
+      }
+
+      // Build destination key and collapse any duplicate slashes
+      const destinationKey = (normalizedDest + normalizedName).replace(/\/+/g, '/');
+
+      // Final validation: destinationKey should not be empty or start with '/'
+      if (!destinationKey || destinationKey.startsWith('/')) {
+        setCopyMoveResolveError('Invalid destination: path cannot be empty or start with /');
+        return;
+      }
+
       setCopyMovePlan({
         operations: [{
           sourceKey: copyMoveItem.key,
-          destinationKey: normalizedDest + normalizedName,
+          destinationKey,
         }],
         folderKeys: [],
       });
