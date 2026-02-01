@@ -57,6 +57,13 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
 
   // Defensive check: s3Middleware should populate these, but verify to avoid runtime errors
   if (!bucket || !client) {
+    console.error('Download route missing S3 context:', {
+      route: 'GET /api/download/:connectionId/:bucket/url',
+      method: req.method,
+      path: req.path,
+      hasBucket: !!bucket,
+      hasClient: !!client,
+    });
     res.status(500).json({ error: 'Internal server error' });
     return;
   }

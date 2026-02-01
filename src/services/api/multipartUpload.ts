@@ -1,6 +1,15 @@
 import { apiPost } from './client';
 import { UPLOAD_CONFIG } from '../../config/upload';
 
+function validateUploadContext(connectionId: number, bucket: string): void {
+  if (!Number.isInteger(connectionId) || connectionId <= 0) {
+    throw new Error('connectionId must be a positive integer');
+  }
+  if (typeof bucket !== 'string' || bucket.trim().length === 0) {
+    throw new Error('bucket must be a non-empty string');
+  }
+}
+
 export interface InitiateUploadResponse {
   uploadId: string;
   key: string;
@@ -57,6 +66,8 @@ export async function initiateUpload(
   contentType: string,
   fileSize: number
 ): Promise<InitiateUploadResponse> {
+  validateUploadContext(connectionId, bucket);
+
   const response = await apiPost<InitiateUploadResponse>(
     `/upload/${connectionId}/${encodeURIComponent(bucket)}/initiate`,
     {
@@ -174,6 +185,8 @@ export async function uploadPart(
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
 ): Promise<string> {
+  validateUploadContext(connectionId, bucket);
+
   const params = new URLSearchParams({
     uploadId,
     key,
@@ -212,6 +225,8 @@ export async function uploadSingleFile(
   onProgress?: (loaded: number, total: number) => void,
   abortSignal?: AbortSignal
 ): Promise<void> {
+  validateUploadContext(connectionId, bucket);
+
   const params = new URLSearchParams({ key });
 
   await performXhrUpload({
@@ -233,6 +248,8 @@ export async function completeUpload(
   key: string,
   parts: CompletedPart[]
 ): Promise<{ success: boolean; key: string }> {
+  validateUploadContext(connectionId, bucket);
+
   // Sort parts by partNumber in ascending order (S3 requires deterministic ordering)
   const sortedParts = [...parts].sort((a, b) => a.partNumber - b.partNumber);
 
@@ -259,6 +276,8 @@ export async function abortUpload(
   uploadId: string,
   key: string
 ): Promise<{ success: boolean }> {
+  validateUploadContext(connectionId, bucket);
+
   const response = await apiPost<{ success: boolean }>(
     `/upload/${connectionId}/${encodeURIComponent(bucket)}/abort`,
     {
@@ -364,6 +383,8 @@ export async function uploadFileMultipart({
   completedParts: CompletedPart[];
   persistenceErrors?: PersistenceError[];
 }> {
+  validateUploadContext(connectionId, bucket);
+
   const contentType = file.type || 'application/octet-stream';
   const fileSize = file.size;
   const partSize = UPLOAD_CONFIG.PART_SIZE;
