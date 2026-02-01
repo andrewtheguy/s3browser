@@ -1,34 +1,48 @@
-import { mkdirSync, existsSync } from 'fs';
+import { dlopen, FFIType } from 'bun:ffi';
+import { openSync, closeSync, mkdirSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { FileSink } from 'bun';
 
 const LOCK_DIR = join(homedir(), '.s3browser');
 const LOCK_FILE = join(LOCK_DIR, 's3browser.lock');
 
-let lockWriter: FileSink | null = null;
+// flock constants
+const LOCK_EX = 2;  // Exclusive lock
+const LOCK_NB = 4;  // Non-blocking
 
-export async function acquireLock(): Promise<void> {
-  // Ensure directory exists
+// Load flock from libc
+const libc = dlopen(
+  process.platform === 'darwin' ? 'libSystem.B.dylib' : 'libc.so.6',
+  {
+    flock: {
+      args: [FFIType.i32, FFIType.i32],
+      returns: FFIType.i32,
+    },
+  }
+);
+
+let lockFd: number | null = null;
+
+export function acquireLock(): void {
   if (!existsSync(LOCK_DIR)) {
     mkdirSync(LOCK_DIR, { recursive: true });
   }
 
-  try {
-    // Open with exclusive lock - blocks/fails if another process holds the lock
-    lockWriter = Bun.file(LOCK_FILE).writer({ lock: "exclusive" });
-    // Write PID for informational purposes
-    await lockWriter.write(String(process.pid));
-    await lockWriter.flush();
-    // Keep writer open to maintain lock
-  } catch {
+  // Open lock file (create if doesn't exist)
+  lockFd = openSync(LOCK_FILE, 'w');
+
+  // Try to acquire exclusive non-blocking lock
+  const result = libc.symbols.flock(lockFd, LOCK_EX | LOCK_NB);
+  if (result !== 0) {
+    closeSync(lockFd);
+    lockFd = null;
     throw new Error('Another s3browser instance is already running');
   }
 }
 
-export async function releaseLock(): Promise<void> {
-  if (lockWriter) {
-    await lockWriter.end();
-    lockWriter = null;
+export function releaseLock(): void {
+  if (lockFd !== null) {
+    closeSync(lockFd);
+    lockFd = null;
   }
 }
