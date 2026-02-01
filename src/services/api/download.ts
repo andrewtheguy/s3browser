@@ -1,4 +1,4 @@
-import { apiGet } from './client';
+import { apiGet, apiGetText } from './client';
 
 interface DownloadUrlResponse {
   url: string;
@@ -74,15 +74,10 @@ export async function getFilePreview(connectionId: number, bucket: string, key: 
     throw new Error('Invalid connection ID');
   }
 
-  const response = await fetch(
-    `/api/download/${connectionId}/${encodeURIComponent(bucket)}/preview?key=${encodeURIComponent(key)}`,
-    { credentials: 'include', signal }
+  const content = await apiGetText(
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/preview?key=${encodeURIComponent(key)}`,
+    signal
   );
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({})) as { error?: string };
-    throw new Error(errorData.error || `Failed to fetch file: ${response.statusText}`);
-  }
-
-  return response.text();
+  return content ?? '';
 }

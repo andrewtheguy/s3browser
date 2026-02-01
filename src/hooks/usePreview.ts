@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { getFilePreview } from '../services/api';
@@ -30,6 +30,15 @@ export function usePreview() {
 
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup on unmount: abort any in-flight request
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const openPreview = useCallback(
     async (item: S3Object) => {

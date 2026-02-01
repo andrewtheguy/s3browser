@@ -122,6 +122,11 @@ router.get('/:connectionId/:bucket/preview', s3Middleware, requireBucket, async 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(content);
   } catch (error) {
+    const s3Error = error as { name?: string; code?: string };
+    if (s3Error.name === 'NoSuchKey' || s3Error.code === 'NoSuchKey') {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
     console.error('Failed to fetch file content:', error);
     res.status(500).json({ error: 'Failed to fetch file content' });
   }

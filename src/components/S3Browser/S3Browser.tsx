@@ -183,15 +183,17 @@ export function S3Browser() {
     }
   }, [copyPresignedUrl, showSnackbar]);
 
+  const { openPreview } = preview;
   const handlePreview = useCallback((item: S3Object) => {
-    void preview.openPreview(item);
-  }, [preview]);
+    void openPreview(item);
+  }, [openPreview]);
 
   const handlePreviewDownload = useCallback(async (key: string) => {
     try {
       await download(key);
-    } catch {
-      showSnackbar('Download failed', 'error');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showSnackbar(message || 'Download failed', 'error');
     }
   }, [download, showSnackbar]);
 
