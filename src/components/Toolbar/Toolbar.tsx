@@ -98,18 +98,20 @@ export function Toolbar({ onUploadClick, onCreateFolderClick, selectedCount = 0,
           </Tooltip>
           {selectedCount > 0 && onBatchDelete && (
             <Tooltip title={isDeleting ? 'Deleting...' : `Delete ${selectedCount} item(s)`}>
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={onBatchDelete}
-                disabled={isDeleting}
-                sx={{ minWidth: { xs: 'auto', sm: 'auto' }, px: { xs: 1, sm: 2 } }}
-              >
-                <DeleteIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                  {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
-                </Box>
-              </Button>
+              <Box component="span" sx={{ display: 'inline-block' }}>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={onBatchDelete}
+                  disabled={isDeleting}
+                  sx={{ minWidth: { xs: 'auto', sm: 'auto' }, px: { xs: 1, sm: 2 } }}
+                >
+                  <DeleteIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                    {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
+                  </Box>
+                </Button>
+              </Box>
             </Tooltip>
           )}
           <Tooltip title="New Folder">
