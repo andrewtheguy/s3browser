@@ -22,6 +22,7 @@ interface CopyMoveDialogProps {
   mode: 'copy' | 'move';
   sourceItem: S3Object | null;
   destinationPath: string;
+  newName: string;
   isResolving: boolean;
   isExecuting: boolean;
   resolutionError: string | null;
@@ -38,6 +39,7 @@ export function CopyMoveDialog({
   mode,
   sourceItem,
   destinationPath,
+  newName,
   isResolving,
   isExecuting,
   resolutionError,
@@ -58,6 +60,10 @@ export function CopyMoveDialog({
   const isFolder = sourceItem.isFolder;
   const totalOperations = plan?.operations.length ?? 0;
   const folderCount = plan?.folderKeys.length ?? 0;
+
+  // Compute full destination for display
+  const fullDestination = destinationPath + newName + (isFolder ? '/' : '');
+  const isRename = newName !== sourceItem.name;
 
   const getTitle = () => {
     if (isExecuting) {
@@ -84,7 +90,8 @@ export function CopyMoveDialog({
         return (
           <>
             {actionLabel} empty folder <strong>{sourceItem.name}</strong> to{' '}
-            <strong>{destinationPath || '/ (root)'}</strong>?
+            <strong>{fullDestination || '/'}</strong>
+            {isRename && <> (renamed to <strong>{newName}</strong>)</>}?
           </>
         );
       }
@@ -92,14 +99,16 @@ export function CopyMoveDialog({
         <>
           {actionLabel} <strong>{totalOperations} object{totalOperations === 1 ? '' : 's'}</strong>{' '}
           from <strong>{sourceItem.name}</strong> to{' '}
-          <strong>{destinationPath || '/ (root)'}</strong>?
+          <strong>{fullDestination || '/'}</strong>
+          {isRename && <> (renamed to <strong>{newName}</strong>)</>}?
         </>
       );
     }
     return (
       <>
         {actionLabel} <strong>{sourceItem.name}</strong> to{' '}
-        <strong>{destinationPath || '/ (root)'}</strong>?
+        <strong>{fullDestination || '/'}</strong>
+        {isRename && <> (renamed to <strong>{newName}</strong>)</>}?
       </>
     );
   };

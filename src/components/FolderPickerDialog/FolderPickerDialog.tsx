@@ -32,13 +32,18 @@ import { useParams } from 'react-router';
 import { listObjects, createFolder } from '../../services/api';
 import type { S3Object } from '../../types';
 
+export interface FolderPickerResult {
+  destinationPath: string;
+  newName: string;
+}
+
 interface FolderPickerDialogProps {
   open: boolean;
   title: string;
   sourceItem: S3Object | null;
   currentSourcePath: string;
   mode: 'copy' | 'move';
-  onConfirm: (destinationPath: string) => void;
+  onConfirm: (result: FolderPickerResult) => void;
   onCancel: () => void;
 }
 
@@ -46,7 +51,7 @@ export function FolderPickerDialog({
   open,
   title,
   sourceItem,
-  currentSourcePath,
+  currentSourcePath: _currentSourcePath,
   mode,
   onConfirm,
   onCancel,
@@ -64,18 +69,21 @@ export function FolderPickerDialog({
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newName, setNewName] = useState('');
 
   // Reset state when dialog opens
   useEffect(() => {
-    if (open) {
+    if (open && sourceItem) {
       setBrowsePath('');
       setManualPath('');
       setIsManualInput(false);
       setShowNewFolderInput(false);
       setNewFolderName('');
       setError(null);
+      // Initialize new name from source item
+      setNewName(sourceItem.name);
     }
-  }, [open]);
+  }, [open, sourceItem]);
 
   // Load folders when path changes
   useEffect(() => {
@@ -130,8 +138,8 @@ export function FolderPickerDialog({
     const finalPath = isManualInput ? manualPath : browsePath;
     // Ensure path ends with / if not empty
     const normalizedPath = finalPath && !finalPath.endsWith('/') ? finalPath + '/' : finalPath;
-    onConfirm(normalizedPath);
-  }, [isManualInput, manualPath, browsePath, onConfirm]);
+    onConfirm({ destinationPath: normalizedPath, newName: newName.trim() });
+  }, [isManualInput, manualPath, browsePath, newName, onConfirm]);
 
   const handleCreateFolder = useCallback(async () => {
     if (!newFolderName.trim() || !activeConnectionId || !bucket) return;
@@ -163,8 +171,18 @@ export function FolderPickerDialog({
   const isInvalidDestination = useCallback((): string | null => {
     if (!sourceItem) return null;
 
+    // Check for empty name
+    if (!newName.trim()) {
+      return 'Name cannot be empty';
+    }
+
+    // Check for invalid characters in name
+    if (newName.includes('/')) {
+      return 'Name cannot contain "/"';
+    }
+
     const destPath = isManualInput ? manualPath : browsePath;
-    const normalizedDest = destPath.endsWith('/') ? destPath : destPath + '/';
+    const normalizedDest = destPath.endsWith('/') ? destPath : (destPath ? destPath + '/' : '');
 
     // For move operations, can't move a folder into itself or its subfolders
     if (mode === 'move' && sourceItem.isFolder) {
@@ -174,16 +192,26 @@ export function FolderPickerDialog({
       }
     }
 
-    // Can't copy/move to the same location
-    if (normalizedDest === currentSourcePath) {
-      return 'Destination is the same as current location';
+    // Check if destination + name is the same as source
+    const isFolder = sourceItem.isFolder;
+    const destKey = isFolder
+      ? normalizedDest + newName.trim() + '/'
+      : normalizedDest + newName.trim();
+
+    if (destKey === sourceItem.key) {
+      return 'Destination is the same as source';
     }
 
     return null;
-  }, [sourceItem, isManualInput, manualPath, browsePath, mode, currentSourcePath]);
+  }, [sourceItem, isManualInput, manualPath, browsePath, mode, newName]);
 
   const validationError = isInvalidDestination();
   const pathSegments = browsePath.split('/').filter(Boolean);
+
+  // Compute the full destination for display
+  const displayDestPath = isManualInput ? manualPath : browsePath;
+  const normalizedDisplayPath = displayDestPath.endsWith('/') ? displayDestPath : (displayDestPath ? displayDestPath + '/' : '');
+  const fullDestination = normalizedDisplayPath + newName.trim() + (sourceItem?.isFolder ? '/' : '');
 
   return (
     <Dialog
@@ -195,6 +223,25 @@ export function FolderPickerDialog({
     >
       <DialogTitle>{title}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', p: 0 }}>
+        {/* Name input */}
+        <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <TextField
+            fullWidth
+            size="small"
+            label={sourceItem?.isFolder ? 'Folder name' : 'File name'}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            error={!newName.trim() || newName.includes('/')}
+            helperText={
+              !newName.trim()
+                ? 'Name is required'
+                : newName.includes('/')
+                  ? 'Name cannot contain "/"'
+                  : undefined
+            }
+          />
+        </Box>
+
         {/* Breadcrumb navigation */}
         <Box sx={{ px: 3, py: 1, borderBottom: 1, borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -256,7 +303,7 @@ export function FolderPickerDialog({
             <TextField
               fullWidth
               size="small"
-              label="Destination path"
+              label="Destination folder"
               value={manualPath}
               onChange={(e) => setManualPath(e.target.value)}
               placeholder="Enter folder path (e.g., folder/subfolder/)"
@@ -273,7 +320,7 @@ export function FolderPickerDialog({
         )}
 
         {/* Validation error */}
-        {validationError && (
+        {validationError && validationError !== 'Name cannot be empty' && !validationError.includes('cannot contain') && (
           <Alert severity="warning" sx={{ mx: 3, mt: 2 }}>
             {validationError}
           </Alert>
@@ -385,7 +432,7 @@ export function FolderPickerDialog({
           <Typography variant="caption" color="text.secondary">
             {mode === 'copy' ? 'Copy' : 'Move'} to:{' '}
             <strong>
-              {(isManualInput ? manualPath : browsePath) || '/ (root)'}
+              {fullDestination || '/ (root)'}
             </strong>
           </Typography>
         </Box>

@@ -23,7 +23,7 @@ import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
 import { DeleteDialog } from '../DeleteDialog';
 import { PreviewDialog } from '../PreviewDialog';
-import { FolderPickerDialog } from '../FolderPickerDialog';
+import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDialog';
 import { CopyMoveDialog } from '../CopyMoveDialog';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove } from '../../hooks';
@@ -100,6 +100,7 @@ export function S3Browser() {
   const [isResolvingCopyMove, setIsResolvingCopyMove] = useState(false);
   const [copyMoveResolveError, setCopyMoveResolveError] = useState<string | null>(null);
   const [copyMoveProgress, setCopyMoveProgress] = useState<{ completed: number; total: number } | undefined>(undefined);
+  const [copyMoveNewName, setCopyMoveNewName] = useState('');
 
   const showSnackbar = useCallback(
     (message: string, severity: SnackbarState['severity']) => {
@@ -399,9 +400,10 @@ export function S3Browser() {
     setCopyMoveItem(null);
   }, []);
 
-  const handleDestinationSelected = useCallback((destinationPath: string) => {
+  const handleDestinationSelected = useCallback((result: FolderPickerResult) => {
     setFolderPickerOpen(false);
-    setCopyMoveDestination(destinationPath);
+    setCopyMoveDestination(result.destinationPath);
+    setCopyMoveNewName(result.newName);
     setCopyMovePlan(null);
     setCopyMoveResolveError(null);
     setCopyMoveProgress(undefined);
@@ -425,8 +427,9 @@ export function S3Browser() {
 
       void (async () => {
         try {
-          const plan = await resolveCopyMovePlan([copyMoveItem], copyMoveDestination, {
+          const plan = await resolveCopyMovePlan(copyMoveItem, copyMoveDestination, {
             signal: abortController.signal,
+            newName: copyMoveNewName,
           });
           if (!abortController.signal.aborted) {
             setCopyMovePlan(plan);
@@ -443,12 +446,11 @@ export function S3Browser() {
         }
       })();
     } else {
-      // For single files, create a simple plan
-      const fileName = copyMoveItem.key.split('/').pop() || copyMoveItem.key;
+      // For single files, create a simple plan using the new name
       setCopyMovePlan({
         operations: [{
           sourceKey: copyMoveItem.key,
-          destinationKey: copyMoveDestination + fileName,
+          destinationKey: copyMoveDestination + copyMoveNewName,
         }],
         folderKeys: [],
       });
@@ -457,7 +459,7 @@ export function S3Browser() {
     return () => {
       abortController.abort();
     };
-  }, [copyMoveDialogOpen, copyMoveItem, copyMoveDestination, resolveCopyMovePlan]);
+  }, [copyMoveDialogOpen, copyMoveItem, copyMoveDestination, copyMoveNewName, resolveCopyMovePlan]);
 
   const handleCopyMoveConfirm = useCallback(async () => {
     if (!copyMoveItem || !copyMovePlan) return;
@@ -507,6 +509,7 @@ export function S3Browser() {
       setCopyMoveItem(null);
       setCopyMovePlan(null);
       setCopyMoveProgress(undefined);
+      setCopyMoveNewName('');
     }
   }, [copyMoveItem, copyMovePlan, copyMoveMode, copy, move, copyMany, moveMany, refresh, showSnackbar]);
 
@@ -516,6 +519,7 @@ export function S3Browser() {
     setCopyMovePlan(null);
     setCopyMoveResolveError(null);
     setCopyMoveProgress(undefined);
+    setCopyMoveNewName('');
   }, []);
 
   return (
@@ -648,6 +652,7 @@ export function S3Browser() {
         mode={copyMoveMode}
         sourceItem={copyMoveItem}
         destinationPath={copyMoveDestination}
+        newName={copyMoveNewName}
         isResolving={isResolvingCopyMove}
         isExecuting={isCopying || isMoving}
         resolutionError={copyMoveResolveError}

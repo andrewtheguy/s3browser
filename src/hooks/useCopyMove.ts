@@ -14,6 +14,7 @@ import type { S3Object } from '../types';
 
 interface ResolveCopyMovePlanOptions {
   signal?: AbortSignal;
+  newName?: string; // Optional new name for the item (rename during copy/move)
 }
 
 export interface CopyMovePlan {
@@ -27,14 +28,6 @@ function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
   }
-}
-
-function computeDestinationKey(sourceKey: string, sourcePrefix: string, destPrefix: string): string {
-  // Extract the relative path from source
-  const relativePath = sourceKey.startsWith(sourcePrefix)
-    ? sourceKey.slice(sourcePrefix.length)
-    : sourceKey;
-  return destPrefix + relativePath;
 }
 
 export function useCopyMove() {
@@ -193,7 +186,7 @@ export function useCopyMove() {
 
   const resolveCopyMovePlan = useCallback(
     async (
-      items: S3Object[],
+      item: S3Object,
       destPrefix: string,
       options: ResolveCopyMovePlanOptions = {}
     ): Promise<CopyMovePlan> => {
@@ -203,58 +196,64 @@ export function useCopyMove() {
 
       const operations: CopyMoveOperation[] = [];
       const folderKeys: string[] = [];
-      const queue: Array<{ prefix: string; sourceBasePrefix: string }> = [];
 
-      for (const item of items) {
-        if (item.isFolder) {
-          // For folders, we need to recursively list and copy all contents
-          folderKeys.push(item.key);
-          // The source base prefix is the folder key itself
-          queue.push({ prefix: item.key, sourceBasePrefix: item.key });
-        } else {
-          // For files, compute destination based on file name only
-          const fileName = item.key.split('/').pop() || item.key;
-          operations.push({
-            sourceKey: item.key,
-            destinationKey: destPrefix + fileName,
-          });
-        }
-      }
+      // Determine the target name (either the new name or the original name)
+      const targetName = options.newName || item.name;
 
-      // Process folders recursively
-      while (queue.length > 0) {
-        const current = queue.shift();
-        if (!current) continue;
+      if (item.isFolder) {
+        // For folders, we need to recursively list and copy all contents
+        folderKeys.push(item.key);
 
-        let continuationToken: string | undefined = undefined;
-        do {
-          throwIfAborted(options.signal);
-          const result = await listObjects(
-            activeConnectionId,
-            bucket,
-            current.prefix,
-            continuationToken,
-            options.signal
-          );
+        // The destination folder prefix uses the new name
+        const destFolderPrefix = destPrefix + targetName + '/';
 
-          for (const obj of result.objects) {
-            if (obj.isFolder) {
-              folderKeys.push(obj.key);
-              queue.push({ prefix: obj.key, sourceBasePrefix: current.sourceBasePrefix });
-            } else {
-              operations.push({
-                sourceKey: obj.key,
-                destinationKey: computeDestinationKey(
-                  obj.key,
-                  current.sourceBasePrefix,
-                  destPrefix
-                ),
-              });
+        // Queue for BFS traversal: { prefix, sourceBasePrefix, destBasePrefix }
+        const queue: Array<{ prefix: string; sourceBasePrefix: string; destBasePrefix: string }> = [
+          { prefix: item.key, sourceBasePrefix: item.key, destBasePrefix: destFolderPrefix }
+        ];
+
+        while (queue.length > 0) {
+          const current = queue.shift();
+          if (!current) continue;
+
+          let continuationToken: string | undefined = undefined;
+          do {
+            throwIfAborted(options.signal);
+            const result = await listObjects(
+              activeConnectionId,
+              bucket,
+              current.prefix,
+              continuationToken,
+              options.signal
+            );
+
+            for (const obj of result.objects) {
+              if (obj.isFolder) {
+                folderKeys.push(obj.key);
+                queue.push({
+                  prefix: obj.key,
+                  sourceBasePrefix: current.sourceBasePrefix,
+                  destBasePrefix: current.destBasePrefix,
+                });
+              } else {
+                // Compute destination key preserving relative path
+                const relativePath = obj.key.slice(current.sourceBasePrefix.length);
+                operations.push({
+                  sourceKey: obj.key,
+                  destinationKey: current.destBasePrefix + relativePath,
+                });
+              }
             }
-          }
 
-          continuationToken = result.isTruncated ? result.continuationToken : undefined;
-        } while (continuationToken);
+            continuationToken = result.isTruncated ? result.continuationToken : undefined;
+          } while (continuationToken);
+        }
+      } else {
+        // For files, just create a single operation
+        operations.push({
+          sourceKey: item.key,
+          destinationKey: destPrefix + targetName,
+        });
       }
 
       return { operations, folderKeys };
