@@ -10,6 +10,8 @@ import {
   CircularProgress,
 } from '@mui/material';
 import CloudIcon from '@mui/icons-material/Cloud';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useS3Client } from '../../hooks';
 import { S3ConnectionForm } from '../S3ConnectionForm';
 
@@ -82,7 +84,7 @@ function PasswordLoginForm({
 }
 
 export function LoginForm() {
-  const { isLoggedIn, error: contextError, disconnect } = useS3Client();
+  const { isLoggedIn, error: contextError, serverError, disconnect, retryConnection, isCheckingSession } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
@@ -126,7 +128,32 @@ export function LoginForm() {
             </Typography>
           </Box>
 
-          {!isLoggedIn ? (
+          {serverError ? (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+              }}
+            >
+              <ErrorOutlineIcon sx={{ fontSize: 48, color: 'error.main', mb: 2 }} />
+              <Typography variant="h6" color="error" gutterBottom>
+                Server Connection Error
+              </Typography>
+              <Typography variant="body2" color="text.secondary" mb={3}>
+                {serverError}
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={isCheckingSession ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
+                onClick={retryConnection}
+                disabled={isCheckingSession}
+              >
+                {isCheckingSession ? 'Connecting...' : 'Retry Connection'}
+              </Button>
+            </Box>
+          ) : !isLoggedIn ? (
             <>
               <Typography
                 variant="body2"
