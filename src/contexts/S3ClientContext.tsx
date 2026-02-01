@@ -90,6 +90,9 @@ function reducer(state: S3ClientState, action: S3ClientAction): S3ClientState {
         error: null,
       };
     case 'BUCKET_SELECTED':
+      if (!state.session) {
+        console.warn('BUCKET_SELECTED dispatched without an active session');
+      }
       return {
         ...state,
         session: state.session ? { ...state.session, bucket: action.bucket } : null,
