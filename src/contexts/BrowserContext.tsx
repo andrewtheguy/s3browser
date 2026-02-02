@@ -17,13 +17,19 @@ import { decodeUrlToS3Path } from '../utils/urlEncoding';
 interface BrowserState {
   objects: S3Object[];
   isLoading: boolean;
+  isLoadingMore: boolean;
   error: string | null;
+  continuationToken?: string;
+  isTruncated: boolean;
 }
 
 type BrowserAction =
   | { type: 'FETCH_START' }
-  | { type: 'FETCH_SUCCESS'; objects: S3Object[] }
+  | { type: 'FETCH_SUCCESS'; objects: S3Object[]; continuationToken?: string; isTruncated: boolean }
   | { type: 'FETCH_ERROR'; error: string }
+  | { type: 'LOAD_MORE_START' }
+  | { type: 'LOAD_MORE_SUCCESS'; objects: S3Object[]; continuationToken?: string; isTruncated: boolean }
+  | { type: 'LOAD_MORE_ERROR'; error: string }
   | { type: 'RESET' };
 
 function reducer(state: BrowserState, action: BrowserAction): BrowserState {
@@ -31,9 +37,28 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
     case 'FETCH_START':
       return { ...state, isLoading: true, error: null };
     case 'FETCH_SUCCESS':
-      return { ...state, isLoading: false, objects: action.objects, error: null };
+      return {
+        ...state,
+        isLoading: false,
+        objects: action.objects,
+        error: null,
+        continuationToken: action.continuationToken,
+        isTruncated: action.isTruncated,
+      };
     case 'FETCH_ERROR':
       return { ...state, isLoading: false, error: action.error };
+    case 'LOAD_MORE_START':
+      return { ...state, isLoadingMore: true, error: null };
+    case 'LOAD_MORE_SUCCESS':
+      return {
+        ...state,
+        isLoadingMore: false,
+        objects: action.objects,
+        continuationToken: action.continuationToken,
+        isTruncated: action.isTruncated,
+      };
+    case 'LOAD_MORE_ERROR':
+      return { ...state, isLoadingMore: false, error: action.error };
     case 'RESET':
       return initialState;
     default:
@@ -44,7 +69,10 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
 const initialState: BrowserState = {
   objects: [],
   isLoading: false,
+  isLoadingMore: false,
   error: null,
+  continuationToken: undefined,
+  isTruncated: false,
 };
 
 export const BrowserContext = createContext<BrowserContextValue | null>(null);
@@ -96,7 +124,12 @@ export function BrowserProvider({
         const result = await listObjects(activeConnectionId, bucket, path, undefined, abortController.signal);
         if (requestId === requestIdRef.current) {
           // Sort client-side: folders first, then files, alphabetically
-          dispatch({ type: 'FETCH_SUCCESS', objects: sortObjects(result.objects) });
+          dispatch({
+            type: 'FETCH_SUCCESS',
+            objects: sortObjects(result.objects),
+            continuationToken: result.continuationToken,
+            isTruncated: result.isTruncated,
+          });
           lastFetchedPathRef.current = path;
         }
       } catch (err) {
@@ -132,6 +165,25 @@ export function BrowserProvider({
   const refresh = useCallback(async () => {
     await fetchObjects(currentPath);
   }, [currentPath, fetchObjects]);
+
+  const loadMore = useCallback(async () => {
+    if (!state.continuationToken || state.isLoadingMore || !isConnected || !activeConnectionId || !bucket) return;
+
+    dispatch({ type: 'LOAD_MORE_START' });
+    try {
+      const result = await listObjects(activeConnectionId, bucket, currentPath, state.continuationToken);
+      // Append new objects to existing, re-sort
+      dispatch({
+        type: 'LOAD_MORE_SUCCESS',
+        objects: sortObjects([...state.objects, ...result.objects]),
+        continuationToken: result.continuationToken,
+        isTruncated: result.isTruncated,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load more objects';
+      dispatch({ type: 'LOAD_MORE_ERROR', error: message });
+    }
+  }, [state.continuationToken, state.isLoadingMore, state.objects, isConnected, activeConnectionId, bucket, currentPath]);
 
   // Reset when disconnected
   useEffect(() => {
@@ -172,8 +224,12 @@ export function BrowserProvider({
       navigateUp,
       refresh,
       pathSegments: getPathSegments(currentPath),
+      continuationToken: state.continuationToken,
+      isTruncated: state.isTruncated,
+      isLoadingMore: state.isLoadingMore,
+      loadMore,
     }),
-    [currentPath, state.objects, state.isLoading, state.error, navigateTo, navigateUp, refresh]
+    [currentPath, state.objects, state.isLoading, state.error, navigateTo, navigateUp, refresh, state.continuationToken, state.isTruncated, state.isLoadingMore, loadMore]
   );
 
   return (

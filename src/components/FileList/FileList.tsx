@@ -12,6 +12,8 @@ import {
   Skeleton,
   Alert,
   Checkbox,
+  Button,
+  CircularProgress,
 } from '@mui/material';
 import FolderOffIcon from '@mui/icons-material/FolderOff';
 import { useBrowserContext } from '../../contexts';
@@ -44,7 +46,7 @@ export function FileList({
   onSelectAll,
   selectionMode = false,
 }: FileListProps) {
-  const { objects, isLoading, error, navigateTo } = useBrowserContext();
+  const { objects, isLoading, error, navigateTo, isTruncated, isLoadingMore, loadMore } = useBrowserContext();
 
   const selectableItems = objects;
   const selectableCount = selectableItems.length;
@@ -135,51 +137,65 @@ export function FileList({
   }
 
   return (
-    <TableContainer component={Paper} elevation={0} sx={{ overflowX: 'auto' }}>
-      <Table sx={{ width: { xs: 'max-content', sm: '100%' }, tableLayout: { xs: 'auto', sm: 'fixed' } }}>
-        <TableHead>
-          <TableRow>
-            {selectionMode && (
-              <TableCell sx={{ width: 48, padding: '0 8px' }}>
-                {selectableCount > 0 && (
-                  <Checkbox
-                    size="small"
-                    checked={isAllSelected}
-                    indeterminate={isIndeterminate}
-                    onChange={(e) => onSelectAll(e.target.checked)}
-                  />
-                )}
+    <>
+      <TableContainer component={Paper} elevation={0} sx={{ overflowX: 'auto' }}>
+        <Table sx={{ width: { xs: 'max-content', sm: '100%' }, tableLayout: { xs: 'auto', sm: 'fixed' } }}>
+          <TableHead>
+            <TableRow>
+              {selectionMode && (
+                <TableCell sx={{ width: 48, padding: '0 8px' }}>
+                  {selectableCount > 0 && (
+                    <Checkbox
+                      size="small"
+                      checked={isAllSelected}
+                      indeterminate={isIndeterminate}
+                      onChange={(e) => onSelectAll(e.target.checked)}
+                    />
+                  )}
+                </TableCell>
+              )}
+              <TableCell sx={{ width: 48 }} />
+              <TableCell sx={{ minWidth: 120, whiteSpace: 'nowrap' }}>Name</TableCell>
+              <TableCell sx={{ width: { xs: 72, sm: 100 }, whiteSpace: 'nowrap' }}>Size</TableCell>
+              <TableCell sx={{ width: { xs: 120, sm: 180 }, whiteSpace: 'nowrap' }}>Last Modified</TableCell>
+              <TableCell sx={{ width: 160 }} align="right">
+                Actions
               </TableCell>
-            )}
-            <TableCell sx={{ width: 48 }} />
-            <TableCell sx={{ minWidth: 120, whiteSpace: 'nowrap' }}>Name</TableCell>
-            <TableCell sx={{ width: { xs: 72, sm: 100 }, whiteSpace: 'nowrap' }}>Size</TableCell>
-            <TableCell sx={{ width: { xs: 120, sm: 180 }, whiteSpace: 'nowrap' }}>Last Modified</TableCell>
-            <TableCell sx={{ width: 160 }} align="right">
-              Actions
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {objects.map((item) => (
-            <FileListItem
-              key={item.key}
-              item={item}
-              onNavigate={navigateTo}
-              onDownload={handleDownload}
-              onCopyUrl={onCopyUrl}
-              onCopyS3Uri={onCopyS3Uri}
-              onDelete={onDeleteRequest}
-              onCopy={onCopyRequest}
-              onMove={onMoveRequest}
-              onPreview={onPreview}
-              isSelected={selectedKeys.has(item.key)}
-              onSelect={onSelectItem}
-              selectionMode={selectionMode}
-            />
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {objects.map((item) => (
+              <FileListItem
+                key={item.key}
+                item={item}
+                onNavigate={navigateTo}
+                onDownload={handleDownload}
+                onCopyUrl={onCopyUrl}
+                onCopyS3Uri={onCopyS3Uri}
+                onDelete={onDeleteRequest}
+                onCopy={onCopyRequest}
+                onMove={onMoveRequest}
+                onPreview={onPreview}
+                isSelected={selectedKeys.has(item.key)}
+                onSelect={onSelectItem}
+                selectionMode={selectionMode}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      {isTruncated && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            startIcon={isLoadingMore ? <CircularProgress size={16} /> : null}
+          >
+            {isLoadingMore ? 'Loading...' : 'Load More'}
+          </Button>
+        </Box>
+      )}
+    </>
   );
 }
