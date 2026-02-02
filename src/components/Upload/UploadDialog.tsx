@@ -115,8 +115,10 @@ export function UploadDialog({
         'Uploads are in progress. Are you sure you want to close?'
       );
       if (!confirmed) return;
-      await clearAll();
     }
+    await clearAll();
+    setPendingToResume(null);
+    setResumeError(null);
     onClose();
   }, [isUploading, clearAll, onClose]);
 
@@ -128,22 +130,24 @@ export function UploadDialog({
   useEffect(() => {
     const hasUploading = uploads.some((u) => u.status === 'uploading');
     const hasPending = uploads.some((u) => u.status === 'pending');
-    const completedCount = uploads.filter((u) => u.status === 'completed').length;
+    const hasPaused = uploads.some((u) => u.status === 'paused');
+    const hasActive = hasUploading || hasPending || hasPaused;
+    const completedCount = completedStats.count;
 
     // Reset flag when new uploads are added
-    if (uploads.length > previousUploadCountRef.current || hasPending || hasUploading) {
+    if (uploads.length > previousUploadCountRef.current || hasActive) {
       completedCallbackFiredRef.current = false;
     }
     previousUploadCountRef.current = uploads.length;
 
     // Fire callback only once when all uploads finish
-    if (completedCount > 0 && !hasUploading && !hasPending && !completedCallbackFiredRef.current) {
+    if (completedCount > 0 && !hasActive && !completedCallbackFiredRef.current) {
       completedCallbackFiredRef.current = true;
       onUploadComplete();
     }
-  }, [uploads, onUploadComplete]);
+  }, [uploads, completedStats.count, onUploadComplete]);
 
-  const hasCancelableUploads = uploads.length > 0;
+  const hasCancelableUploads = uploads.some((upload) => upload.status !== 'completed');
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>

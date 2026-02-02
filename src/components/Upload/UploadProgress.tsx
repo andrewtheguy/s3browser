@@ -37,7 +37,9 @@ export function UploadProgress({
   onResume,
   onRetry,
 }: UploadProgressProps) {
-  if (uploads.length === 0 && completedStats.count === 0) {
+  const activeUploads = uploads.filter((upload) => upload.status !== 'completed');
+
+  if (activeUploads.length === 0 && completedStats.count === 0) {
     return null;
   }
 
@@ -55,14 +57,14 @@ export function UploadProgress({
         )}
 
         {/* Active uploads list */}
-        {uploads.length > 0 && (
+        {activeUploads.length > 0 && (
           <>
             <h3 className="text-sm font-medium mb-2">
-              Uploads ({uploads.length})
+              Uploads ({activeUploads.length})
             </h3>
             <div className="max-h-[300px] overflow-y-auto">
               <ul className="space-y-2">
-                {uploads.map((upload) => {
+                {activeUploads.map((upload) => {
                 const displayName = upload.relativePath || upload.fileName;
                 return (
                   <li
