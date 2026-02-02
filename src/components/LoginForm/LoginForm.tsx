@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Cloud, AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -98,7 +98,7 @@ export function LoginForm() {
       <Card className="max-w-[450px] w-full">
         <CardContent className="p-8">
           <div className="flex items-center justify-center mb-6">
-            <Cloud className="h-10 w-10 text-primary mr-2" />
+            <img src="/vite.svg" alt="Logo" className="h-10 w-10 mr-2" />
             <h1 className="text-2xl font-bold">
               S3 Browser
             </h1>

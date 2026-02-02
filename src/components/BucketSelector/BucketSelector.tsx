@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { Cloud, LogOut, RefreshCw, Settings } from 'lucide-react';
+import { LogOut, RefreshCw, Settings } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -93,7 +93,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
       <Card className="max-w-[500px] w-full">
         <CardContent className="p-8">
           <div className="flex items-center justify-center mb-6">
-            <Cloud className="h-10 w-10 text-primary mr-2" />
+            <img src="/vite.svg" alt="Logo" className="h-10 w-10 mr-2" />
             <h1 className="text-2xl font-bold">
               Select Bucket
             </h1>
