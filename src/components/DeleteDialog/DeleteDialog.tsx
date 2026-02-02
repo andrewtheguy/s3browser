@@ -1,17 +1,16 @@
+import { AlertCircle } from 'lucide-react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
-  CircularProgress,
-  Box,
-  List,
-  ListItem,
-  ListItemText,
-  Alert,
-} from '@mui/material';
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import type { S3Object } from '../../types';
 
 interface DeleteDialogProps {
@@ -107,13 +106,6 @@ export function DeleteDialog({
 }: DeleteDialogProps) {
   if (items.length === 0) return null;
 
-  const handleClose = (_event: object, _reason: 'backdropClick' | 'escapeKeyDown') => {
-    if (isDeleting) {
-      return;
-    }
-    onCancel();
-  };
-
   const isSingleItem = items.length === 1;
   const singleItem = items[0];
   const isFolder = isSingleItem && singleItem.isFolder;
@@ -143,67 +135,64 @@ export function DeleteDialog({
   });
 
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      disableEscapeKeyDown={isDeleting}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent>
-        {resolutionError && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {resolutionError}
-          </Alert>
-        )}
-        <DialogContentText>{message}</DialogContentText>
-        {isBatch && folderCount > 0 && !isResolving && !resolutionError && (
-          <DialogContentText sx={{ mt: 1 }}>
-            {resolvedTotalKeys === 0
-              ? (folderCount === 1 ? 'The folder marker will be removed.' : 'Folder markers will be removed.')
-              : (folderCount === 1
-                  ? 'The folder will be removed after all objects are deleted.'
-                  : 'Folders will be removed after all objects are deleted.')}
-          </DialogContentText>
-        )}
-        {isBatch && !isResolving && !resolutionError && previewKeys.length > 0 && (
-          <Box sx={{ mt: 2 }}>
-            <List dense sx={{ maxHeight: 320, overflow: 'auto' }}>
-              {previewKeys.map((key) => (
-                <ListItem key={key} sx={{ py: 0 }}>
-                  <ListItemText
-                    primary={key}
-                    primaryTypographyProps={{ variant: 'body2', sx: { wordBreak: 'break-all' } }}
-                  />
-                </ListItem>
-              ))}
-            </List>
-            {remainingPreviewCount > 0 && (
-              <DialogContentText sx={{ mt: 1 }}>
-                …and {remainingPreviewCount} more
-              </DialogContentText>
-            )}
-          </Box>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel} disabled={isDeleting}>
-          Cancel
-        </Button>
-        <Button
-          onClick={onConfirm}
-          color="error"
-          variant="contained"
-          disabled={isDeleting || isResolving || Boolean(resolutionError)}
-        >
-          {isDeleting ? (
-            <CircularProgress size={20} color="inherit" />
-          ) : (
-            'Delete'
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !isDeleting && onCancel()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {resolutionError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{resolutionError}</AlertDescription>
+            </Alert>
           )}
-        </Button>
-      </DialogActions>
+          <DialogDescription>{message}</DialogDescription>
+          {isBatch && folderCount > 0 && !isResolving && !resolutionError && (
+            <p className="text-sm text-muted-foreground">
+              {resolvedTotalKeys === 0
+                ? (folderCount === 1 ? 'The folder marker will be removed.' : 'Folder markers will be removed.')
+                : (folderCount === 1
+                    ? 'The folder will be removed after all objects are deleted.'
+                    : 'Folders will be removed after all objects are deleted.')}
+            </p>
+          )}
+          {isBatch && !isResolving && !resolutionError && previewKeys.length > 0 && (
+            <div>
+              <ScrollArea className="h-[320px] rounded-md border">
+                <ul className="p-2 space-y-1">
+                  {previewKeys.map((key) => (
+                    <li key={key} className="text-sm break-all py-1">
+                      {key}
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+              {remainingPreviewCount > 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  ...and {remainingPreviewCount} more
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={isDeleting || isResolving || Boolean(resolutionError)}
+          >
+            {isDeleting ? (
+              <Spinner size="sm" className="text-white" />
+            ) : (
+              'Delete'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

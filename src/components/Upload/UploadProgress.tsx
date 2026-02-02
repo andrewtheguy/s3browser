@@ -1,22 +1,22 @@
 import {
-  Box,
-  Typography,
-  LinearProgress,
-  IconButton,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Chip,
+  File,
+  X,
+  CheckCircle,
+  AlertCircle,
+  Pause,
+  Play,
+  RefreshCw,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import {
   Tooltip,
-} from '@mui/material';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import CloseIcon from '@mui/icons-material/Close';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
-import PauseIcon from '@mui/icons-material/Pause';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import RefreshIcon from '@mui/icons-material/Refresh';
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import type { UploadProgress as UploadProgressType } from '../../types';
 import { formatFileSize } from '../../utils/formatters';
 
@@ -40,160 +40,149 @@ export function UploadProgress({
   }
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Typography variant="subtitle2" gutterBottom>
-        Uploads ({uploads.length})
-      </Typography>
-      <List dense>
-        {uploads.map((upload) => {
-          const displayName = upload.relativePath || upload.fileName;
-          return (
-            <ListItem
-              key={upload.id}
-              secondaryAction={
-                <Box sx={{ display: 'flex', gap: 0.5 }}>
-                {upload.status === 'uploading' && upload.isMultipart && onPause && (
-                  <Tooltip title="Pause">
-                    <span>
-                      <IconButton
-                        edge="end"
-                        size="small"
-                        onClick={() => onPause(upload.id)}
-                      >
-                        <PauseIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                )}
-                {upload.status === 'paused' && onResume && (
-                  <Tooltip title="Resume">
-                    <span>
-                      <IconButton
-                        edge="end"
-                        size="small"
-                        onClick={() => onResume(upload.id)}
-                      >
-                        <PlayArrowIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                )}
-                {upload.status === 'error' && onRetry && (
-                  <Tooltip title="Retry">
-                    <span>
-                      <IconButton
-                        edge="end"
-                        size="small"
-                        onClick={() => onRetry(upload.id)}
-                      >
-                        <RefreshIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                )}
-                {(upload.status === 'uploading' ||
-                  upload.status === 'paused' ||
-                  upload.status === 'error' ||
-                  upload.status === 'pending') && (
-                  <Tooltip title="Cancel">
-                    <span>
-                      <IconButton
-                        edge="end"
-                        size="small"
-                        onClick={() => onCancel(upload.id)}
-                      >
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                )}
-                </Box>
-              }
-              sx={{
-                bgcolor: 'background.default',
-                borderRadius: 1,
-                mb: 1,
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                {upload.status === 'completed' ? (
-                  <CheckCircleIcon color="success" />
-                ) : upload.status === 'error' ? (
-                  <ErrorIcon color="error" />
-                ) : upload.status === 'paused' ? (
-                  <PauseIcon color="warning" />
-                ) : (
-                  <InsertDriveFileIcon />
-                )}
-              </ListItemIcon>
-              <ListItemText
-                disableTypography
-                primary={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    <Tooltip title={displayName} placement="top" arrow>
-                      <Typography variant="body2" noWrap sx={{ maxWidth: 180 }}>
-                        {displayName}
-                      </Typography>
-                    </Tooltip>
-                    <Chip
-                      size="small"
-                      label={formatFileSize(upload.total)}
-                      sx={{ fontSize: '0.7rem' }}
-                    />
-                    {upload.isMultipart && upload.totalParts && (
-                      <Chip
-                        size="small"
-                        label={`Part ${upload.completedParts || 0}/${upload.totalParts}`}
-                        color="primary"
-                        variant="outlined"
-                        sx={{ fontSize: '0.7rem' }}
-                      />
-                    )}
-                  </Box>
-                }
-                secondary={
-                  upload.status === 'error' ? (
-                    <Typography variant="caption" color="error">
-                      {upload.error}
-                    </Typography>
-                  ) : upload.status === 'uploading' ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={upload.percentage}
-                        sx={{ flexGrow: 1 }}
-                      />
-                      <Typography variant="caption" sx={{ minWidth: 35 }}>
-                        {upload.percentage}%
-                      </Typography>
-                    </Box>
+    <TooltipProvider>
+      <div className="mt-4">
+        <h3 className="text-sm font-medium mb-2">
+          Uploads ({uploads.length})
+        </h3>
+        <ul className="space-y-2">
+          {uploads.map((upload) => {
+            const displayName = upload.relativePath || upload.fileName;
+            return (
+              <li
+                key={upload.id}
+                className="flex items-start gap-3 bg-muted/50 rounded-lg p-3"
+              >
+                <div className="flex-shrink-0 mt-0.5">
+                  {upload.status === 'completed' ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : upload.status === 'error' ? (
+                    <AlertCircle className="h-5 w-5 text-destructive" />
                   ) : upload.status === 'paused' ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={upload.percentage}
-                        color="warning"
-                        sx={{ flexGrow: 1 }}
-                      />
-                      <Typography variant="caption" color="warning.main" sx={{ minWidth: 50 }}>
-                        Paused
-                      </Typography>
-                    </Box>
-                  ) : upload.status === 'completed' ? (
-                    <Typography variant="caption" color="success.main">
-                      Completed
-                    </Typography>
+                    <Pause className="h-5 w-5 text-yellow-500" />
                   ) : (
-                    <Typography variant="caption" color="text.secondary">
-                      Pending
-                    </Typography>
-                  )
-                }
-              />
-            </ListItem>
-          );
-        })}
-      </List>
-    </Box>
+                    <File className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-grow min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-sm truncate max-w-[180px]">
+                          {displayName}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>{displayName}</TooltipContent>
+                    </Tooltip>
+                    <Badge variant="secondary" className="text-xs">
+                      {formatFileSize(upload.total)}
+                    </Badge>
+                    {upload.isMultipart && upload.totalParts && (
+                      <Badge variant="outline" className="text-xs">
+                        Part {upload.completedParts || 0}/{upload.totalParts}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-1">
+                    {upload.status === 'error' ? (
+                      <span className="text-xs text-destructive">
+                        {upload.error}
+                      </span>
+                    ) : upload.status === 'uploading' ? (
+                      <div className="flex items-center gap-2">
+                        <Progress value={upload.percentage} className="h-2 flex-grow" />
+                        <span className="text-xs text-muted-foreground min-w-[35px]">
+                          {upload.percentage}%
+                        </span>
+                      </div>
+                    ) : upload.status === 'paused' ? (
+                      <div className="flex items-center gap-2">
+                        <Progress value={upload.percentage} className="h-2 flex-grow [&>div]:bg-yellow-500" />
+                        <span className="text-xs text-yellow-600 min-w-[50px]">
+                          Paused
+                        </span>
+                      </div>
+                    ) : upload.status === 'completed' ? (
+                      <span className="text-xs text-green-600">
+                        Completed
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  {upload.status === 'uploading' && upload.isMultipart && onPause && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => onPause(upload.id)}
+                        >
+                          <Pause className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Pause</TooltipContent>
+                    </Tooltip>
+                  )}
+                  {upload.status === 'paused' && onResume && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => onResume(upload.id)}
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Resume</TooltipContent>
+                    </Tooltip>
+                  )}
+                  {upload.status === 'error' && onRetry && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => onRetry(upload.id)}
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Retry</TooltipContent>
+                    </Tooltip>
+                  )}
+                  {(upload.status === 'uploading' ||
+                    upload.status === 'paused' ||
+                    upload.status === 'error' ||
+                    upload.status === 'pending') && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => onCancel(upload.id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Cancel</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </TooltipProvider>
   );
 }

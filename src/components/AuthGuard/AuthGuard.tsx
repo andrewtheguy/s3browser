@@ -1,20 +1,13 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router';
-import { Box, CircularProgress } from '@mui/material';
+import { Spinner } from '@/components/ui/spinner';
 import { useS3ClientContext } from '../../contexts';
 
 export function CenteredLoader() {
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <CircularProgress />
-    </Box>
+    <div className="min-h-screen flex items-center justify-center">
+      <Spinner size="lg" />
+    </div>
   );
 }
 

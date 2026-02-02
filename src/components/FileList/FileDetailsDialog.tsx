@@ -1,21 +1,20 @@
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  Button,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import {
   Table,
   TableBody,
   TableRow,
   TableCell,
-  IconButton,
-  CircularProgress,
-  Box,
-  Typography,
-} from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
-import { useParams } from 'react-router';
+} from '@/components/ui/table';
+import { Spinner } from '@/components/ui/spinner';
 import { useS3ClientContext } from '../../contexts';
 import { getObjectMetadata, type ObjectMetadata } from '../../services/api/objects';
 import type { S3Object } from '../../types';
@@ -78,36 +77,35 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
   if (!item) return null;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {item.isFolder ? 'Folder Details' : 'File Details'}
-        <IconButton onClick={onClose} size="small" aria-label="close">
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent>
-        <Table size="small">
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            {item.isFolder ? 'Folder Details' : 'File Details'}
+          </DialogTitle>
+        </DialogHeader>
+        <Table>
           <TableBody>
             <TableRow>
-              <TableCell component="th" sx={{ fontWeight: 500, width: 120 }}>
+              <TableCell className="font-medium w-[120px]">
                 Name
               </TableCell>
-              <TableCell sx={{ wordBreak: 'break-all' }}>
+              <TableCell className="break-all">
                 {item.name}{item.isFolder ? '/' : ''}
               </TableCell>
             </TableRow>
             <TableRow>
-              <TableCell component="th" sx={{ fontWeight: 500 }}>
+              <TableCell className="font-medium">
                 Full Path
               </TableCell>
-              <TableCell sx={{ wordBreak: 'break-all' }}>
+              <TableCell className="break-all">
                 {item.key}
               </TableCell>
             </TableRow>
             {!item.isFolder && (
               <>
                 <TableRow>
-                  <TableCell component="th" sx={{ fontWeight: 500 }}>
+                  <TableCell className="font-medium">
                     Size
                   </TableCell>
                   <TableCell>
@@ -115,7 +113,7 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell component="th" sx={{ fontWeight: 500 }}>
+                  <TableCell className="font-medium">
                     Last Modified
                   </TableCell>
                   <TableCell>
@@ -125,27 +123,27 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                 {isLoading ? (
                   <TableRow>
                     <TableCell colSpan={2}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CircularProgress size={16} />
-                        <Typography variant="body2" color="text.secondary">
+                      <div className="flex items-center gap-2">
+                        <Spinner size="sm" />
+                        <span className="text-sm text-muted-foreground">
                           Loading metadata...
-                        </Typography>
-                      </Box>
+                        </span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : error ? (
                   <TableRow>
                     <TableCell colSpan={2}>
-                      <Typography variant="body2" color="error">
+                      <span className="text-sm text-destructive">
                         {error}
-                      </Typography>
+                      </span>
                     </TableCell>
                   </TableRow>
                 ) : metadata && (
                   <>
                     {metadata.contentType && (
                       <TableRow>
-                        <TableCell component="th" sx={{ fontWeight: 500 }}>
+                        <TableCell className="font-medium">
                           Content Type
                         </TableCell>
                         <TableCell>
@@ -155,7 +153,7 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                     )}
                     {metadata.storageClass && (
                       <TableRow>
-                        <TableCell component="th" sx={{ fontWeight: 500 }}>
+                        <TableCell className="font-medium">
                           Storage Class
                         </TableCell>
                         <TableCell>
@@ -164,7 +162,7 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                       </TableRow>
                     )}
                     <TableRow>
-                      <TableCell component="th" sx={{ fontWeight: 500 }}>
+                      <TableCell className="font-medium">
                         Encryption
                       </TableCell>
                       <TableCell>
@@ -173,20 +171,20 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                     </TableRow>
                     {metadata.sseKmsKeyId && (
                       <TableRow>
-                        <TableCell component="th" sx={{ fontWeight: 500 }}>
+                        <TableCell className="font-medium">
                           KMS Key ID
                         </TableCell>
-                        <TableCell sx={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.85em' }}>
+                        <TableCell className="break-all font-mono text-xs">
                           {metadata.sseKmsKeyId}
                         </TableCell>
                       </TableRow>
                     )}
                     {item.etag && (
                       <TableRow>
-                        <TableCell component="th" sx={{ fontWeight: 500 }}>
+                        <TableCell className="font-medium">
                           ETag
                         </TableCell>
-                        <TableCell sx={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.85em' }}>
+                        <TableCell className="break-all font-mono text-xs">
                           {item.etag}
                         </TableCell>
                       </TableRow>
@@ -197,10 +195,10 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
             )}
           </TableBody>
         </Table>
+        <DialogFooter>
+          <Button onClick={onClose}>Close</Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
     </Dialog>
   );
 }

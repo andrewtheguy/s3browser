@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type DragEvent, type MouseEvent } from 'react';
-import { Box, Button, Typography } from '@mui/material';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import { Upload } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { UploadCandidate } from '../../types';
 
 interface FileSystemDirectoryReaderLike {
@@ -318,52 +319,38 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
   );
 
   return (
-    <Box
+    <div
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onClick={handleClick}
-      sx={{
-        border: 2,
-        borderStyle: 'dashed',
-        borderColor: isDragging ? 'primary.main' : 'divider',
-        borderRadius: 2,
-        p: 4,
-        textAlign: 'center',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        bgcolor: isDragging ? 'action.hover' : 'background.paper',
-        transition: 'all 0.2s ease',
-        opacity: disabled ? 0.5 : 1,
-        '&:hover': disabled
-          ? {}
-          : {
-              borderColor: 'primary.main',
-              bgcolor: 'action.hover',
-            },
-      }}
+      className={cn(
+        "border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200",
+        isDragging ? "border-primary bg-accent" : "border-border bg-background",
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:border-primary hover:bg-accent"
+      )}
     >
-      <CloudUploadIcon
-        sx={{
-          fontSize: 48,
-          color: isDragging ? 'primary.main' : 'text.secondary',
-          mb: 1,
-        }}
+      <Upload
+        className={cn(
+          "mx-auto h-12 w-12 mb-2",
+          isDragging ? "text-primary" : "text-muted-foreground"
+        )}
       />
-      <Typography variant="h6" gutterBottom>
+      <h3 className="text-lg font-semibold mb-1">
         Drag and drop files or folders here
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
+      </h3>
+      <p className="text-sm text-muted-foreground">
         or click to browse files or folders
-      </Typography>
-      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 2, flexWrap: 'wrap' }}>
-        <Button variant="outlined" size="small" disabled={disabled} onClick={handleSelectFiles}>
+      </p>
+      <div className="flex justify-center gap-2 mt-4 flex-wrap">
+        <Button variant="outline" size="sm" disabled={disabled} onClick={handleSelectFiles}>
           Choose Files
         </Button>
-        <Button variant="outlined" size="small" disabled={disabled} onClick={handleSelectFolder}>
+        <Button variant="outline" size="sm" disabled={disabled} onClick={handleSelectFolder}>
           Choose Folder
         </Button>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

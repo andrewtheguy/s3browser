@@ -1,19 +1,17 @@
+import { AlertCircle } from 'lucide-react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
-  CircularProgress,
-  Box,
-  List,
-  ListItem,
-  ListItemText,
-  Alert,
-  LinearProgress,
-  Typography,
-} from '@mui/material';
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
 
@@ -49,11 +47,6 @@ export function CopyMoveDialog({
   onCancel,
 }: CopyMoveDialogProps) {
   if (!sourceItem) return null;
-
-  const handleClose = (_event: object, _reason: 'backdropClick' | 'escapeKeyDown') => {
-    if (isExecuting) return;
-    onCancel();
-  };
 
   const actionLabel = mode === 'copy' ? 'Copy' : 'Move';
   const actioningLabel = mode === 'copy' ? 'Copying' : 'Moving';
@@ -117,92 +110,84 @@ export function CopyMoveDialog({
   const remainingCount = Math.max(totalOperations - PREVIEW_LIMIT, 0);
 
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      disableEscapeKeyDown={isExecuting}
-      maxWidth="sm"
-      fullWidth
-    >
-      <DialogTitle>{getTitle()}</DialogTitle>
-      <DialogContent>
-        {resolutionError && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {resolutionError}
-          </Alert>
-        )}
-
-        <DialogContentText>{getMessage()}</DialogContentText>
-
-        {/* Progress bar during execution */}
-        {isExecuting && progress && (
-          <Box sx={{ mt: 2 }}>
-            <LinearProgress
-              variant="determinate"
-              value={progress.total > 0 ? Math.min((progress.completed / progress.total) * 100, 100) : 0}
-            />
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-              {progress.completed} / {progress.total} objects
-            </Typography>
-          </Box>
-        )}
-
-        {/* Loading spinner during resolution */}
-        {isResolving && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-            <CircularProgress size={24} />
-          </Box>
-        )}
-
-        {/* Folder info */}
-        {isFolder && !isResolving && !resolutionError && folderCount > 0 && !isExecuting && (
-          <DialogContentText sx={{ mt: 1 }}>
-            {folderCount} subfolder{folderCount === 1 ? '' : 's'} will be recreated at the
-            destination.
-          </DialogContentText>
-        )}
-
-        {/* Preview list for folder operations */}
-        {isFolder && !isResolving && !resolutionError && previewKeys.length > 0 && !isExecuting && (
-          <Box sx={{ mt: 2 }}>
-            <List dense sx={{ maxHeight: 320, overflow: 'auto' }}>
-              {previewKeys.map((key) => (
-                <ListItem key={key} sx={{ py: 0 }}>
-                  <ListItemText
-                    primary={key}
-                    primaryTypographyProps={{
-                      variant: 'body2',
-                      sx: { wordBreak: 'break-all' },
-                    }}
-                  />
-                </ListItem>
-              ))}
-            </List>
-            {remainingCount > 0 && (
-              <DialogContentText sx={{ mt: 1 }}>
-                ...and {remainingCount} more
-              </DialogContentText>
-            )}
-          </Box>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel} disabled={isExecuting}>
-          Cancel
-        </Button>
-        <Button
-          onClick={onConfirm}
-          variant="contained"
-          color="primary"
-          disabled={isExecuting || isResolving || !!resolutionError}
-        >
-          {isExecuting ? (
-            <CircularProgress size={20} color="inherit" />
-          ) : (
-            actionLabel
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !isExecuting && onCancel()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{getTitle()}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {resolutionError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{resolutionError}</AlertDescription>
+            </Alert>
           )}
-        </Button>
-      </DialogActions>
+
+          <DialogDescription>{getMessage()}</DialogDescription>
+
+          {/* Progress bar during execution */}
+          {isExecuting && progress && (
+            <div className="space-y-2">
+              <Progress
+                value={progress.total > 0 ? Math.min((progress.completed / progress.total) * 100, 100) : 0}
+              />
+              <p className="text-xs text-muted-foreground">
+                {progress.completed} / {progress.total} objects
+              </p>
+            </div>
+          )}
+
+          {/* Loading spinner during resolution */}
+          {isResolving && (
+            <div className="flex justify-center py-4">
+              <Spinner size="md" />
+            </div>
+          )}
+
+          {/* Folder info */}
+          {isFolder && !isResolving && !resolutionError && folderCount > 0 && !isExecuting && (
+            <p className="text-sm text-muted-foreground">
+              {folderCount} subfolder{folderCount === 1 ? '' : 's'} will be recreated at the
+              destination.
+            </p>
+          )}
+
+          {/* Preview list for folder operations */}
+          {isFolder && !isResolving && !resolutionError && previewKeys.length > 0 && !isExecuting && (
+            <div>
+              <ScrollArea className="h-[320px] rounded-md border">
+                <ul className="p-2 space-y-1">
+                  {previewKeys.map((key) => (
+                    <li key={key} className="text-sm break-all py-1">
+                      {key}
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+              {remainingCount > 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  ...and {remainingCount} more
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={isExecuting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={onConfirm}
+            disabled={isExecuting || isResolving || !!resolutionError}
+          >
+            {isExecuting ? (
+              <Spinner size="sm" className="text-white" />
+            ) : (
+              actionLabel
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

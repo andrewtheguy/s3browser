@@ -1,23 +1,31 @@
 import { useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  Box,
-  Breadcrumbs,
-  Link,
-  Typography,
-  Button,
-  IconButton,
+  Home,
+  Upload,
+  FolderPlus,
+  RefreshCw,
+  LogOut,
+  Trash2,
+  Settings,
+  Info,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
   Tooltip,
-  Chip,
-} from '@mui/material';
-import HomeIcon from '@mui/icons-material/Home';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import LogoutIcon from '@mui/icons-material/Logout';
-import DeleteIcon from '@mui/icons-material/Delete';
-import SettingsIcon from '@mui/icons-material/Settings';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { buildSelectBucketUrl } from '../../utils/urlEncoding';
 
@@ -83,183 +91,189 @@ export function Toolbar({
     }
   };
 
-  const refreshAction = (
-    <Tooltip title="Refresh">
-      <IconButton onClick={refresh} disabled={isLoading}>
-        <RefreshIcon />
-      </IconButton>
-    </Tooltip>
-  );
-
-  const selectAction = onToggleSelection ? (
-    <Tooltip title={selectionMode ? 'Cancel selection' : 'Select items'}>
-      <Button
-        variant={selectionMode ? 'contained' : 'outlined'}
-        onClick={onToggleSelection}
-        sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-      >
-        {selectionMode ? 'Cancel' : 'Select'}
-      </Button>
-    </Tooltip>
-  ) : null;
-
-  const batchDeleteAction = selectionMode && selectedCount > 0 && onBatchDelete ? (
-    <Tooltip title={isDeleting ? 'Deleting...' : `Delete ${selectedCount} item(s)`}>
-      <Box component="span" sx={{ display: 'inline-block' }}>
-        <Button
-          variant="outlined"
-          color="error"
-          onClick={onBatchDelete}
-          disabled={isDeleting}
-          sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-        >
-          <DeleteIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-            {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
-          </Box>
-        </Button>
-      </Box>
-    </Tooltip>
-  ) : null;
-
-  const newFolderAction = (
-    <Tooltip title="New Folder">
-      <Button
-        variant="outlined"
-        onClick={onCreateFolderClick}
-        sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-      >
-        <CreateNewFolderIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-          New Folder
-        </Box>
-      </Button>
-    </Tooltip>
-  );
-
-  const uploadAction = (
-    <Tooltip title="Upload">
-      <Button
-        variant="contained"
-        onClick={onUploadClick}
-        sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-      >
-        <CloudUploadIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-          Upload
-        </Box>
-      </Button>
-    </Tooltip>
-  );
-
-  const manageConnectionsAction = (
-    <Tooltip title="Manage Connections">
-      <Button
-        variant="outlined"
-        onClick={handleManageConnections}
-        sx={{ minWidth: 'auto', px: { xs: 1, sm: 2 } }}
-      >
-        <SettingsIcon sx={{ mr: { xs: 0, sm: 1 } }} />
-        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-          Manage Connections
-        </Box>
-      </Button>
-    </Tooltip>
-  );
-
-  const signOutAction = (
-    <Tooltip title="Sign Out">
-      <IconButton onClick={handleDisconnect} color="error">
-        <LogoutIcon />
-      </IconButton>
-    </Tooltip>
-  );
-
   return (
-    <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: { xs: 1, sm: 2 },
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <Tooltip title="Click to change bucket">
-            <Chip
-              label={`Bucket: ${credentials?.bucket ?? '—'}`}
-              color="primary"
-              variant="outlined"
-              onClick={handleChangeBucket}
-              sx={{ fontWeight: 500, cursor: 'pointer' }}
-            />
-          </Tooltip>
-          <Tooltip title="Bucket settings">
-            <IconButton size="small" onClick={onBucketInfoClick} aria-label="Bucket settings">
-              <InfoOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
+    <TooltipProvider>
+      <div className="p-4 border-b">
+        <div className="flex items-center justify-between mb-2 sm:mb-4">
+          <div className="flex items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="cursor-pointer font-medium px-3 py-1"
+                  onClick={handleChangeBucket}
+                >
+                  Bucket: {credentials?.bucket ?? '—'}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>Click to change bucket</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBucketInfoClick}>
+                  <Info className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Bucket settings</TooltipContent>
+            </Tooltip>
+          </div>
 
-        <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5 }}>
-          {refreshAction}
-          {manageConnectionsAction}
-          {signOutAction}
-        </Box>
+          {/* Mobile actions */}
+          <div className="flex sm:hidden gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={refresh} disabled={isLoading}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={handleManageConnections}>
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Manage Connections</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={handleDisconnect} className="text-destructive hover:text-destructive">
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Sign Out</TooltipContent>
+            </Tooltip>
+          </div>
 
-        <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 1 }}>
-          {refreshAction}
-          {selectAction}
-          {batchDeleteAction}
-          {newFolderAction}
-          {uploadAction}
-          {manageConnectionsAction}
-          {signOutAction}
-        </Box>
-      </Box>
+          {/* Desktop actions */}
+          <div className="hidden sm:flex gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={refresh} disabled={isLoading}>
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh</TooltipContent>
+            </Tooltip>
 
-      <Breadcrumbs aria-label="breadcrumb">
-        <Link
-          component="button"
-          underline="hover"
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            cursor: 'pointer',
-          }}
-          color={pathSegments.length === 0 ? 'text.primary' : 'inherit'}
-          onClick={() => handleBreadcrumbClick(-1)}
-        >
-          <HomeIcon sx={{ mr: 0.5, fontSize: 20 }} />
-          Home
-        </Link>
+            {onToggleSelection && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={selectionMode ? 'default' : 'outline'}
+                    onClick={onToggleSelection}
+                  >
+                    {selectionMode ? 'Cancel' : 'Select'}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{selectionMode ? 'Cancel selection' : 'Select items'}</TooltipContent>
+              </Tooltip>
+            )}
 
-        {pathSegments.map((segment, index) => {
-          const isLast = index === pathSegments.length - 1;
+            {selectionMode && selectedCount > 0 && onBatchDelete && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="text-destructive border-destructive hover:bg-destructive/10"
+                    onClick={onBatchDelete}
+                    disabled={isDeleting}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2 sm:mr-1" />
+                    <span className="hidden sm:inline">
+                      {isDeleting ? 'Deleting...' : `Delete (${selectedCount})`}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isDeleting ? 'Deleting...' : `Delete ${selectedCount} item(s)`}</TooltipContent>
+              </Tooltip>
+            )}
 
-          if (isLast) {
-            return (
-              <Typography key={index} color="text.primary" fontWeight={500}>
-                {segment}
-              </Typography>
-            );
-          }
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" onClick={onCreateFolderClick}>
+                  <FolderPlus className="h-4 w-4 mr-2 sm:mr-1" />
+                  <span className="hidden sm:inline">New Folder</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>New Folder</TooltipContent>
+            </Tooltip>
 
-          return (
-            <Link
-              key={index}
-              component="button"
-              underline="hover"
-              color="inherit"
-              onClick={() => handleBreadcrumbClick(index)}
-              sx={{ cursor: 'pointer' }}
-            >
-              {segment}
-            </Link>
-          );
-        })}
-      </Breadcrumbs>
-    </Box>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={onUploadClick}>
+                  <Upload className="h-4 w-4 mr-2 sm:mr-1" />
+                  <span className="hidden sm:inline">Upload</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Upload</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" onClick={handleManageConnections}>
+                  <Settings className="h-4 w-4 mr-2 sm:mr-1" />
+                  <span className="hidden sm:inline">Manage Connections</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Manage Connections</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={handleDisconnect} className="text-destructive hover:text-destructive">
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Sign Out</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              {pathSegments.length === 0 ? (
+                <BreadcrumbPage className="flex items-center">
+                  <Home className="h-4 w-4 mr-1" />
+                  Home
+                </BreadcrumbPage>
+              ) : (
+                <BreadcrumbLink
+                  className="flex items-center cursor-pointer"
+                  onClick={() => handleBreadcrumbClick(-1)}
+                >
+                  <Home className="h-4 w-4 mr-1" />
+                  Home
+                </BreadcrumbLink>
+              )}
+            </BreadcrumbItem>
+
+            {pathSegments.map((segment, index) => {
+              const isLast = index === pathSegments.length - 1;
+
+              return (
+                <BreadcrumbItem key={index}>
+                  <BreadcrumbSeparator />
+                  {isLast ? (
+                    <BreadcrumbPage className="font-medium">
+                      {segment}
+                    </BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink
+                      className="cursor-pointer"
+                      onClick={() => handleBreadcrumbClick(index)}
+                    >
+                      {segment}
+                    </BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+              );
+            })}
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
+    </TooltipProvider>
   );
 }
