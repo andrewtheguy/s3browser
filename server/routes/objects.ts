@@ -220,8 +220,8 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
   }
 
   // AWS S3 DeleteObjects supports up to 1000 keys per request
-  if (fileKeys.length > 1000) {
-    res.status(400).json({ error: 'Cannot delete more than 1000 objects at once' });
+  if (fileKeys.length > MAX_BATCH_OPERATIONS) {
+    res.status(400).json({ error: `Cannot delete more than ${MAX_BATCH_OPERATIONS} objects at once` });
     return;
   }
 
@@ -300,6 +300,9 @@ router.post('/:connectionId/:bucket/folder', s3Middleware, requireBucket, async 
 // 5GB threshold for multipart copy
 const MULTIPART_THRESHOLD = 5 * 1024 * 1024 * 1024;
 const PART_SIZE = 100 * 1024 * 1024; // 100MB parts
+
+// Maximum objects per batch operation (S3 DeleteObjects API limit is 1000)
+const MAX_BATCH_OPERATIONS = 1000;
 
 function validateKey(key: string): { valid: true } | { valid: false; error: string } {
   if (!key || typeof key !== 'string') {
@@ -457,8 +460,8 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
     return;
   }
 
-  if (operations.length > 1000) {
-    res.status(400).json({ error: 'Cannot copy more than 1000 objects at once' });
+  if (operations.length > MAX_BATCH_OPERATIONS) {
+    res.status(400).json({ error: `Cannot copy more than ${MAX_BATCH_OPERATIONS} objects at once` });
     return;
   }
 
@@ -602,8 +605,8 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
     return;
   }
 
-  if (operations.length > 1000) {
-    res.status(400).json({ error: 'Cannot move more than 1000 objects at once' });
+  if (operations.length > MAX_BATCH_OPERATIONS) {
+    res.status(400).json({ error: `Cannot move more than ${MAX_BATCH_OPERATIONS} objects at once` });
     return;
   }
 
