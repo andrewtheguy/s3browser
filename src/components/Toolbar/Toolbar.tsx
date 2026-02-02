@@ -196,7 +196,7 @@ export function Toolbar({
             />
           </Tooltip>
           <Tooltip title="Bucket settings">
-            <IconButton size="small" onClick={onBucketInfoClick}>
+            <IconButton size="small" onClick={onBucketInfoClick} aria-label="Bucket settings">
               <InfoOutlinedIcon fontSize="small" />
             </IconButton>
           </Tooltip>

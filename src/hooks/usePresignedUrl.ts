@@ -40,9 +40,9 @@ export function usePresignedUrl() {
     }
   }, [activeConnectionId, bucket]);
 
-  const copyS3Uri = useCallback(async (key: string): Promise<boolean> => {
+  const copyS3Uri = useCallback(async (key: string): Promise<CopyPresignedUrlResult> => {
     if (!bucket) {
-      return false;
+      return { success: false };
     }
 
     const s3Uri = `s3://${bucket}/${key}`;
@@ -51,14 +51,15 @@ export function usePresignedUrl() {
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(s3Uri);
-        return true;
+        return { success: true, url: s3Uri };
       } catch (err) {
         console.error('usePresignedUrl: failed to copy S3 URI', err);
-        return false;
+        return { success: false, url: s3Uri };
       }
     }
 
-    return false;
+    // Clipboard unavailable - return URL for manual copy dialog
+    return { success: false, url: s3Uri };
   }, [bucket]);
 
   return { copyPresignedUrl, copyS3Uri, isLoading };

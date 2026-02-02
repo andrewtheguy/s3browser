@@ -20,7 +20,7 @@ export function formatFileSizeDetailed(bytes?: number): string {
   if (bytes === 0) return '0 bytes';
 
   const formatted = formatFileSize(bytes);
-  const bytesWithCommas = bytes.toLocaleString();
+  const bytesWithCommas = bytes.toLocaleString('en-US');
 
   // If already in bytes, just show with commas
   if (bytes < 1024) {

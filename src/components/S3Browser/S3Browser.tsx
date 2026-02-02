@@ -348,10 +348,27 @@ export function S3Browser() {
     setNewFolderName('');
   }, []);
 
+  const formatTtlDuration = (ttl: number): string => {
+    const days = Math.floor(ttl / 86400);
+    const hours = Math.floor((ttl % 86400) / 3600);
+    const minutes = Math.floor((ttl % 3600) / 60);
+
+    if (days > 0) {
+      return days === 1 ? '1 day' : `${days} days`;
+    }
+    if (hours > 0) {
+      return hours === 1 ? '1 hour' : `${hours} hours`;
+    }
+    if (minutes > 0) {
+      return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+    }
+    return `${ttl} seconds`;
+  };
+
   const handleCopyUrl = useCallback(async (key: string, ttl: number) => {
     const result = await copyPresignedUrl(key, ttl);
     if (result.success) {
-      const duration = ttl >= 86400 ? '1 day' : '1 hour';
+      const duration = formatTtlDuration(ttl);
       showSnackbar(`Presigned URL (${duration}) copied to clipboard`, 'success');
     } else {
       showSnackbar('Failed to copy URL', 'error');
@@ -359,8 +376,8 @@ export function S3Browser() {
   }, [copyPresignedUrl, showSnackbar]);
 
   const handleCopyS3Uri = useCallback(async (key: string) => {
-    const success = await copyS3Uri(key);
-    if (success) {
+    const result = await copyS3Uri(key);
+    if (result.success) {
       showSnackbar('S3 URI copied to clipboard', 'success');
     } else {
       showSnackbar('Failed to copy S3 URI', 'error');
