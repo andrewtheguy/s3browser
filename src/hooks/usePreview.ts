@@ -35,31 +35,12 @@ export function usePreview() {
 
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const activeBlobUrlRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const currentUrl = state.signedUrl;
-    const previousBlobUrl = activeBlobUrlRef.current;
-
-    if (previousBlobUrl && previousBlobUrl !== currentUrl) {
-      URL.revokeObjectURL(previousBlobUrl);
-      activeBlobUrlRef.current = null;
-    }
-
-    if (currentUrl && currentUrl.startsWith('blob:')) {
-      activeBlobUrlRef.current = currentUrl;
-    }
-  }, [state.signedUrl]);
 
   // Cleanup on unmount: abort any in-flight request
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
-      }
-      if (activeBlobUrlRef.current) {
-        URL.revokeObjectURL(activeBlobUrlRef.current);
-        activeBlobUrlRef.current = null;
       }
     };
   }, []);
