@@ -25,6 +25,7 @@ import { DeleteDialog } from '../DeleteDialog';
 import { PreviewDialog } from '../PreviewDialog';
 import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDialog';
 import { CopyMoveDialog } from '../CopyMoveDialog';
+import { BucketInfoDialog } from '../BucketInfoDialog';
 import { useBrowserContext } from '../../contexts';
 import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove } from '../../hooks';
 import type { S3Object } from '../../types';
@@ -42,7 +43,7 @@ export function S3Browser() {
   const { refresh, currentPath, objects } = useBrowserContext();
   const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
-  const { copyPresignedUrl } = usePresignedUrl();
+  const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
   const { download } = useDownload();
   const preview = usePreview();
   const {
@@ -85,6 +86,17 @@ export function S3Browser() {
   const [copyMoveResolveError, setCopyMoveResolveError] = useState<string | null>(null);
   const [copyMoveProgress, setCopyMoveProgress] = useState<{ completed: number; total: number } | undefined>(undefined);
   const [copyMoveNewName, setCopyMoveNewName] = useState('');
+
+  // Bucket info state
+  const [bucketInfoOpen, setBucketInfoOpen] = useState(false);
+
+  const handleBucketInfoClick = useCallback(() => {
+    setBucketInfoOpen(true);
+  }, []);
+
+  const handleBucketInfoClose = useCallback(() => {
+    setBucketInfoOpen(false);
+  }, []);
 
   const showSnackbar = useCallback(
     (message: string, severity: SnackbarState['severity']) => {
@@ -336,14 +348,41 @@ export function S3Browser() {
     setNewFolderName('');
   }, []);
 
-  const handleCopyUrl = useCallback(async (key: string) => {
-    const success = await copyPresignedUrl(key);
-    if (success) {
-      showSnackbar('URL copied to clipboard', 'success');
+  const formatTtlDuration = (ttl: number): string => {
+    const days = Math.floor(ttl / 86400);
+    const hours = Math.floor((ttl % 86400) / 3600);
+    const minutes = Math.floor((ttl % 3600) / 60);
+
+    if (days > 0) {
+      return days === 1 ? '1 day' : `${days} days`;
+    }
+    if (hours > 0) {
+      return hours === 1 ? '1 hour' : `${hours} hours`;
+    }
+    if (minutes > 0) {
+      return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+    }
+    return `${ttl} seconds`;
+  };
+
+  const handleCopyUrl = useCallback(async (key: string, ttl: number) => {
+    const result = await copyPresignedUrl(key, ttl);
+    if (result.success) {
+      const duration = formatTtlDuration(ttl);
+      showSnackbar(`Presigned URL (${duration}) copied to clipboard`, 'success');
     } else {
       showSnackbar('Failed to copy URL', 'error');
     }
   }, [copyPresignedUrl, showSnackbar]);
+
+  const handleCopyS3Uri = useCallback(async (key: string) => {
+    const result = await copyS3Uri(key);
+    if (result.success) {
+      showSnackbar('S3 URI copied to clipboard', 'success');
+    } else {
+      showSnackbar('Failed to copy S3 URI', 'error');
+    }
+  }, [copyS3Uri, showSnackbar]);
 
   const { openPreview } = preview;
   const handlePreview = useCallback((item: S3Object) => {
@@ -542,6 +581,7 @@ export function S3Browser() {
         <Toolbar
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}
+          onBucketInfoClick={handleBucketInfoClick}
           selectedCount={selectedKeys.size}
           onBatchDelete={handleBatchDeleteRequest}
           isDeleting={isDeleting}
@@ -563,6 +603,7 @@ export function S3Browser() {
               onCopyRequest={handleCopyRequest}
               onMoveRequest={handleMoveRequest}
               onCopyUrl={handleCopyUrl}
+              onCopyS3Uri={handleCopyS3Uri}
               onPreview={handlePreview}
               selectedKeys={selectedKeys}
               onSelectItem={handleSelectItem}
@@ -703,6 +744,8 @@ export function S3Browser() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <BucketInfoDialog open={bucketInfoOpen} onClose={handleBucketInfoClose} />
 
       <Snackbar
         open={snackbar.open}

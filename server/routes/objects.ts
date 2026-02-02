@@ -15,6 +15,13 @@ import { s3Middleware, requireBucket, AuthenticatedRequest } from '../middleware
 
 const router = Router();
 
+// Maximum objects per batch operation (S3 DeleteObjects API limit is 1000).
+// To support more than 1000 objects, batch operations would need to:
+// 1. Chunk operations into groups of 1000
+// 2. Use pagination (continuationToken) when listing objects for folder operations
+// 3. Handle partial failures across chunks
+const MAX_BATCH_OPERATIONS = 1000;
+
 interface FolderRequestBody {
   path?: string;
 }
@@ -177,9 +184,9 @@ router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req:
     return;
   }
 
-  // Validate key to prevent path traversal and invalid paths
-  if (key.includes('../') || key.startsWith('/')) {
-    res.status(400).json({ error: 'Invalid object key' });
+  const keyValidation = validateKey(key);
+  if (!keyValidation.valid) {
+    res.status(400).json({ error: keyValidation.error });
     return;
   }
 
@@ -220,8 +227,8 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
   }
 
   // AWS S3 DeleteObjects supports up to 1000 keys per request
-  if (fileKeys.length > 1000) {
-    res.status(400).json({ error: 'Cannot delete more than 1000 objects at once' });
+  if (fileKeys.length > MAX_BATCH_OPERATIONS) {
+    res.status(400).json({ error: `Cannot delete more than ${MAX_BATCH_OPERATIONS} objects at once` });
     return;
   }
 
@@ -457,8 +464,8 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
     return;
   }
 
-  if (operations.length > 1000) {
-    res.status(400).json({ error: 'Cannot copy more than 1000 objects at once' });
+  if (operations.length > MAX_BATCH_OPERATIONS) {
+    res.status(400).json({ error: `Cannot copy more than ${MAX_BATCH_OPERATIONS} objects at once` });
     return;
   }
 
@@ -602,8 +609,8 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
     return;
   }
 
-  if (operations.length > 1000) {
-    res.status(400).json({ error: 'Cannot move more than 1000 objects at once' });
+  if (operations.length > MAX_BATCH_OPERATIONS) {
+    res.status(400).json({ error: `Cannot move more than ${MAX_BATCH_OPERATIONS} objects at once` });
     return;
   }
 
@@ -671,6 +678,59 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
   }
 
   res.json(result);
+});
+
+// GET /api/objects/:connectionId/:bucket/metadata?key=...
+router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const key = req.query.key as string | undefined;
+
+  if (!key) {
+    res.status(400).json({ error: 'Object key is required' });
+    return;
+  }
+
+  const keyValidation = validateKey(key);
+  if (!keyValidation.valid) {
+    res.status(400).json({ error: keyValidation.error });
+    return;
+  }
+
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
+
+  if (!bucket || !client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+
+  const command = new HeadObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  });
+
+  let response;
+  try {
+    response = await client.send(command);
+  } catch (err: unknown) {
+    const errorName = (err as { name?: string })?.name;
+    if (errorName === 'NotFound' || errorName === 'NoSuchKey') {
+      res.status(404).json({ error: 'Object not found' });
+      return;
+    }
+    throw err;
+  }
+
+  res.json({
+    key,
+    size: response.ContentLength,
+    lastModified: response.LastModified?.toISOString(),
+    contentType: response.ContentType,
+    etag: response.ETag,
+    serverSideEncryption: response.ServerSideEncryption,
+    sseKmsKeyId: response.SSEKMSKeyId,
+    sseCustomerAlgorithm: response.SSECustomerAlgorithm,
+    storageClass: response.StorageClass,
+  });
 });
 
 export default router;

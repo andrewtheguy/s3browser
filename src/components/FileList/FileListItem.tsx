@@ -1,4 +1,5 @@
-import { TableRow, TableCell, IconButton, Tooltip, Box, Typography, Checkbox } from '@mui/material';
+import { useState } from 'react';
+import { TableRow, TableCell, IconButton, Tooltip, Box, Typography, Checkbox, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import ImageIcon from '@mui/icons-material/Image';
@@ -15,15 +16,19 @@ import LinkIcon from '@mui/icons-material/Link';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { S3Object } from '../../types';
 import { formatFileSize, formatDate } from '../../utils/formatters';
 import { getFileIconType, type FileIconType } from '../../utils/fileIcons';
+import { FileDetailsDialog } from './FileDetailsDialog';
 
 interface FileListItemProps {
   item: S3Object;
   onNavigate: (path: string) => void;
   onDownload: (key: string) => void;
-  onCopyUrl: (key: string) => void;
+  onCopyUrl: (key: string, ttl: number) => void;
+  onCopyS3Uri: (key: string) => void;
   onDelete: (item: S3Object) => void;
   onCopy: (item: S3Object) => void;
   onMove: (item: S3Object) => void;
@@ -66,6 +71,7 @@ export function FileListItem({
   onNavigate,
   onDownload,
   onCopyUrl,
+  onCopyS3Uri,
   onDelete,
   onCopy,
   onMove,
@@ -77,6 +83,13 @@ export function FileListItem({
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
   const iconColor = iconColors[iconType];
+
+  // State declarations
+  const [linkMenuAnchor, setLinkMenuAnchor] = useState<null | HTMLElement>(null);
+  const linkMenuOpen = Boolean(linkMenuAnchor);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const menuOpen = Boolean(menuAnchor);
 
   const handleClick = () => {
     if (item.isFolder) {
@@ -91,24 +104,28 @@ export function FileListItem({
     onDownload(item.key);
   };
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleLinkMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
-    onDelete(item);
+    setLinkMenuAnchor(e.currentTarget);
   };
 
-  const handleCopyUrl = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onCopyUrl(item.key);
+  const handleLinkMenuClose = () => {
+    setLinkMenuAnchor(null);
   };
 
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onCopy(item);
+  const handleCopyUrl1Hour = () => {
+    handleLinkMenuClose();
+    onCopyUrl(item.key, 3600);
   };
 
-  const handleMove = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onMove(item);
+  const handleCopyUrl1Day = () => {
+    handleLinkMenuClose();
+    onCopyUrl(item.key, 86400);
+  };
+
+  const handleCopyS3Uri = () => {
+    handleLinkMenuClose();
+    onCopyS3Uri(item.key);
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,7 +136,41 @@ export function FileListItem({
     e.stopPropagation();
   };
 
+  const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    setMenuAnchor(e.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+  };
+
+  const handleInfoClick = () => {
+    handleMenuClose();
+    setDetailsOpen(true);
+  };
+
+  const handleDetailsClose = () => {
+    setDetailsOpen(false);
+  };
+
+  const handleMenuCopy = () => {
+    handleMenuClose();
+    onCopy(item);
+  };
+
+  const handleMenuMove = () => {
+    handleMenuClose();
+    onMove(item);
+  };
+
+  const handleMenuDelete = () => {
+    handleMenuClose();
+    onDelete(item);
+  };
+
   return (
+  <>
     <TableRow
       hover
       onClick={handleClick}
@@ -148,21 +199,28 @@ export function FileListItem({
       </TableCell>
       <TableCell sx={{ minWidth: 120 }}>
         <Box>
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: item.isFolder ? 500 : 400,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              display: 'block',
-              maxWidth: 'clamp(140px, 35vw, 320px)',
-              '&:hover': item.isFolder ? { textDecoration: 'underline' } : {},
-            }}
+          <Tooltip
+            title={item.name + (item.isFolder ? '/' : '')}
+            placement="bottom-start"
+            enterDelay={500}
+            enterTouchDelay={300}
           >
-            {item.name}
-            {item.isFolder && '/'}
-          </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: item.isFolder ? 500 : 400,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                display: 'block',
+                maxWidth: 'clamp(140px, 35vw, 320px)',
+                '&:hover': item.isFolder ? { textDecoration: 'underline' } : {},
+              }}
+            >
+              {item.name}
+              {item.isFolder && '/'}
+            </Typography>
+          </Tooltip>
         </Box>
       </TableCell>
       <TableCell sx={{ width: { xs: 72, sm: 100 } }}>
@@ -175,12 +233,12 @@ export function FileListItem({
           {formatDate(item.lastModified)}
         </Typography>
       </TableCell>
-      <TableCell sx={{ width: 160 }} align="right">
+      <TableCell sx={{ width: 120 }} align="right">
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           {!item.isFolder && (
             <>
-              <Tooltip title="Copy presigned URL (24h)" placement="top-start">
-                <IconButton size="small" onClick={handleCopyUrl}>
+              <Tooltip title="Copy URL" placement="top-start">
+                <IconButton size="small" onClick={handleLinkMenuOpen}>
                   <LinkIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
@@ -191,26 +249,66 @@ export function FileListItem({
               </Tooltip>
             </>
           )}
-          <Tooltip title="Copy to..." placement="top-start">
-            <IconButton size="small" onClick={handleCopy}>
-              <ContentCopyIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Move to..." placement="top-start">
-            <IconButton size="small" onClick={handleMove}>
-              <DriveFileMoveIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip
-            title={item.isFolder ? 'Delete folder and contents' : 'Delete'}
-            placement="top-start"
-          >
-            <IconButton size="small" onClick={handleDelete} color="error">
-              <DeleteIcon fontSize="small" />
+          <Tooltip title="More actions" placement="top-start">
+            <IconButton size="small" onClick={handleMenuOpen}>
+              <MoreVertIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Box>
       </TableCell>
     </TableRow>
+    <Menu
+      anchorEl={linkMenuAnchor}
+      open={linkMenuOpen}
+      onClose={handleLinkMenuClose}
+      onClick={(e) => e.stopPropagation()}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+    >
+      <MenuItem onClick={handleCopyUrl1Hour}>
+        <ListItemText>Presigned URL (1 hour)</ListItemText>
+      </MenuItem>
+      <MenuItem onClick={handleCopyUrl1Day}>
+        <ListItemText>Presigned URL (1 day)</ListItemText>
+      </MenuItem>
+      <MenuItem onClick={handleCopyS3Uri}>
+        <ListItemText>S3 URI (s3://...)</ListItemText>
+      </MenuItem>
+    </Menu>
+    <Menu
+      anchorEl={menuAnchor}
+      open={menuOpen}
+      onClose={handleMenuClose}
+      onClick={(e) => e.stopPropagation()}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+    >
+      <MenuItem onClick={handleInfoClick}>
+        <ListItemIcon>
+          <InfoOutlinedIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Details</ListItemText>
+      </MenuItem>
+      <MenuItem onClick={handleMenuCopy}>
+        <ListItemIcon>
+          <ContentCopyIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Copy to...</ListItemText>
+      </MenuItem>
+      <MenuItem onClick={handleMenuMove}>
+        <ListItemIcon>
+          <DriveFileMoveIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>Move to...</ListItemText>
+      </MenuItem>
+      <MenuItem onClick={handleMenuDelete} sx={{ color: 'error.main' }}>
+        <ListItemIcon sx={{ color: 'error.main' }}>
+          <DeleteIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText>{item.isFolder ? 'Delete folder and contents' : 'Delete'}</ListItemText>
+      </MenuItem>
+    </Menu>
+    <FileDetailsDialog open={detailsOpen} item={item} onClose={handleDetailsClose} />
+  </>
   );
 }

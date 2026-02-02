@@ -304,7 +304,7 @@ router.get('/buckets/:connectionId', s3Middleware, async (req: AuthenticatedRequ
     console.error('Failed to list buckets:', error);
 
     if (error instanceof Error) {
-      const signatureErrorNames = ['SignatureDoesNotMatch', 'InvalidAccessKeyId', 'ExpiredToken', 'AccessDenied', 'InvalidToken'];
+      const signatureErrorNames = ['SignatureDoesNotMatch', 'InvalidAccessKeyId', 'ExpiredToken', 'InvalidToken'];
       const isSignatureError =
         signatureErrorNames.some(n => error?.name === n || error?.name?.toLowerCase() === n.toLowerCase()) ||
         error.message?.toLowerCase().includes('signature') ||

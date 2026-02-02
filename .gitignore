@@ -42,3 +42,5 @@ package-lock.json
 # Bun build temp files
 *.bun-build
 .*.bun-build
+
+tsconfig.server.tsbuildinfo

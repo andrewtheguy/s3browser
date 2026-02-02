@@ -157,3 +157,33 @@ export async function moveObjects(
 
   return response;
 }
+
+export interface ObjectMetadata {
+  key: string;
+  size?: number;
+  lastModified?: string;
+  contentType?: string;
+  etag?: string;
+  serverSideEncryption?: string;
+  sseKmsKeyId?: string;
+  sseCustomerAlgorithm?: string;
+  storageClass?: string;
+}
+
+export async function getObjectMetadata(
+  connectionId: number,
+  bucket: string,
+  key: string,
+  signal?: AbortSignal
+): Promise<ObjectMetadata> {
+  const response = await apiGet<ObjectMetadata>(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/metadata?key=${encodeURIComponent(key)}`,
+    signal
+  );
+
+  if (!response) {
+    throw new Error('Failed to get object metadata: missing response');
+  }
+
+  return response;
+}

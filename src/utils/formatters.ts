@@ -14,6 +14,22 @@ export function formatFileSize(bytes?: number): string {
   return `${size.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
+export function formatFileSizeDetailed(bytes?: number): string {
+  if (bytes === undefined || bytes === null) return '-';
+  if (bytes < 0) return '-';
+  if (bytes === 0) return '0 bytes';
+
+  const formatted = formatFileSize(bytes);
+  const bytesWithCommas = bytes.toLocaleString('en-US');
+
+  // If already in bytes, just show with commas
+  if (bytes < 1024) {
+    return `${bytesWithCommas} bytes`;
+  }
+
+  return `${bytesWithCommas} bytes (${formatted})`;
+}
+
 export function formatDate(date?: Date): string {
   if (!date) return '-';
 

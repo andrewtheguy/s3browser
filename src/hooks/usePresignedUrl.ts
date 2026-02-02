@@ -5,7 +5,7 @@ import { getPresignedUrl } from '../services/api/download';
 
 export interface CopyPresignedUrlResult {
   success: boolean;
-  /** Present when clipboard is unavailable - show in dialog for manual copy */
+  /** The URL that was copied (or attempted to copy). Present on success and when clipboard is unavailable. */
   url?: string;
 }
 
@@ -15,19 +15,19 @@ export function usePresignedUrl() {
   const bucket = urlBucket || credentials?.bucket;
   const [isLoading, setIsLoading] = useState(false);
 
-  const copyPresignedUrl = useCallback(async (key: string): Promise<CopyPresignedUrlResult> => {
+  const copyPresignedUrl = useCallback(async (key: string, ttl: number = 86400): Promise<CopyPresignedUrlResult> => {
     if (!activeConnectionId || !bucket) {
       return { success: false };
     }
 
     setIsLoading(true);
     try {
-      const url = await getPresignedUrl(activeConnectionId, bucket, key);
+      const url = await getPresignedUrl(activeConnectionId, bucket, key, ttl);
 
       // Check if clipboard API is available (not available in SSR or insecure contexts)
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
-        return { success: true };
+        return { success: true, url };
       }
 
       // Clipboard unavailable - return URL for manual copy dialog
@@ -40,5 +40,27 @@ export function usePresignedUrl() {
     }
   }, [activeConnectionId, bucket]);
 
-  return { copyPresignedUrl, isLoading };
+  const copyS3Uri = useCallback(async (key: string): Promise<CopyPresignedUrlResult> => {
+    if (!bucket) {
+      return { success: false };
+    }
+
+    const s3Uri = `s3://${bucket}/${key}`;
+
+    // Check if clipboard API is available
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(s3Uri);
+        return { success: true, url: s3Uri };
+      } catch (err) {
+        console.error('usePresignedUrl: failed to copy S3 URI', err);
+        return { success: false, url: s3Uri };
+      }
+    }
+
+    // Clipboard unavailable - return URL for manual copy dialog
+    return { success: false, url: s3Uri };
+  }, [bucket]);
+
+  return { copyPresignedUrl, copyS3Uri, isLoading };
 }
