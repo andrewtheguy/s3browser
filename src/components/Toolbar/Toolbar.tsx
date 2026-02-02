@@ -10,8 +10,8 @@ import {
   Settings,
   Info,
 } from 'lucide-react';
+import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
   TooltipContent,
@@ -98,13 +98,14 @@ export function Toolbar({
           <div className="flex items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge
+                <Button
                   variant="outline"
-                  className="cursor-pointer font-medium px-3 py-1"
+                  size="sm"
                   onClick={handleChangeBucket}
                 >
-                  Bucket: {credentials?.bucket ?? '—'}
-                </Badge>
+                  <BucketIcon className="h-4 w-4 mr-1" />
+                  {credentials?.bucket ?? '—'}
+                </Button>
               </TooltipTrigger>
               <TooltipContent>Click to change bucket</TooltipContent>
             </Tooltip>

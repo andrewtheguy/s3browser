@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -98,7 +99,7 @@ export function LoginForm() {
       <Card className="max-w-[450px] w-full">
         <CardContent className="p-8">
           <div className="flex items-center justify-center mb-6">
-            <img src="/vite.svg" alt="Logo" className="h-10 w-10 mr-2" />
+            <BucketIcon className="h-10 w-10 mr-2 text-primary" />
             <h1 className="text-2xl font-bold">
               S3 Browser
             </h1>
