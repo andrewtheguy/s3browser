@@ -128,7 +128,7 @@ export function BrowserProvider({
             if (requestId === requestIdRef.current) {
               dispatch({
                 type: 'FETCH_LIMIT_EXCEEDED',
-                error: `Folder contains more than ${MAX_OBJECTS} items. Please narrow the path.`,
+                error: `Folder contains more than ${MAX_OBJECTS} items is not supported`,
               });
               lastFetchedPathRef.current = path;
             }

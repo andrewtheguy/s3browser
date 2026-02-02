@@ -9,6 +9,7 @@ import {
   Trash2,
   Settings,
   Info,
+  FlaskConical,
 } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,8 @@ interface ToolbarProps {
   isDeleting?: boolean;
   selectionMode?: boolean;
   onToggleSelection?: () => void;
+  onSeedTestItems?: () => void;
+  isSeedingTestItems?: boolean;
 }
 
 export function Toolbar({
@@ -49,6 +52,8 @@ export function Toolbar({
   isDeleting = false,
   selectionMode = false,
   onToggleSelection,
+  onSeedTestItems,
+  isSeedingTestItems = false,
 }: ToolbarProps) {
   const navigate = useNavigate();
   const { connectionId } = useParams<{ connectionId?: string }>();
@@ -210,6 +215,20 @@ export function Toolbar({
               </TooltipTrigger>
               <TooltipContent>Upload</TooltipContent>
             </Tooltip>
+
+            {onSeedTestItems && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={onSeedTestItems} disabled={isSeedingTestItems}>
+                    <FlaskConical className="h-4 w-4 mr-2 sm:mr-1" />
+                    <span className="hidden sm:inline">
+                      {isSeedingTestItems ? 'Seeding...' : 'Seed 10,005'}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Seed 10,005 test items</TooltipContent>
+              </Tooltip>
+            )}
 
             <Tooltip>
               <TooltipTrigger asChild>

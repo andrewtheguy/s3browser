@@ -50,6 +50,28 @@ export async function listObjects(
   };
 }
 
+export interface SeedTestItemsResponse {
+  created: number;
+  prefix: string;
+}
+
+export async function seedTestItems(
+  connectionId: number,
+  bucket: string,
+  prefix: string
+): Promise<SeedTestItemsResponse> {
+  const response = await apiPost<SeedTestItemsResponse>(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/seed-test-items`,
+    { prefix }
+  );
+
+  if (!response) {
+    throw new Error('Failed to create test items: missing response');
+  }
+
+  return response;
+}
+
 export async function deleteObject(connectionId: number, bucket: string, key: string): Promise<void> {
   await apiDelete(`/objects/${connectionId}/${encodeURIComponent(bucket)}?key=${encodeURIComponent(key)}`);
 }

@@ -32,7 +32,8 @@ import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDial
 import { CopyMoveDialog } from '../CopyMoveDialog';
 import { BucketInfoDialog } from '../BucketInfoDialog';
 import { useBrowserContext } from '../../contexts';
-import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove } from '../../hooks';
+import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove, useSeedTestItems } from '../../hooks';
+import { FEATURES } from '../../config';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
 
@@ -45,6 +46,8 @@ export function S3Browser() {
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
   const { download } = useDownload();
   const preview = usePreview();
+  const { seedTestItems } = useSeedTestItems();
+  const seedTestItemsEnabled = FEATURES.seedTestItems;
   const {
     copy,
     move,
@@ -80,6 +83,7 @@ export function S3Browser() {
   const [copyMoveResolveError, setCopyMoveResolveError] = useState<string | null>(null);
   const [copyMoveProgress, setCopyMoveProgress] = useState<{ completed: number; total: number } | undefined>(undefined);
   const [copyMoveNewName, setCopyMoveNewName] = useState('');
+  const [isSeedingTestItems, setIsSeedingTestItems] = useState(false);
 
   // Bucket info state
   const [bucketInfoOpen, setBucketInfoOpen] = useState(false);
@@ -134,6 +138,32 @@ export function S3Browser() {
     void refresh();
     toast.success('Files uploaded successfully');
   }, [refresh]);
+
+  const handleSeedTestItems = useCallback(async () => {
+    if (!seedTestItemsEnabled) return;
+    if (isSeedingTestItems) return;
+
+    const input = window.prompt('Folder name for test items', 'seed-10005');
+    if (!input) return;
+    const trimmed = input.trim();
+    if (!trimmed) return;
+
+    const targetPrefix = `${currentPath}${trimmed}`;
+    const confirmed = window.confirm(`Create 10,005 items in "${targetPrefix}/"?`);
+    if (!confirmed) return;
+
+    setIsSeedingTestItems(true);
+    try {
+      const result = await seedTestItems(targetPrefix);
+      toast.success(`Created ${result.created} items in ${result.prefix}`);
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create test items';
+      toast.error(message);
+    } finally {
+      setIsSeedingTestItems(false);
+    }
+  }, [currentPath, isSeedingTestItems, refresh, seedTestItems, seedTestItemsEnabled]);
 
   // Clear selection when path changes
   useEffect(() => {
@@ -560,6 +590,8 @@ export function S3Browser() {
           isDeleting={isDeleting}
           selectionMode={selectionMode}
           onToggleSelection={handleToggleSelection}
+          onSeedTestItems={seedTestItemsEnabled ? handleSeedTestItems : undefined}
+          isSeedingTestItems={seedTestItemsEnabled ? isSeedingTestItems : undefined}
         />
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">

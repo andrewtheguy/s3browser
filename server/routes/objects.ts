@@ -21,6 +21,10 @@ const router = Router();
 // 2. Use pagination (continuationToken) when listing objects for folder operations
 // 3. Handle partial failures across chunks
 const MAX_BATCH_OPERATIONS = 1000;
+const TEST_SEED_COUNT = 10005;
+const TEST_SEED_CONCURRENCY = 25;
+const SEED_TEST_ITEMS_ENABLED = process.env.FEATURE_SEED_TEST_ITEMS === 'true'
+  || process.env.FEATURE_SEED_TEST_ITEMS === '1';
 
 interface FolderRequestBody {
   path?: string;
@@ -47,6 +51,10 @@ interface BatchCopyRequestBody {
 interface BatchCopyMoveResponse {
   successful: string[];
   errors: Array<{ sourceKey: string; message: string; destinationKey?: string }>;
+}
+
+interface SeedTestItemsRequestBody {
+  prefix?: string;
 }
 
 interface S3Object {
@@ -104,6 +112,38 @@ function sanitizeFolderPath(path: string): { valid: true; path: string } | { val
   }
 
   return { valid: true, path: folderPath };
+}
+
+async function seedTestItems(
+  client: AuthenticatedRequest['s3Client'],
+  bucket: string,
+  prefix: string
+): Promise<void> {
+  if (!client) {
+    throw new Error('S3 client unavailable');
+  }
+
+  const width = String(TEST_SEED_COUNT).length;
+  const uploadOne = async (index: number) => {
+    const key = `${prefix}item-${String(index + 1).padStart(width, '0')}.txt`;
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: '',
+        ContentType: 'text/plain',
+      })
+    );
+  };
+
+  for (let i = 0; i < TEST_SEED_COUNT; i += TEST_SEED_CONCURRENCY) {
+    const batch: Array<Promise<void>> = [];
+    const end = Math.min(TEST_SEED_COUNT, i + TEST_SEED_CONCURRENCY);
+    for (let j = i; j < end; j += 1) {
+      batch.push(uploadOne(j));
+    }
+    await Promise.all(batch);
+  }
 }
 
 // All routes use s3Middleware which checks auth and creates S3 client from connectionId
@@ -173,6 +213,40 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
     continuationToken: response.NextContinuationToken,
     isTruncated: response.IsTruncated ?? false,
   });
+});
+
+// POST /api/objects/:connectionId/:bucket/seed-test-items
+router.post('/:connectionId/:bucket/seed-test-items', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!SEED_TEST_ITEMS_ENABLED) {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
+
+  const body = req.body as SeedTestItemsRequestBody;
+  const prefix = body.prefix;
+
+  if (!prefix || typeof prefix !== 'string') {
+    res.status(400).json({ error: 'Prefix is required' });
+    return;
+  }
+
+  const sanitized = sanitizeFolderPath(prefix);
+  if (!sanitized.valid) {
+    res.status(400).json({ error: sanitized.error });
+    return;
+  }
+
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
+
+  if (!bucket || !client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+
+  await seedTestItems(client, bucket, sanitized.path);
+
+  res.json({ created: TEST_SEED_COUNT, prefix: sanitized.path });
 });
 
 // DELETE /api/objects/:connectionId/:bucket?key=...
