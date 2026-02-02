@@ -9,6 +9,7 @@ import {
   Trash2,
   Settings,
   Info,
+  FlaskConical,
 } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,12 @@ import {
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { buildSelectBucketUrl } from '../../utils/urlEncoding';
 
+const SEED_TEST_ITEM_COUNT = 10005;
+const seedEnv = import.meta.env as { MODE?: string; VITE_FEATURE_SEED_TEST_ITEMS?: string };
+const seedFeatureEnabled = seedEnv.VITE_FEATURE_SEED_TEST_ITEMS === 'true'
+  || seedEnv.VITE_FEATURE_SEED_TEST_ITEMS === '1';
+const seedButtonEnabled = seedEnv.MODE !== 'production' || seedFeatureEnabled;
+
 interface ToolbarProps {
   onUploadClick: () => void;
   onCreateFolderClick: () => void;
@@ -38,6 +45,8 @@ interface ToolbarProps {
   isDeleting?: boolean;
   selectionMode?: boolean;
   onToggleSelection?: () => void;
+  onSeedTestItems?: () => void;
+  isSeedingTestItems?: boolean;
 }
 
 export function Toolbar({
@@ -49,6 +58,8 @@ export function Toolbar({
   isDeleting = false,
   selectionMode = false,
   onToggleSelection,
+  onSeedTestItems,
+  isSeedingTestItems = false,
 }: ToolbarProps) {
   const navigate = useNavigate();
   const { connectionId } = useParams<{ connectionId?: string }>();
@@ -129,6 +140,21 @@ export function Toolbar({
               </TooltipTrigger>
               <TooltipContent>Refresh</TooltipContent>
             </Tooltip>
+            {seedButtonEnabled && onSeedTestItems && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={onSeedTestItems}
+                    disabled={isSeedingTestItems}
+                  >
+                    <FlaskConical className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Seed {SEED_TEST_ITEM_COUNT} test items</TooltipContent>
+              </Tooltip>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" size="icon" onClick={handleManageConnections}>
@@ -210,6 +236,20 @@ export function Toolbar({
               </TooltipTrigger>
               <TooltipContent>Upload</TooltipContent>
             </Tooltip>
+
+            {seedButtonEnabled && onSeedTestItems && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={onSeedTestItems} disabled={isSeedingTestItems}>
+                    <FlaskConical className="h-4 w-4 mr-2 sm:mr-1" />
+                    <span className="hidden sm:inline">
+                      {isSeedingTestItems ? 'Seeding...' : `Seed ${SEED_TEST_ITEM_COUNT}`}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Seed {SEED_TEST_ITEM_COUNT} test items</TooltipContent>
+              </Tooltip>
+            )}
 
             <Tooltip>
               <TooltipTrigger asChild>

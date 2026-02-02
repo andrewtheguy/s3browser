@@ -7,3 +7,4 @@ export { useCopyMove } from './useCopyMove';
 export { useConnectionHistory } from './useConnectionHistory';
 export { usePresignedUrl } from './usePresignedUrl';
 export { usePreview } from './usePreview';
+export { useSeedTestItems } from './useSeedTestItems';

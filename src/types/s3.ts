@@ -91,10 +91,6 @@ export interface BrowserContextValue {
   navigateUp: () => void;
   refresh: () => Promise<void>;
   pathSegments: string[];
-  continuationToken?: string;
-  isTruncated: boolean;
-  isLoadingMore: boolean;
-  loadMore: () => Promise<void>;
 }
 
 export interface SavedConnection {

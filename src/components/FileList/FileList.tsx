@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { FolderX } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, FolderX } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 import { useBrowserContext } from '../../contexts';
 import { useDownload } from '../../hooks';
 import { FileListItem } from './FileListItem';
@@ -31,6 +31,15 @@ interface FileListProps {
   selectionMode?: boolean;
 }
 
+type SortKey = 'name' | 'size' | 'lastModified';
+type SortDirection = 'asc' | 'desc';
+
+const DEFAULT_SORT_DIRECTION: Record<SortKey, SortDirection> = {
+  name: 'asc',
+  size: 'desc',
+  lastModified: 'desc',
+};
+
 export function FileList({
   onDeleteRequest,
   onCopyRequest,
@@ -43,9 +52,106 @@ export function FileList({
   onSelectAll,
   selectionMode = false,
 }: FileListProps) {
-  const { objects, isLoading, error, navigateTo, isTruncated, isLoadingMore, loadMore } = useBrowserContext();
+  const { objects, isLoading, error, navigateTo } = useBrowserContext();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
+    key: 'name',
+    direction: DEFAULT_SORT_DIRECTION.name,
+  });
+  const pageSize = 500;
+  const nameCollator = useMemo(
+    () => new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }),
+    []
+  );
+  const sortedObjects = useMemo(() => {
+    if (objects.length === 0) {
+      return objects;
+    }
 
-  const selectableItems = objects;
+    const folders: S3Object[] = [];
+    const files: S3Object[] = [];
+
+    for (const item of objects) {
+      if (item.isFolder) {
+        folders.push(item);
+      } else {
+        files.push(item);
+      }
+    }
+
+    const compareName = (a: S3Object, b: S3Object) => nameCollator.compare(a.name, b.name);
+    const compareFiles = (a: S3Object, b: S3Object) => {
+      if (sortConfig.key === 'size') {
+        const sizeDiff = (a.size ?? 0) - (b.size ?? 0);
+        if (sizeDiff !== 0) {
+          return sizeDiff;
+        }
+      } else if (sortConfig.key === 'lastModified') {
+        const timeDiff = (a.lastModified?.getTime() ?? 0) - (b.lastModified?.getTime() ?? 0);
+        if (timeDiff !== 0) {
+          return timeDiff;
+        }
+      }
+      return compareName(a, b);
+    };
+
+    const sortedFolders = [...folders].sort(compareName);
+    const sortedFiles = [...files].sort(sortConfig.key === 'name' ? compareName : compareFiles);
+
+    const filesOrdered =
+      sortConfig.direction === 'desc' ? [...sortedFiles].reverse() : sortedFiles;
+
+    let foldersOrdered = sortedFolders;
+    if (sortConfig.key === 'name' && sortConfig.direction === 'desc') {
+      foldersOrdered = [...sortedFolders].reverse();
+    }
+
+    return [...foldersOrdered, ...filesOrdered];
+  }, [objects, sortConfig, nameCollator]);
+
+  const totalItems = sortedObjects.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const clampedPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (clampedPage - 1) * pageSize;
+  const pageEndIndex = Math.min(pageStartIndex + pageSize, totalItems);
+  const pageItems = useMemo(
+    () => sortedObjects.slice(pageStartIndex, pageEndIndex),
+    [sortedObjects, pageStartIndex, pageEndIndex]
+  );
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination when list changes
+    setCurrentPage(1);
+  }, [objects]);
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const items: Array<number | 'ellipsis'> = [];
+    const windowSize = 2;
+    const leftBoundary = Math.max(2, clampedPage - windowSize);
+    const rightBoundary = Math.min(totalPages - 1, clampedPage + windowSize);
+
+    items.push(1);
+
+    if (leftBoundary > 2) {
+      items.push('ellipsis');
+    }
+
+    for (let page = leftBoundary; page <= rightBoundary; page += 1) {
+      items.push(page);
+    }
+
+    if (rightBoundary < totalPages - 1) {
+      items.push('ellipsis');
+    }
+
+    items.push(totalPages);
+    return items;
+  }, [totalPages, clampedPage]);
+
+  const selectableItems = sortedObjects;
   const selectableCount = selectableItems.length;
   const selectedCount = selectableItems.filter((item) => selectedKeys.has(item.key)).length;
   const isAllSelected = selectableCount > 0 && selectedCount === selectableCount;
@@ -57,6 +163,36 @@ export function FileList({
       void download(key);
     },
     [download]
+  );
+
+  const handleSort = useCallback((key: SortKey) => {
+    setCurrentPage(1);
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        key,
+        direction: DEFAULT_SORT_DIRECTION[key],
+      };
+    });
+  }, []);
+
+  const renderSortIcon = useCallback(
+    (key: SortKey) => {
+      if (sortConfig.key !== key) {
+        return <ArrowUpDown className="h-3.5 w-3.5" />;
+      }
+      return sortConfig.direction === 'asc' ? (
+        <ArrowUp className="h-3.5 w-3.5" />
+      ) : (
+        <ArrowDown className="h-3.5 w-3.5" />
+      );
+    },
+    [sortConfig]
   );
 
   if (error) {
@@ -141,14 +277,50 @@ export function FileList({
                 </TableHead>
               )}
               <TableHead className="w-12" />
-              <TableHead className="min-w-[120px]">Name</TableHead>
-              <TableHead className="w-[72px] sm:w-[100px]">Size</TableHead>
-              <TableHead className="w-[120px] sm:w-[180px]">Last Modified</TableHead>
+              <TableHead className="min-w-[120px]">
+                <button
+                  type="button"
+                  onClick={() => handleSort('name')}
+                  className={cn(
+                    "inline-flex items-center gap-1 hover:text-foreground",
+                    sortConfig.key === 'name' ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  <span>Name</span>
+                  {renderSortIcon('name')}
+                </button>
+              </TableHead>
+              <TableHead className="w-[72px] sm:w-[100px]">
+                <button
+                  type="button"
+                  onClick={() => handleSort('size')}
+                  className={cn(
+                    "inline-flex items-center gap-1 hover:text-foreground",
+                    sortConfig.key === 'size' ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  <span>Size</span>
+                  {renderSortIcon('size')}
+                </button>
+              </TableHead>
+              <TableHead className="w-[120px] sm:w-[180px]">
+                <button
+                  type="button"
+                  onClick={() => handleSort('lastModified')}
+                  className={cn(
+                    "inline-flex items-center gap-1 hover:text-foreground",
+                    sortConfig.key === 'lastModified' ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  <span>Last Modified</span>
+                  {renderSortIcon('lastModified')}
+                </button>
+              </TableHead>
               <TableHead className="w-[160px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {objects.map((item) => (
+            {pageItems.map((item) => (
               <FileListItem
                 key={item.key}
                 item={item}
@@ -168,16 +340,65 @@ export function FileList({
           </TableBody>
         </Table>
       </div>
-      {isTruncated && (
-        <div className="flex justify-center py-4">
-          <Button
-            variant="outline"
-            onClick={loadMore}
-            disabled={isLoadingMore}
-          >
-            {isLoadingMore && <Spinner size="sm" className="mr-2" />}
-            {isLoadingMore ? 'Loading...' : 'Load More'}
-          </Button>
+      {totalItems > pageSize && (
+        <div className="flex flex-wrap items-center justify-between gap-3 py-4">
+          <div className="text-sm text-muted-foreground">
+            Showing {pageStartIndex + 1}-{pageEndIndex} of {totalItems}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(1)}
+              disabled={clampedPage === 1}
+            >
+              First
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.max(1, clampedPage - 1))}
+              disabled={clampedPage === 1}
+            >
+              Previous
+            </Button>
+            {paginationItems.map((item, index) => {
+              if (item === 'ellipsis') {
+                return (
+                  <span key={`ellipsis-${index}`} className="px-2 text-sm text-muted-foreground">
+                    …
+                  </span>
+                );
+              }
+
+              return (
+                <Button
+                  key={item}
+                  variant={item === clampedPage ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCurrentPage(item)}
+                >
+                  {item}
+                </Button>
+              );
+            })}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.min(totalPages, clampedPage + 1))}
+              disabled={clampedPage === totalPages}
+            >
+              Next
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={clampedPage === totalPages}
+            >
+              Last
+            </Button>
+          </div>
         </div>
       )}
     </>
