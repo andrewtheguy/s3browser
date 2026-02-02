@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { X, Download, File, RefreshCw } from 'lucide-react';
+import { Download, File, RefreshCw } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -184,13 +184,10 @@ export function PreviewDialog({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-[calc(100vw-64px)] max-h-[calc(100vh-64px)] w-[calc(100vw-64px)] h-[calc(100vh-64px)] flex flex-col p-0">
-        <DialogHeader className="flex flex-row items-center justify-between px-6 py-4 border-b shrink-0">
-          <DialogTitle className="truncate mr-2">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
+          <DialogTitle className="truncate pr-8">
             {item?.name || 'Preview'}
           </DialogTitle>
-          <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0">
-            <X className="h-4 w-4" />
-          </Button>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto min-h-0">
