@@ -106,7 +106,7 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
       result.lifecycleRules = lifecycleResponse.Rules.map((rule) => ({
         id: rule.ID,
         status: rule.Status ?? 'Unknown',
-        prefix: rule.Prefix ?? rule.Filter?.Prefix,
+        prefix: rule.Filter?.Prefix,
         expiration: rule.Expiration ? {
           days: rule.Expiration.Days,
           date: rule.Expiration.Date?.toISOString(),
