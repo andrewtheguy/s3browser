@@ -17,10 +17,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { UploadProgress as UploadProgressType } from '../../types';
+import type { CompletedStats } from '../../hooks';
 import { formatFileSize } from '../../utils/formatters';
 
 interface UploadProgressProps {
   uploads: UploadProgressType[];
+  completedStats: CompletedStats;
   onCancel: (id: string) => void;
   onPause?: (id: string) => void;
   onResume?: (id: string) => void;
@@ -29,160 +31,165 @@ interface UploadProgressProps {
 
 export function UploadProgress({
   uploads,
+  completedStats,
   onCancel,
   onPause,
   onResume,
   onRetry,
 }: UploadProgressProps) {
-  if (uploads.length === 0) {
+  if (uploads.length === 0 && completedStats.count === 0) {
     return null;
   }
 
   return (
     <TooltipProvider>
       <div className="mt-4">
-        <h3 className="text-sm font-medium mb-2">
-          Uploads ({uploads.length})
-        </h3>
-        <div className="max-h-[300px] overflow-y-auto">
-          <ul className="space-y-2">
-            {uploads.map((upload) => {
-            const displayName = upload.relativePath || upload.fileName;
-            return (
-              <li
-                key={upload.id}
-                className="flex items-start gap-3 bg-muted/50 rounded-lg p-3"
-              >
-                <div className="flex-shrink-0 mt-0.5">
-                  {upload.status === 'completed' ? (
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                  ) : upload.status === 'error' ? (
-                    <AlertCircle className="h-5 w-5 text-destructive" />
-                  ) : upload.status === 'paused' ? (
-                    <Pause className="h-5 w-5 text-yellow-500" />
-                  ) : (
-                    <File className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex-grow min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-sm truncate max-w-[180px]">
-                          {displayName}
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>{displayName}</TooltipContent>
-                    </Tooltip>
-                    <Badge variant="secondary" className="text-xs">
-                      {formatFileSize(upload.total)}
-                    </Badge>
-                    {upload.isMultipart && upload.totalParts && (
-                      <Badge variant="outline" className="text-xs">
-                        Part {upload.completedParts || 0}/{upload.totalParts}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="mt-1">
-                    {upload.status === 'error' ? (
-                      <span className="text-xs text-destructive">
-                        {upload.error}
-                      </span>
-                    ) : upload.status === 'uploading' ? (
-                      <div className="flex items-center gap-2">
-                        <Progress value={upload.percentage} className="h-2 flex-grow" />
-                        <span className="text-xs text-muted-foreground min-w-[35px]">
-                          {upload.percentage}%
-                        </span>
+        {/* Completed uploads summary */}
+        {completedStats.count > 0 && (
+          <div className="flex items-center gap-2 mb-3 p-2 bg-green-50 dark:bg-green-950/30 rounded-md border border-green-200 dark:border-green-900">
+            <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+            <span className="text-sm text-green-700 dark:text-green-400">
+              {completedStats.count} file{completedStats.count !== 1 ? 's' : ''} completed ({formatFileSize(completedStats.size)})
+            </span>
+          </div>
+        )}
+
+        {/* Active uploads list */}
+        {uploads.length > 0 && (
+          <>
+            <h3 className="text-sm font-medium mb-2">
+              Uploads ({uploads.length})
+            </h3>
+            <div className="max-h-[300px] overflow-y-auto">
+              <ul className="space-y-2">
+                {uploads.map((upload) => {
+                const displayName = upload.relativePath || upload.fileName;
+                return (
+                  <li
+                    key={upload.id}
+                    className="flex items-start gap-3 bg-muted/50 rounded-lg p-3"
+                  >
+                    <div className="flex-shrink-0 mt-0.5">
+                      {upload.status === 'error' ? (
+                        <AlertCircle className="h-5 w-5 text-destructive" />
+                      ) : upload.status === 'paused' ? (
+                        <Pause className="h-5 w-5 text-yellow-500" />
+                      ) : (
+                        <File className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-grow min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-sm truncate max-w-[180px]">
+                              {displayName}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>{displayName}</TooltipContent>
+                        </Tooltip>
+                        <Badge variant="secondary" className="text-xs">
+                          {formatFileSize(upload.total)}
+                        </Badge>
+                        {upload.isMultipart && upload.totalParts && (
+                          <Badge variant="outline" className="text-xs">
+                            Part {upload.completedParts || 0}/{upload.totalParts}
+                          </Badge>
+                        )}
                       </div>
-                    ) : upload.status === 'paused' ? (
-                      <div className="flex items-center gap-2">
-                        <Progress value={upload.percentage} className="h-2 flex-grow [&>div]:bg-yellow-500" />
-                        <span className="text-xs text-yellow-600 min-w-[50px]">
-                          Paused
-                        </span>
+                      <div className="mt-1">
+                        {upload.status === 'error' ? (
+                          <span className="text-xs text-destructive">
+                            {upload.error}
+                          </span>
+                        ) : upload.status === 'uploading' ? (
+                          <div className="flex items-center gap-2">
+                            <Progress value={upload.percentage} className="h-2 flex-grow" />
+                            <span className="text-xs text-muted-foreground min-w-[35px]">
+                              {upload.percentage}%
+                            </span>
+                          </div>
+                        ) : upload.status === 'paused' ? (
+                          <div className="flex items-center gap-2">
+                            <Progress value={upload.percentage} className="h-2 flex-grow [&>div]:bg-yellow-500" />
+                            <span className="text-xs text-yellow-600 min-w-[50px]">
+                              Paused
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            Pending
+                          </span>
+                        )}
                       </div>
-                    ) : upload.status === 'completed' ? (
-                      <span className="text-xs text-green-600">
-                        Completed
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        Pending
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex gap-1 flex-shrink-0">
-                  {upload.status === 'uploading' && upload.isMultipart && onPause && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => onPause(upload.id)}
-                        >
-                          <Pause className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Pause</TooltipContent>
-                    </Tooltip>
-                  )}
-                  {upload.status === 'paused' && onResume && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => onResume(upload.id)}
-                        >
-                          <Play className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Resume</TooltipContent>
-                    </Tooltip>
-                  )}
-                  {upload.status === 'error' && onRetry && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => onRetry(upload.id)}
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Retry</TooltipContent>
-                    </Tooltip>
-                  )}
-                  {(upload.status === 'uploading' ||
-                    upload.status === 'paused' ||
-                    upload.status === 'error' ||
-                    upload.status === 'pending') && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => onCancel(upload.id)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Cancel</TooltipContent>
-                    </Tooltip>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-          </ul>
-        </div>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      {upload.status === 'uploading' && upload.isMultipart && onPause && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => onPause(upload.id)}
+                            >
+                              <Pause className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Pause</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {upload.status === 'paused' && onResume && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => onResume(upload.id)}
+                            >
+                              <Play className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Resume</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {upload.status === 'error' && onRetry && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => onRetry(upload.id)}
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Retry</TooltipContent>
+                        </Tooltip>
+                      )}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => onCancel(upload.id)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Cancel</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </li>
+                );
+              })}
+              </ul>
+            </div>
+          </>
+        )}
       </div>
     </TooltipProvider>
   );

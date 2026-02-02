@@ -40,13 +40,13 @@ export function UploadDialog({
   const {
     uploads,
     pendingResumable,
+    completedStats,
     upload,
     cancelUpload,
     cancelAll,
     pauseUpload,
     resumeUpload,
     retryUpload,
-    clearCompleted,
     clearAll,
     removePendingResumable,
     isUploading,
@@ -143,9 +143,7 @@ export function UploadDialog({
     }
   }, [uploads, onUploadComplete]);
 
-  const completedCount = uploads.filter((u) => u.status === 'completed').length;
-  const hasCompletedUploads = completedCount > 0;
-  const hasCancelableUploads = uploads.some((u) => u.status !== 'completed');
+  const hasCancelableUploads = uploads.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
@@ -253,6 +251,7 @@ export function UploadDialog({
 
           <UploadProgress
             uploads={uploads}
+            completedStats={completedStats}
             onCancel={cancelUpload}
             onPause={pauseUpload}
             onResume={resumeUpload}
@@ -263,11 +262,6 @@ export function UploadDialog({
           {hasCancelableUploads && (
             <Button variant="destructive" onClick={cancelAll}>
               Cancel All
-            </Button>
-          )}
-          {hasCompletedUploads && (
-            <Button variant="outline" onClick={clearCompleted}>
-              Clear Completed
             </Button>
           )}
           <Button onClick={handleClose} disabled={isUploading}>
