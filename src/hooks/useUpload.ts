@@ -115,14 +115,16 @@ export function useUpload() {
     [setUploadsAndSync]
   );
 
-  // Mark upload as completed: update stats and remove from list
+  // Mark upload as completed: update stats and clear file reference
   const markCompleted = useCallback(
     (id: string, fileSize: number) => {
       setCompletedStats((prev) => ({
         count: prev.count + 1,
         size: prev.size + fileSize,
       }));
-      setUploadsAndSync((prev) => prev.filter((u) => u.id !== id));
+      setUploadsAndSync((prev) => {
+        return prev.filter((u) => u.id !== id);
+      });
     },
     [setUploadsAndSync]
   );
@@ -499,7 +501,13 @@ export function useUpload() {
 
       // Find the upload to get details for cleanup (read from ref to avoid stale closure)
       const uploadItem = uploadsRef.current.find((u) => u.id === id);
-      if (uploadItem?.uploadId && uploadItem.isMultipart && activeConnectionId && bucket) {
+      if (
+        uploadItem?.uploadId &&
+        uploadItem.isMultipart &&
+        uploadItem.status !== 'completed' &&
+        activeConnectionId &&
+        bucket
+      ) {
         // Abort the S3 multipart upload
         try {
           await abortUpload(activeConnectionId, bucket, uploadItem.uploadId, uploadItem.key);
@@ -599,6 +607,7 @@ export function useUpload() {
   const clearAll = useCallback(async () => {
     await cancelAll();
     setUploadsAndSync(() => []);
+    setCompletedStats({ count: 0, size: 0 });
   }, [cancelAll, setUploadsAndSync]);
 
   const removePendingResumable = useCallback(async (persistenceId: string) => {
