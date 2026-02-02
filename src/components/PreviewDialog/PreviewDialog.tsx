@@ -1,20 +1,14 @@
 import { useState, useCallback } from 'react';
+import { Download, File, RefreshCw } from 'lucide-react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  Button,
-  Box,
-  Typography,
-  CircularProgress,
-  IconButton,
-  Alert,
-} from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
-import DownloadIcon from '@mui/icons-material/Download';
-import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import RefreshIcon from '@mui/icons-material/Refresh';
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Spinner } from '@/components/ui/spinner';
 import type { S3Object } from '../../types';
 import type { EmbedType } from '../../utils/previewUtils';
 
@@ -71,117 +65,74 @@ export function PreviewDialog({
   }, []);
 
   const renderMediaError = () => (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        color: 'text.secondary',
-        p: 4,
-      }}
-    >
-      <InsertDriveFileIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
-      <Typography variant="h6" gutterBottom>
-        {mediaLoadError}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 2 }}>
+    <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+      <File className="h-16 w-16 mb-2 opacity-50" />
+      <h3 className="text-lg font-semibold mb-1">{mediaLoadError}</h3>
+      <p className="text-sm text-center mb-4">
         The file could not be played. Try again or download the file.
-      </Typography>
-      <Box sx={{ display: 'flex', gap: 2 }}>
-        <Button variant="outlined" startIcon={<RefreshIcon />} onClick={handleRetry}>
+      </p>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={handleRetry}>
+          <RefreshCw className="h-4 w-4 mr-2" />
           Retry
         </Button>
-        <Button variant="contained" startIcon={<DownloadIcon />} onClick={handleDownload} disabled={!item}>
+        <Button onClick={handleDownload} disabled={!item}>
+          <Download className="h-4 w-4 mr-2" />
           Download
         </Button>
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 
   const renderContent = () => {
     if (isLoading) {
       return (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-          }}
-        >
-          <CircularProgress />
-        </Box>
+        <div className="flex items-center justify-center h-full">
+          <Spinner size="lg" />
+        </div>
       );
     }
 
     if (error) {
       return (
-        <Box sx={{ p: 2 }}>
-          <Alert severity="error">{error}</Alert>
-        </Box>
+        <div className="p-2">
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </div>
       );
     }
 
     if (cannotPreviewReason) {
       return (
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%',
-            color: 'text.secondary',
-            p: 4,
-          }}
-        >
-          <InsertDriveFileIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
-          <Typography variant="h6" gutterBottom>
-            Cannot Preview File
-          </Typography>
-          <Typography variant="body2" color="text.secondary" align="center">
+        <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+          <File className="h-16 w-16 mb-2 opacity-50" />
+          <h3 className="text-lg font-semibold mb-1">Cannot Preview File</h3>
+          <p className="text-sm text-center">
             {cannotPreviewReason}
-          </Typography>
+          </p>
           <Button
-            variant="contained"
-            startIcon={<DownloadIcon />}
             onClick={handleDownload}
             disabled={!item}
-            sx={{ mt: 3 }}
+            className="mt-6"
           >
+            <Download className="h-4 w-4 mr-2" />
             Download File
           </Button>
-        </Box>
+        </div>
       );
     }
 
     if (signedUrl !== null) {
       if (embedType === 'image') {
         return (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              p: 2,
-              bgcolor: (theme) =>
-                theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
-            }}
-          >
-            <Box
-              component="img"
+          <div className="flex items-center justify-center h-full p-2 bg-muted/30">
+            <img
               src={signedUrl}
               alt={item?.name || 'Preview'}
-              sx={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-                objectFit: 'contain',
-              }}
+              className="max-w-full max-h-full object-contain"
             />
-          </Box>
+          </div>
         );
       }
 
@@ -190,28 +141,14 @@ export function PreviewDialog({
           return renderMediaError();
         }
         return (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              p: 2,
-              bgcolor: (theme) =>
-                theme.palette.mode === 'dark' ? theme.palette.background.paper : 'grey.50',
-            }}
-          >
-            <Box
-              component="video"
+          <div className="flex items-center justify-center h-full p-2 bg-muted/30">
+            <video
               controls
               src={signedUrl}
               onError={() => handleMediaError('video')}
-              sx={{
-                maxWidth: '100%',
-                maxHeight: '100%',
-              }}
+              className="max-w-full max-h-full"
             />
-          </Box>
+          </div>
         );
       }
 
@@ -220,37 +157,23 @@ export function PreviewDialog({
           return renderMediaError();
         }
         return (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              p: 2,
-            }}
-          >
-            <Box
-              component="audio"
+          <div className="flex items-center justify-center h-full p-2">
+            <audio
               controls
               src={signedUrl}
               onError={() => handleMediaError('audio')}
-              sx={{ width: '100%', maxWidth: 500 }}
+              className="w-full max-w-[500px]"
             />
-          </Box>
+          </div>
         );
       }
 
       // For text and PDF, use iframe
       return (
-        <Box
-          component="iframe"
+        <iframe
           src={signedUrl}
           title={item?.name || 'Preview'}
-          sx={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-          }}
+          className="w-full h-full border-none"
         />
       );
     }
@@ -259,64 +182,28 @@ export function PreviewDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth={false}
-      PaperProps={{
-        sx: {
-          width: 'calc(100vw - 64px)',
-          height: 'calc(100vh - 64px)',
-          maxWidth: 'calc(100vw - 64px)',
-          maxHeight: 'calc(100vh - 64px)',
-          m: 4,
-          display: 'flex',
-          flexDirection: 'column',
-        },
-      }}
-    >
-      <DialogTitle
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: 1,
-          borderColor: 'divider',
-        }}
-      >
-        <Typography
-          variant="h6"
-          component="span"
-          sx={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            mr: 2,
-          }}
-        >
-          {item?.name || 'Preview'}
-        </Typography>
-        <IconButton onClick={onClose} size="small" edge="end">
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-[calc(100vw-64px)] max-h-[calc(100vh-64px)] w-[calc(100vw-64px)] h-[calc(100vh-64px)] flex flex-col p-0">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
+          <DialogTitle className="truncate pr-8">
+            {item?.name || 'Preview'}
+          </DialogTitle>
+        </DialogHeader>
 
-      <DialogContent sx={{ flex: 1, overflow: 'auto', p: 0 }}>
-        {renderContent()}
+        <div className="flex-1 overflow-auto min-h-0">
+          {renderContent()}
+        </div>
+
+        <div className="flex justify-end gap-2 px-6 py-4 border-t shrink-0">
+          {!cannotPreviewReason && !mediaLoadError && (
+            <Button variant="outline" onClick={handleDownload} disabled={!item}>
+              <Download className="h-4 w-4 mr-2" />
+              Download
+            </Button>
+          )}
+          <Button onClick={onClose}>Close</Button>
+        </div>
       </DialogContent>
-
-      <DialogActions sx={{ borderTop: 1, borderColor: 'divider' }}>
-        {!cannotPreviewReason && (
-          <Button
-            startIcon={<DownloadIcon />}
-            onClick={handleDownload}
-            disabled={!item}
-          >
-            Download
-          </Button>
-        )}
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
     </Dialog>
   );
 }

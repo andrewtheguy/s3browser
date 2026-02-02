@@ -19,12 +19,18 @@ import {
 import { UPLOAD_CONFIG } from '../config/upload';
 import type { UploadCandidate, UploadProgress } from '../types';
 
+export interface CompletedStats {
+  count: number;
+  size: number;
+}
+
 export function useUpload() {
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const { bucket: urlBucket } = useParams<{ bucket: string }>();
   const bucket = urlBucket || credentials?.bucket;
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [pendingResumable, setPendingResumable] = useState<PersistedUpload[]>([]);
+  const [completedStats, setCompletedStats] = useState<CompletedStats>({ count: 0, size: 0 });
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const pendingQueueRef = useRef<string[]>([]);
   const queuedIdsRef = useRef<Set<string>>(new Set());
@@ -105,6 +111,18 @@ export function useUpload() {
       setUploadsAndSync((prev) =>
         prev.map((u) => (u.id === id ? { ...u, ...updates } : u))
       );
+    },
+    [setUploadsAndSync]
+  );
+
+  // Mark upload as completed: update stats and remove from list
+  const markCompleted = useCallback(
+    (id: string, fileSize: number) => {
+      setCompletedStats((prev) => ({
+        count: prev.count + 1,
+        size: prev.size + fileSize,
+      }));
+      setUploadsAndSync((prev) => prev.filter((u) => u.id !== id));
     },
     [setUploadsAndSync]
   );
@@ -305,7 +323,7 @@ export function useUpload() {
             ? await getUploadById(uploadItem.persistenceId).catch(() => null)
             : null;
 
-          const result = await uploadMultipartFile(
+          await uploadMultipartFile(
             uploadItem,
             abortController,
             persistedData?.uploadId ?? uploadItem.uploadId,
@@ -313,22 +331,13 @@ export function useUpload() {
             persistedData?.id ?? uploadItem.persistenceId
           );
 
-          updateUpload(id, {
-            status: 'completed',
-            percentage: 100,
-            canResume: false,
-            completedParts: result.completedParts.length,
-            file: null,
-          });
+          // Remove completed upload from list and update stats
+          markCompleted(id, uploadItem.file.size);
         } else {
           await uploadSingleFileWithProxy(uploadItem, abortController);
 
-          updateUpload(id, {
-            status: 'completed',
-            percentage: 100,
-            canResume: false,
-            file: null,
-          });
+          // Remove completed upload from list and update stats
+          markCompleted(id, uploadItem.file.size);
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
@@ -347,7 +356,7 @@ export function useUpload() {
         }
       }
     },
-    [updateUpload, uploadMultipartFile, uploadSingleFileWithProxy, refreshPendingUploads]
+    [updateUpload, markCompleted, uploadMultipartFile, uploadSingleFileWithProxy, refreshPendingUploads]
   );
 
   const processQueue = useCallback(() => {
@@ -567,10 +576,6 @@ export function useUpload() {
     [enqueueUploadIds, updateUpload]
   );
 
-  const clearCompleted = useCallback(() => {
-    setUploadsAndSync((prev) => prev.filter((u) => u.status !== 'completed'));
-  }, [setUploadsAndSync]);
-
   const cancelAll = useCallback(async () => {
     const idsToCancel = uploadsRef.current
       .filter((upload) => upload.status !== 'completed')
@@ -626,13 +631,13 @@ export function useUpload() {
   return {
     uploads,
     pendingResumable,
+    completedStats,
     upload,
     cancelUpload,
     cancelAll,
     pauseUpload,
     resumeUpload,
     retryUpload,
-    clearCompleted,
     clearAll,
     removePendingResumable,
     createNewFolder,

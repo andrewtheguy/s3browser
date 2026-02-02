@@ -1,21 +1,18 @@
 import { useCallback } from 'react';
+import { FolderX } from 'lucide-react';
 import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
+  TableHeader,
   TableRow,
-  Paper,
-  Box,
-  Typography,
-  Skeleton,
-  Alert,
-  Checkbox,
-  Button,
-  CircularProgress,
-} from '@mui/material';
-import FolderOffIcon from '@mui/icons-material/FolderOff';
+} from '@/components/ui/table';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { useBrowserContext } from '../../contexts';
 import { useDownload } from '../../hooks';
 import { FileListItem } from './FileListItem';
@@ -64,105 +61,92 @@ export function FileList({
 
   if (error) {
     return (
-      <Alert severity="error" sx={{ m: 2 }}>
-        {error}
+      <Alert variant="destructive" className="m-4">
+        <AlertDescription>{error}</AlertDescription>
       </Alert>
     );
   }
 
   if (isLoading) {
     return (
-      <TableContainer component={Paper} elevation={0} sx={{ overflowX: 'auto' }}>
-        <Table sx={{ width: { xs: 'max-content', sm: '100%' }, tableLayout: { xs: 'auto', sm: 'fixed' } }}>
-          <TableHead>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
             <TableRow>
-              {selectionMode && <TableCell sx={{ width: 48, padding: '0 8px' }} />}
-              <TableCell sx={{ width: 48 }} />
-              <TableCell sx={{ minWidth: 120, whiteSpace: 'nowrap' }}>Name</TableCell>
-              <TableCell sx={{ width: { xs: 72, sm: 100 }, whiteSpace: 'nowrap' }}>Size</TableCell>
-              <TableCell sx={{ width: { xs: 120, sm: 180 }, whiteSpace: 'nowrap' }}>Last Modified</TableCell>
-              <TableCell sx={{ width: 160 }} />
+              {selectionMode && <TableHead className="w-12 px-2" />}
+              <TableHead className="w-12" />
+              <TableHead className="min-w-[120px]">Name</TableHead>
+              <TableHead className="w-[72px] sm:w-[100px]">Size</TableHead>
+              <TableHead className="w-[120px] sm:w-[180px]">Last Modified</TableHead>
+              <TableHead className="w-[160px]" />
             </TableRow>
-          </TableHead>
-        <TableBody>
-          {Array.from({ length: 5 }).map((_, index) => (
-            <TableRow key={index}>
-              {selectionMode && (
-                <TableCell sx={{ padding: '0 8px' }}>
-                  <Skeleton variant="rectangular" width={20} height={20} />
-                </TableCell>
-              )}
-              <TableCell>
-                <Skeleton variant="circular" width={24} height={24} />
-              </TableCell>
-              <TableCell>
-                <Skeleton variant="text" width="60%" />
+          </TableHeader>
+          <TableBody>
+            {Array.from({ length: 5 }).map((_, index) => (
+              <TableRow key={index}>
+                {selectionMode && (
+                  <TableCell className="px-2">
+                    <Skeleton className="w-5 h-5" />
+                  </TableCell>
+                )}
+                <TableCell>
+                  <Skeleton className="w-6 h-6 rounded-full" />
                 </TableCell>
                 <TableCell>
-                  <Skeleton variant="text" width="80%" />
+                  <Skeleton className="w-3/5 h-4" />
                 </TableCell>
                 <TableCell>
-                  <Skeleton variant="text" width="80%" />
+                  <Skeleton className="w-4/5 h-4" />
                 </TableCell>
                 <TableCell>
-                  <Skeleton variant="text" width={60} />
+                  <Skeleton className="w-4/5 h-4" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="w-[60px] h-4" />
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </TableContainer>
+      </div>
     );
   }
 
   if (objects.length === 0) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          py: 8,
-          color: 'text.secondary',
-        }}
-      >
-        <FolderOffIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
-        <Typography variant="h6">This folder is empty</Typography>
-        <Typography variant="body2">
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+        <FolderX className="h-16 w-16 mb-4 opacity-50" />
+        <h3 className="text-lg font-semibold">This folder is empty</h3>
+        <p className="text-sm">
           Upload files or create a new folder to get started
-        </Typography>
-      </Box>
+        </p>
+      </div>
     );
   }
 
   return (
     <>
-      <TableContainer component={Paper} elevation={0} sx={{ overflowX: 'auto' }}>
-        <Table sx={{ width: { xs: 'max-content', sm: '100%' }, tableLayout: { xs: 'auto', sm: 'fixed' } }}>
-          <TableHead>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
             <TableRow>
               {selectionMode && (
-                <TableCell sx={{ width: 48, padding: '0 8px' }}>
+                <TableHead className="w-12 px-2">
                   {selectableCount > 0 && (
                     <Checkbox
-                      size="small"
-                      checked={isAllSelected}
-                      indeterminate={isIndeterminate}
-                      onChange={(e) => onSelectAll(e.target.checked)}
+                      checked={isAllSelected ? true : isIndeterminate ? 'indeterminate' : false}
+                      onCheckedChange={(checked) => onSelectAll(!!checked)}
                     />
                   )}
-                </TableCell>
+                </TableHead>
               )}
-              <TableCell sx={{ width: 48 }} />
-              <TableCell sx={{ minWidth: 120, whiteSpace: 'nowrap' }}>Name</TableCell>
-              <TableCell sx={{ width: { xs: 72, sm: 100 }, whiteSpace: 'nowrap' }}>Size</TableCell>
-              <TableCell sx={{ width: { xs: 120, sm: 180 }, whiteSpace: 'nowrap' }}>Last Modified</TableCell>
-              <TableCell sx={{ width: 160 }} align="right">
-                Actions
-              </TableCell>
+              <TableHead className="w-12" />
+              <TableHead className="min-w-[120px]">Name</TableHead>
+              <TableHead className="w-[72px] sm:w-[100px]">Size</TableHead>
+              <TableHead className="w-[120px] sm:w-[180px]">Last Modified</TableHead>
+              <TableHead className="w-[160px] text-right">Actions</TableHead>
             </TableRow>
-          </TableHead>
+          </TableHeader>
           <TableBody>
             {objects.map((item) => (
               <FileListItem
@@ -183,18 +167,18 @@ export function FileList({
             ))}
           </TableBody>
         </Table>
-      </TableContainer>
+      </div>
       {isTruncated && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+        <div className="flex justify-center py-4">
           <Button
-            variant="outlined"
+            variant="outline"
             onClick={loadMore}
             disabled={isLoadingMore}
-            startIcon={isLoadingMore ? <CircularProgress size={16} /> : null}
           >
+            {isLoadingMore && <Spinner size="sm" className="mr-2" />}
             {isLoadingMore ? 'Loading...' : 'Load More'}
           </Button>
-        </Box>
+        </div>
       )}
     </>
   );

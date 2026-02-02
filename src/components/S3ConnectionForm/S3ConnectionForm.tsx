@@ -1,27 +1,20 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { Trash2, LogOut, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Separator } from '@/components/ui/separator';
+import { Spinner } from '@/components/ui/spinner';
 import {
-  Box,
-  TextField,
-  Button,
-  Typography,
-  Alert,
-  CircularProgress,
-  FormControlLabel,
-  Checkbox,
-  FormControl,
-  InputLabel,
   Select,
-  MenuItem,
-  IconButton,
-  ListItemText,
-  Divider,
-  InputAdornment,
-} from '@mui/material';
-import type { SelectChangeEvent } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import LogoutIcon from '@mui/icons-material/Logout';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useS3Client, useConnectionHistory } from '../../hooks';
 import { buildBrowseUrl, buildSelectBucketUrl } from '../../utils/urlEncoding';
 import type { S3ConnectionCredentials } from '../../types';
@@ -123,8 +116,7 @@ export function S3ConnectionForm({
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
-  const handleConnectionChange = (e: SelectChangeEvent<string>) => {
-    const value = e.target.value;
+  const handleConnectionChange = (value: string) => {
     if (value === 'new') {
       setSelectedConnectionId(null);
       setFormData({
@@ -200,30 +192,39 @@ export function S3ConnectionForm({
 
   return (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mb: 2 }}>
+      <div className="flex items-center justify-end mb-4">
         <Button
-          size="small"
-          startIcon={<LogoutIcon />}
+          variant="ghost"
+          size="sm"
           onClick={onLogout}
         >
+          <LogOut className="h-4 w-4 mr-2" />
           Sign Out
         </Button>
-      </Box>
+      </div>
 
-      <Divider sx={{ mb: 2 }} />
+      <Separator className="mb-4" />
 
       {deletionError && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setDeletionError(null)}>
-          {deletionError}
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription className="flex items-center justify-between">
+            {deletionError}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => setDeletionError(null)}
+            >
+              ×
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
       {canContinueBrowsing && (
         <Button
-          fullWidth
-          variant="outlined"
-          color="primary"
-          startIcon={<ArrowForwardIcon />}
+          variant="outline"
+          className="w-full mb-4"
           onClick={() => {
             if (activeCredentials?.bucket) {
               void navigate(buildBrowseUrl(activeConnectionId, activeCredentials.bucket, ''));
@@ -231,199 +232,205 @@ export function S3ConnectionForm({
               void navigate(buildSelectBucketUrl(activeConnectionId));
             }
           }}
-          sx={{ mb: 2 }}
         >
+          <ArrowRight className="h-4 w-4 mr-2" />
           Continue Browsing{activeCredentials?.bucket ? ` (${activeCredentials.bucket})` : ''}
         </Button>
       )}
 
-      <Typography variant="body2" color="text.secondary" textAlign="center" mb={2}>
+      <p className="text-sm text-muted-foreground text-center mb-4">
         {canContinueBrowsing ? 'Or connect to a different S3 storage' : 'Enter your S3 credentials to browse storage'}
-      </Typography>
+      </p>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <FormControl fullWidth sx={{ mb: 2 }}>
-        <InputLabel id="connection-select-label">Saved Connection</InputLabel>
+      <div className="space-y-2 mb-4">
+        <Label htmlFor="connection-select">Saved Connection</Label>
         <Select
-          labelId="connection-select-label"
           value={selectedConnectionId !== null ? String(selectedConnectionId) : 'new'}
-          label="Saved Connection"
-          onChange={handleConnectionChange}
+          onValueChange={handleConnectionChange}
           disabled={connectionsLoading}
-          renderValue={(value) => {
-            if (value === 'new') return 'New Connection';
-            const conn = connections.find((c) => c.id === parseInt(value, 10));
-            return conn?.name || 'New Connection';
-          }}
         >
-          <MenuItem value="new">New Connection</MenuItem>
-          {connections.map((connection) => (
-            <MenuItem key={connection.id} value={String(connection.id)}>
-              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
-                <ListItemText
-                  primary={connection.name}
-                  secondary={connection.bucket ? `${connection.bucket} @ ${connection.endpoint}` : connection.endpoint}
-                  primaryTypographyProps={{ noWrap: true }}
-                  secondaryTypographyProps={{ noWrap: true, fontSize: '0.75rem' }}
-                  sx={{ flex: 1, minWidth: 0, mr: 1 }}
-                />
-                <IconButton
-                  size="small"
-                  onClick={(e) => handleDeleteConnection(e, connection.id, connection.name)}
-                  aria-label="delete"
-                  sx={{ flexShrink: 0 }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            </MenuItem>
-          ))}
+          <SelectTrigger id="connection-select">
+            <SelectValue placeholder="Select a connection" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="new">New Connection</SelectItem>
+            {connections.map((connection) => (
+              <SelectItem key={connection.id} value={String(connection.id)}>
+                <div className="flex items-center justify-between w-full gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{connection.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {connection.bucket ? `${connection.bucket} @ ${connection.endpoint}` : connection.endpoint}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={(e) => handleDeleteConnection(e, connection.id, connection.name)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
-      </FormControl>
+      </div>
 
-      <Box component="form" onSubmit={handleSubmit}>
-        <TextField
-          fullWidth
-          label="Connection Name"
-          value={formData.connectionName}
-          onChange={handleChange('connectionName')}
-          onBlur={() => setNameTouched(true)}
-          margin="normal"
-          autoComplete="off"
-          placeholder="my-aws-account"
-          required
-          error={showNameError}
-          helperText={
-            showNameError
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="connectionName">Connection Name</Label>
+          <Input
+            id="connectionName"
+            value={formData.connectionName}
+            onChange={handleChange('connectionName')}
+            onBlur={() => setNameTouched(true)}
+            autoComplete="off"
+            placeholder="my-aws-account"
+            required
+            className={showNameError ? 'border-destructive' : ''}
+          />
+          <p className={`text-xs ${showNameError ? 'text-destructive' : 'text-muted-foreground'}`}>
+            {showNameError
               ? 'Connection name cannot contain spaces'
-              : 'A unique name for this connection (no spaces).'
-          }
-        />
+              : 'A unique name for this connection (no spaces).'}
+          </p>
+        </div>
 
-        <TextField
-          fullWidth
-          label="Endpoint URL"
-          value={formData.endpoint}
-          onChange={handleChange('endpoint')}
-          onBlur={() => setEndpointTouched(true)}
-          margin="normal"
-          autoComplete="off"
-          error={showEndpointError}
-          helperText={
-            showEndpointError
+        <div className="space-y-2">
+          <Label htmlFor="endpoint">Endpoint URL</Label>
+          <Input
+            id="endpoint"
+            value={formData.endpoint}
+            onChange={handleChange('endpoint')}
+            onBlur={() => setEndpointTouched(true)}
+            autoComplete="off"
+            className={showEndpointError ? 'border-destructive' : ''}
+          />
+          <p className={`text-xs ${showEndpointError ? 'text-destructive' : 'text-muted-foreground'}`}>
+            {showEndpointError
               ? 'Please enter a valid URL (e.g., https://s3.amazonaws.com)'
-              : 'Default is AWS S3. Change for S3-compatible services (MinIO, etc.)'
-          }
-        />
+              : 'Default is AWS S3. Change for S3-compatible services (MinIO, etc.)'}
+          </p>
+        </div>
 
-        <TextField
-          fullWidth
-          label="Access Key ID"
-          value={formData.accessKeyId}
-          onChange={handleChange('accessKeyId')}
-          margin="normal"
-          required
-          autoComplete="off"
-        />
+        <div className="space-y-2">
+          <Label htmlFor="accessKeyId">Access Key ID</Label>
+          <Input
+            id="accessKeyId"
+            value={formData.accessKeyId}
+            onChange={handleChange('accessKeyId')}
+            required
+            autoComplete="off"
+          />
+        </div>
 
         {isExistingConnection && !wantsToChangeSecretKey ? (
-          <Box sx={{ mt: 2, mb: 1 }}>
-            <TextField
-              fullWidth
-              label="Secret Access Key"
+          <div className="space-y-2">
+            <Label htmlFor="secretAccessKey">Secret Access Key</Label>
+            <Input
+              id="secretAccessKey"
               type="password"
               value="••••••••••••••••"
               disabled
-              helperText="Key is stored securely on the server"
             />
+            <p className="text-xs text-muted-foreground">Key is stored securely on the server</p>
             <Button
-              size="small"
+              type="button"
+              variant="link"
+              size="sm"
+              className="px-0"
               onClick={() => setWantsToChangeSecretKey(true)}
-              sx={{ mt: 1 }}
             >
               Change Secret Key
             </Button>
-          </Box>
+          </div>
         ) : (
-          <TextField
-            fullWidth
-            label={isExistingConnection ? 'New Secret Access Key' : 'Secret Access Key'}
-            type="password"
-            value={formData.secretAccessKey}
-            onChange={handleChange('secretAccessKey')}
-            margin="normal"
-            required
-            autoComplete="off"
-            slotProps={isExistingConnection ? {
-              input: {
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button
-                      size="small"
-                      onClick={() => {
-                        setWantsToChangeSecretKey(false);
-                        setFormData((prev) => ({ ...prev, secretAccessKey: '' }));
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </InputAdornment>
-                ),
-              },
-            } : undefined}
-          />
+          <div className="space-y-2">
+            <Label htmlFor="secretAccessKey">
+              {isExistingConnection ? 'New Secret Access Key' : 'Secret Access Key'}
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="secretAccessKey"
+                type="password"
+                value={formData.secretAccessKey}
+                onChange={handleChange('secretAccessKey')}
+                required
+                autoComplete="off"
+                className="flex-1"
+              />
+              {isExistingConnection && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setWantsToChangeSecretKey(false);
+                    setFormData((prev) => ({ ...prev, secretAccessKey: '' }));
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </div>
         )}
 
-        <TextField
-          fullWidth
-          label="Bucket Name"
-          value={formData.bucket}
-          onChange={handleChange('bucket')}
-          margin="normal"
-          autoComplete="off"
-          helperText="Leave empty to list available buckets after login"
-        />
+        <div className="space-y-2">
+          <Label htmlFor="bucket">Bucket Name</Label>
+          <Input
+            id="bucket"
+            value={formData.bucket}
+            onChange={handleChange('bucket')}
+            autoComplete="off"
+          />
+          <p className="text-xs text-muted-foreground">
+            Leave empty to list available buckets after login
+          </p>
+        </div>
 
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={autoDetectRegion}
-              onChange={(e) => setAutoDetectRegion(e.target.checked)}
-            />
-          }
-          label="Auto-detect region from bucket"
-          sx={{ mt: 1 }}
-        />
+        <div className="flex items-center space-x-2 pt-2">
+          <Checkbox
+            id="autoDetectRegion"
+            checked={autoDetectRegion}
+            onCheckedChange={(checked) => setAutoDetectRegion(checked === true)}
+          />
+          <Label htmlFor="autoDetectRegion" className="cursor-pointer">
+            Auto-detect region from bucket
+          </Label>
+        </div>
 
         {!autoDetectRegion && (
-          <TextField
-            fullWidth
-            label="Region"
-            value={formData.region}
-            onChange={handleChange('region')}
-            margin="normal"
-            required
-            autoComplete="off"
-            placeholder="us-east-1"
-          />
+          <div className="space-y-2">
+            <Label htmlFor="region">Region</Label>
+            <Input
+              id="region"
+              value={formData.region}
+              onChange={handleChange('region')}
+              required
+              autoComplete="off"
+              placeholder="us-east-1"
+            />
+          </div>
         )}
 
         <Button
           type="submit"
-          fullWidth
-          variant="contained"
-          size="large"
+          className="w-full"
+          size="lg"
           disabled={!isFormValid || isLoading}
-          sx={{ mt: 3 }}
         >
-          {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Connect'}
+          {isLoading ? <Spinner size="sm" className="text-white" /> : 'Connect'}
         </Button>
-      </Box>
+      </form>
     </>
   );
 }

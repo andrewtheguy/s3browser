@@ -1,17 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import {
-  Box,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Typography,
-  Alert,
-  CircularProgress,
-} from '@mui/material';
-import CloudIcon from '@mui/icons-material/Cloud';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import RefreshIcon from '@mui/icons-material/Refresh';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import { BucketIcon } from '@/components/ui/bucket-icon';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Spinner } from '@/components/ui/spinner';
 import { useS3Client } from '../../hooks';
 import { S3ConnectionForm } from '../S3ConnectionForm';
 
@@ -50,36 +44,35 @@ function PasswordLoginForm({
   const isFormValid = password.length > 0;
 
   return (
-    <Box component="form" onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit}>
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <TextField
-        fullWidth
-        label="Password"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        margin="normal"
-        required
-        autoComplete="current-password"
-        autoFocus
-      />
+      <div className="space-y-4">
+        <Input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="current-password"
+          autoFocus
+        />
 
-      <Button
-        type="submit"
-        fullWidth
-        variant="contained"
-        size="large"
-        disabled={!isFormValid || isLoading}
-        sx={{ mt: 3 }}
-      >
-        {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
-      </Button>
-    </Box>
+        <Button
+          type="submit"
+          className="w-full"
+          size="lg"
+          disabled={!isFormValid || isLoading}
+        >
+          {isLoading ? <Spinner size="sm" className="text-white" /> : 'Sign In'}
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -102,81 +95,49 @@ export function LoginForm() {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
-        p: 2,
-      }}
-    >
-      <Card sx={{ maxWidth: 450, width: '100%' }}>
-        <CardContent sx={{ p: 4 }}>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 3,
-            }}
-          >
-            <CloudIcon sx={{ fontSize: 40, color: 'primary.main', mr: 1 }} />
-            <Typography variant="h5" component="h1" fontWeight="bold">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="max-w-[450px] w-full">
+        <CardContent className="p-8">
+          <div className="flex items-center justify-center mb-6">
+            <BucketIcon className="h-10 w-10 mr-2 text-primary" />
+            <h1 className="text-2xl font-bold">
               S3 Browser
-            </Typography>
-          </Box>
+            </h1>
+          </div>
 
           {isCheckingSession && !serverError ? (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                py: 4,
-              }}
-            >
-              <CircularProgress size={40} sx={{ mb: 2 }} />
-              <Typography variant="body2" color="text.secondary">
+            <div className="flex flex-col items-center py-8">
+              <Spinner size="lg" className="mb-4" />
+              <p className="text-sm text-muted-foreground">
                 Connecting to server...
-              </Typography>
-            </Box>
+              </p>
+            </div>
           ) : serverError ? (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                textAlign: 'center',
-              }}
-            >
-              <ErrorOutlineIcon sx={{ fontSize: 48, color: 'error.main', mb: 2 }} />
-              <Typography variant="h6" color="error" gutterBottom>
+            <div className="flex flex-col items-center text-center">
+              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+              <h2 className="text-lg font-semibold text-destructive mb-2">
                 Server Connection Error
-              </Typography>
-              <Typography variant="body2" color="text.secondary" mb={3}>
+              </h2>
+              <p className="text-sm text-muted-foreground mb-6">
                 {serverError}
-              </Typography>
+              </p>
               <Button
-                variant="contained"
-                startIcon={isCheckingSession ? <CircularProgress size={20} color="inherit" /> : <RefreshIcon />}
                 onClick={retryConnection}
                 disabled={isCheckingSession}
               >
+                {isCheckingSession ? (
+                  <Spinner size="sm" className="mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
                 {isCheckingSession ? 'Connecting...' : 'Retry Connection'}
               </Button>
-            </Box>
+            </div>
           ) : !isLoggedIn ? (
             <>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                textAlign="center"
-                mb={3}
-              >
+              <p className="text-sm text-muted-foreground text-center mb-6">
                 Enter password to continue
-              </Typography>
+              </p>
 
               <PasswordLoginForm
                 error={error}
@@ -193,19 +154,13 @@ export function LoginForm() {
                 onLogout={handleLogout}
               />
 
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                display="block"
-                textAlign="center"
-                mt={3}
-              >
+              <p className="text-xs text-muted-foreground text-center mt-6">
                 S3 credentials are encrypted and stored securely. Session expires after 4 hours.
-              </Typography>
+              </p>
             </>
           )}
         </CardContent>
       </Card>
-    </Box>
+    </div>
   );
 }

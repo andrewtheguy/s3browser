@@ -10,7 +10,10 @@
       "Bash(bun install:*)",
       "Bash(bun run build)",
       "Bash(xargs:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(bun add:*)",
+      "Bash(bunx tailwindcss init:*)",
+      "Bash(npx tailwindcss init -p)"
     ]
   }
 }

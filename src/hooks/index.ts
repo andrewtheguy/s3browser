@@ -1,6 +1,6 @@
 export { useS3Client } from './useS3Client';
 export { useListObjects } from './useListObjects';
-export { useUpload } from './useUpload';
+export { useUpload, type CompletedStats } from './useUpload';
 export { useDownload } from './useDownload';
 export { useDelete } from './useDelete';
 export { useCopyMove } from './useCopyMove';

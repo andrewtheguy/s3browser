@@ -1,32 +1,39 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
+  Folder,
+  FolderPlus,
+  Home,
+  ArrowLeft,
+  Pencil,
+  Check,
+  X,
+} from 'lucide-react';
+import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  Button,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  TextField,
-  Box,
-  Breadcrumbs,
-  Link,
-  Typography,
-  CircularProgress,
-  Alert,
-  IconButton,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
+import {
   Tooltip,
-  InputAdornment,
-} from '@mui/material';
-import FolderIcon from '@mui/icons-material/Folder';
-import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
-import HomeIcon from '@mui/icons-material/Home';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import EditIcon from '@mui/icons-material/Edit';
-import CheckIcon from '@mui/icons-material/Check';
-import CloseIcon from '@mui/icons-material/Close';
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useS3ClientContext } from '../../contexts';
 import { useParams } from 'react-router';
 import { listObjects, createFolder } from '../../services/api';
@@ -243,239 +250,237 @@ export function FolderPickerDialog({
   const fullDestination = normalizedDisplayPath + newName.trim() + (sourceItem?.isFolder ? '/' : '');
 
   return (
-    <Dialog
-      open={open}
-      onClose={onCancel}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{ sx: { minHeight: 400, maxHeight: '80vh' } }}
-    >
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', p: 0 }}>
-        {/* Name input */}
-        <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider' }}>
-          <TextField
-            fullWidth
-            size="small"
-            label={sourceItem?.isFolder ? 'Folder name' : 'File name'}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            error={!newName.trim() || newName.includes('/')}
-            helperText={
-              !newName.trim()
-                ? 'Name is required'
-                : newName.includes('/')
-                  ? 'Name cannot contain "/"'
-                  : undefined
-            }
-          />
-        </Box>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
+      <DialogContent className="sm:max-w-md min-h-[400px] max-h-[80vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
 
-        {/* Breadcrumb navigation */}
-        <Box sx={{ px: 3, py: 1, borderBottom: 1, borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Tooltip title="Go up">
-              <span>
-                <IconButton
-                  size="small"
-                  onClick={handleGoUp}
-                  disabled={browsePath === '' || isManualInput}
-                >
-                  <ArrowBackIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
-            <Breadcrumbs sx={{ flex: 1, minWidth: 0 }}>
-              <Link
-                component="button"
-                variant="body2"
-                onClick={() => handleBreadcrumbClick(0)}
-                underline="hover"
-                color={pathSegments.length === 0 ? 'text.primary' : 'inherit'}
-                sx={{ display: 'flex', alignItems: 'center' }}
-                disabled={isManualInput}
-              >
-                <HomeIcon sx={{ mr: 0.5, fontSize: 18 }} />
-                Root
-              </Link>
-              {pathSegments.map((segment, index) => (
-                <Link
-                  key={index}
-                  component="button"
-                  variant="body2"
-                  onClick={() => handleBreadcrumbClick(index + 1)}
-                  underline="hover"
-                  color={index === pathSegments.length - 1 ? 'text.primary' : 'inherit'}
-                  disabled={isManualInput}
-                  sx={{
-                    maxWidth: 120,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {segment}
-                </Link>
-              ))}
-            </Breadcrumbs>
-            <Tooltip title={isManualInput ? 'Browse folders' : 'Enter path manually'}>
-              <IconButton size="small" onClick={toggleManualInput}>
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-
-        {/* Manual path input */}
-        {isManualInput && (
-          <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider' }}>
-            <TextField
-              fullWidth
-              size="small"
-              label="Destination folder"
-              value={manualPath}
-              onChange={(e) => setManualPath(e.target.value)}
-              placeholder="Enter folder path (e.g., folder/subfolder/)"
-              helperText="Leave empty for root"
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {/* Name input */}
+          <div className="px-6 py-3 border-b">
+            <Label htmlFor="newName" className="text-sm">
+              {sourceItem?.isFolder ? 'Folder name' : 'File name'}
+            </Label>
+            <Input
+              id="newName"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className={`mt-1 ${!newName.trim() || newName.includes('/') ? 'border-destructive' : ''}`}
             />
-          </Box>
-        )}
-
-        {/* Error alert */}
-        {error && (
-          <Alert severity="error" sx={{ mx: 3, mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {/* Validation error */}
-        {validationError && validationError !== 'Name cannot be empty' && !validationError.includes('cannot contain') && (
-          <Alert severity="warning" sx={{ mx: 3, mt: 2 }}>
-            {validationError}
-          </Alert>
-        )}
-
-        {/* Folder list */}
-        {!isManualInput && (
-          <Box sx={{ flex: 1, overflow: 'auto', minHeight: 200 }}>
-            {isLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress size={32} />
-              </Box>
-            ) : folders.length === 0 ? (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ textAlign: 'center', py: 4 }}
-              >
-                No subfolders in this location
-              </Typography>
-            ) : (
-              <List dense>
-                {folders.map((folder) => (
-                  <ListItemButton
-                    key={folder.key}
-                    onClick={() => handleFolderClick(folder.key)}
-                  >
-                    <ListItemIcon sx={{ minWidth: 40 }}>
-                      <FolderIcon sx={{ color: '#f9a825' }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={folder.name}
-                      primaryTypographyProps={{
-                        noWrap: true,
-                        sx: { maxWidth: 300 },
-                      }}
-                    />
-                  </ListItemButton>
-                ))}
-              </List>
+            {(!newName.trim() || newName.includes('/')) && (
+              <p className="text-xs text-destructive mt-1">
+                {!newName.trim() ? 'Name is required' : 'Name cannot contain "/"'}
+              </p>
             )}
-          </Box>
-        )}
+          </div>
 
-        {/* Create new folder */}
-        {!isManualInput && (
-          <Box sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
-            {showNewFolderInput ? (
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <TextField
-                  size="small"
-                  fullWidth
-                  placeholder="New folder name"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  disabled={isCreatingFolder}
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newFolderName.trim()) {
-                      void handleCreateFolder();
-                    } else if (e.key === 'Escape') {
+          {/* Breadcrumb navigation */}
+          <div className="px-6 py-2 border-b">
+            <div className="flex items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={handleGoUp}
+                      disabled={browsePath === '' || isManualInput}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Go up</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <Breadcrumb className="flex-1 min-w-0">
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    <BreadcrumbLink
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (!isManualInput) handleBreadcrumbClick(0);
+                      }}
+                      className={`flex items-center ${isManualInput ? 'pointer-events-none opacity-50' : ''}`}
+                    >
+                      <Home className="h-4 w-4 mr-1" />
+                      Root
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  {pathSegments.map((segment, index) => (
+                    <BreadcrumbItem key={index}>
+                      <BreadcrumbSeparator />
+                      <BreadcrumbLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (!isManualInput) handleBreadcrumbClick(index + 1);
+                        }}
+                        className={`max-w-[120px] truncate ${isManualInput ? 'pointer-events-none opacity-50' : ''}`}
+                      >
+                        {segment}
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                  ))}
+                </BreadcrumbList>
+              </Breadcrumb>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={toggleManualInput}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isManualInput ? 'Browse folders' : 'Enter path manually'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+
+          {/* Manual path input */}
+          {isManualInput && (
+            <div className="px-6 py-3 border-b">
+              <Label htmlFor="manualPath" className="text-sm">Destination folder</Label>
+              <Input
+                id="manualPath"
+                value={manualPath}
+                onChange={(e) => setManualPath(e.target.value)}
+                placeholder="Enter folder path (e.g., folder/subfolder/)"
+                className="mt-1"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Leave empty for root</p>
+            </div>
+          )}
+
+          {/* Error alert */}
+          {error && (
+            <Alert variant="destructive" className="mx-6 mt-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Validation error */}
+          {validationError && validationError !== 'Name cannot be empty' && !validationError.includes('cannot contain') && (
+            <Alert className="mx-6 mt-3 border-yellow-500 bg-yellow-50 text-yellow-800">
+              <AlertDescription>{validationError}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Folder list */}
+          {!isManualInput && (
+            <ScrollArea className="flex-1 min-h-[200px]">
+              {isLoading ? (
+                <div className="flex justify-center py-8">
+                  <Spinner size="md" />
+                </div>
+              ) : folders.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No subfolders in this location
+                </p>
+              ) : (
+                <div className="py-1">
+                  {folders.map((folder) => (
+                    <button
+                      key={folder.key}
+                      onClick={() => handleFolderClick(folder.key)}
+                      className="w-full flex items-center gap-3 px-6 py-2 hover:bg-muted transition-colors text-left"
+                    >
+                      <Folder className="h-5 w-5 text-yellow-500 shrink-0" />
+                      <span className="truncate max-w-[300px]">{folder.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          )}
+
+          {/* Create new folder */}
+          {!isManualInput && (
+            <div className="px-6 py-3 border-t">
+              {showNewFolderInput ? (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="New folder name"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    disabled={isCreatingFolder}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newFolderName.trim()) {
+                        void handleCreateFolder();
+                      } else if (e.key === 'Escape') {
+                        setShowNewFolderInput(false);
+                        setNewFolderName('');
+                      }
+                    }}
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCreateFolder}
+                    disabled={!newFolderName.trim() || isCreatingFolder}
+                  >
+                    {isCreatingFolder ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
                       setShowNewFolderInput(false);
                       setNewFolderName('');
-                    }
-                  }}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          size="small"
-                          onClick={handleCreateFolder}
-                          disabled={!newFolderName.trim() || isCreatingFolder}
-                        >
-                          {isCreatingFolder ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <CheckIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            setShowNewFolderInput(false);
-                            setNewFolderName('');
-                          }}
-                          disabled={isCreatingFolder}
-                        >
-                          <CloseIcon fontSize="small" />
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-              </Box>
-            ) : (
-              <Button
-                startIcon={<CreateNewFolderIcon />}
-                onClick={() => setShowNewFolderInput(true)}
-                size="small"
-              >
-                Create New Folder
-              </Button>
-            )}
-          </Box>
-        )}
+                    }}
+                    disabled={isCreatingFolder}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowNewFolderInput(true)}
+                >
+                  <FolderPlus className="h-4 w-4 mr-2" />
+                  Create New Folder
+                </Button>
+              )}
+            </div>
+          )}
 
-        {/* Current selection display */}
-        <Box sx={{ px: 3, py: 1, bgcolor: 'action.hover' }}>
-          <Typography variant="caption" color="text.secondary">
-            {mode === 'copy' ? 'Copy' : 'Move'} to:{' '}
-            <strong>
-              {fullDestination || '/ (root)'}
-            </strong>
-          </Typography>
-        </Box>
+          {/* Current selection display */}
+          <div className="px-6 py-2 bg-muted/50">
+            <p className="text-xs text-muted-foreground">
+              {mode === 'copy' ? 'Copy' : 'Move'} to:{' '}
+              <strong>{fullDestination || '/ (root)'}</strong>
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirm} disabled={!!validationError}>
+            {mode === 'copy' ? 'Copy Here' : 'Move Here'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button
-          onClick={handleConfirm}
-          variant="contained"
-          disabled={!!validationError}
-        >
-          {mode === 'copy' ? 'Copy Here' : 'Move Here'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

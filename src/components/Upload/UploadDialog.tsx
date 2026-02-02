@@ -1,26 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Upload, Trash2, X } from 'lucide-react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  Button,
-  Box,
-  IconButton,
-  Typography,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Chip,
-  Divider,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import {
   Tooltip,
-  Alert,
-} from '@mui/material';
-import { alpha } from '@mui/material/styles';
-import CloseIcon from '@mui/icons-material/Close';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import DeleteIcon from '@mui/icons-material/Delete';
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useBrowserContext } from '../../contexts';
 import { useUpload } from '../../hooks';
 import { DropZone } from './DropZone';
@@ -43,13 +40,13 @@ export function UploadDialog({
   const {
     uploads,
     pendingResumable,
+    completedStats,
     upload,
     cancelUpload,
     cancelAll,
     pauseUpload,
     resumeUpload,
     retryUpload,
-    clearCompleted,
     clearAll,
     removePendingResumable,
     isUploading,
@@ -146,138 +143,132 @@ export function UploadDialog({
     }
   }, [uploads, onUploadComplete]);
 
-  const completedCount = uploads.filter((u) => u.status === 'completed').length;
-  const hasCompletedUploads = completedCount > 0;
-  const hasCancelableUploads = uploads.some((u) => u.status !== 'completed');
+  const hasCancelableUploads = uploads.length > 0;
 
   return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      maxWidth="sm"
-      fullWidth
-      disableEscapeKeyDown={isUploading}
-    >
-      <DialogTitle>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          Upload Files
-          <IconButton onClick={handleClose} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-      </DialogTitle>
-      <DialogContent>
-        {/* Hidden file input for resuming uploads */}
-        <input
-          type="file"
-          ref={resumeFileInputRef}
-          onChange={handleResumeFileSelect}
-          style={{ display: 'none' }}
-        />
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Upload Files</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {/* Hidden file input for resuming uploads */}
+          <input
+            type="file"
+            ref={resumeFileInputRef}
+            onChange={handleResumeFileSelect}
+            className="hidden"
+          />
 
-        {/* Resume error alert */}
-        {resumeError && (
-          <Alert severity="error" onClose={() => setResumeError(null)} sx={{ mb: 2 }}>
-            {resumeError}
-          </Alert>
-        )}
-
-        {/* Pending Resumable Uploads Section */}
-        {pendingResumable.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="warning.main" gutterBottom>
-              Resume Pending Uploads ({pendingResumable.length})
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              These uploads were interrupted. Re-select the same file to resume.
-            </Typography>
-            <List dense sx={(theme) => ({ bgcolor: alpha(theme.palette.warning.light, 0.5), borderRadius: 1 })}>
-              {pendingResumable.map((pending) => (
-                <ListItem
-                  key={pending.id}
-                  secondaryAction={
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <Tooltip title="Re-select file to resume upload">
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleResumeFromPending(pending)}
-                          >
-                            <CloudUploadIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title="Discard">
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => removePendingResumable(pending.id)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    </Box>
-                  }
+          {/* Resume error alert */}
+          {resumeError && (
+            <Alert variant="destructive">
+              <AlertDescription className="flex items-center justify-between">
+                {resumeError}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setResumeError(null)}
                 >
-                  <ListItemIcon sx={{ minWidth: 40 }}>
-                    <CloudUploadIcon color="warning" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={
-                      <Typography variant="body2" noWrap sx={{ maxWidth: { xs: 120, sm: 200, md: 280 } }}>
-                        {pending.key || pending.fileName}
-                      </Typography>
-                    }
-                    secondary={
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Chip
-                          size="small"
-                          label={formatFileSize(pending.fileSize)}
-                          sx={{ fontSize: '0.65rem' }}
-                        />
-                        <Chip
-                          size="small"
-                          label={`${pending.completedParts.length}/${pending.totalParts} parts`}
-                          variant="outlined"
-                          sx={{ fontSize: '0.65rem' }}
-                        />
-                      </Box>
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-            <Divider sx={{ my: 2 }} />
-          </Box>
-        )}
+                  <X className="h-4 w-4" />
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
-        <Box sx={{ mb: 2 }}>
+          {/* Pending Resumable Uploads Section */}
+          {pendingResumable.length > 0 && (
+            <TooltipProvider>
+              <div>
+                <p className="text-sm font-medium text-yellow-600 mb-1">
+                  Resume Pending Uploads ({pendingResumable.length})
+                </p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  These uploads were interrupted. Re-select the same file to resume.
+                </p>
+                <ScrollArea className="max-h-[200px] rounded-md border border-yellow-200 bg-yellow-50/50">
+                  <ul className="p-2 space-y-2">
+                    {pendingResumable.map((pending) => (
+                      <li
+                        key={pending.id}
+                        className="flex items-center justify-between gap-2 bg-background rounded p-2"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Upload className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-sm truncate max-w-[120px] sm:max-w-[200px] md:max-w-[280px]">
+                              {pending.key || pending.fileName}
+                            </p>
+                            <div className="flex gap-1 mt-1">
+                              <Badge variant="secondary" className="text-xs">
+                                {formatFileSize(pending.fileSize)}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {pending.completedParts.length}/{pending.totalParts} parts
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => handleResumeFromPending(pending)}
+                              >
+                                <Upload className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Re-select file to resume upload</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => removePendingResumable(pending.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Discard</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+                <Separator className="my-4" />
+              </div>
+            </TooltipProvider>
+          )}
+
           <DropZone onFilesSelected={handleFilesSelected} disabled={isUploading} />
-        </Box>
-        <UploadProgress
-          uploads={uploads}
-          onCancel={cancelUpload}
-          onPause={pauseUpload}
-          onResume={resumeUpload}
-          onRetry={retryUpload}
-        />
+
+          <UploadProgress
+            uploads={uploads}
+            completedStats={completedStats}
+            onCancel={cancelUpload}
+            onPause={pauseUpload}
+            onResume={resumeUpload}
+            onRetry={retryUpload}
+          />
+        </div>
+        <DialogFooter className="flex-wrap gap-2">
+          {hasCancelableUploads && (
+            <Button variant="destructive" onClick={cancelAll}>
+              Cancel All
+            </Button>
+          )}
+          <Button onClick={handleClose} disabled={isUploading}>
+            {isUploading ? 'Uploading...' : 'Close'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        {hasCancelableUploads && (
-          <Button onClick={cancelAll} color="error">
-            Cancel All
-          </Button>
-        )}
-        {hasCompletedUploads && (
-          <Button onClick={clearCompleted} color="inherit">
-            Clear Completed
-          </Button>
-        )}
-        <Button onClick={handleClose} disabled={isUploading}>
-          {isUploading ? 'Uploading...' : 'Close'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

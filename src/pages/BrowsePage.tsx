@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Box, CircularProgress, Alert } from '@mui/material';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Spinner } from '@/components/ui/spinner';
 import { BrowserProvider, useS3ClientContext } from '../contexts';
 import { S3Browser } from '../components/S3Browser';
 import { decodeUrlToS3Path, buildBrowseUrl } from '../utils/urlEncoding';
@@ -84,52 +86,31 @@ export function BrowsePage() {
   // Show loading while selecting bucket
   if (isSelectingBucket) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 2,
-        }}
-      >
-        <CircularProgress />
-        <Box>Connecting to bucket: {bucket}</Box>
-      </Box>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <Spinner size="lg" />
+        <div>Connecting to bucket: {bucket}</div>
+      </div>
     );
   }
 
   // Show error if bucket selection failed
   if (error) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 2,
-        }}
-      >
-        <Alert severity="error">{error}</Alert>
-      </Box>
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
   // Wait until bucket is selected and connection ID matches
   if (!credentials?.bucket || credentials.bucket !== bucket || activeConnectionId !== connectionId) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <CircularProgress />
-      </Box>
+      <div className="min-h-screen flex items-center justify-center">
+        <Spinner size="lg" />
+      </div>
     );
   }
 

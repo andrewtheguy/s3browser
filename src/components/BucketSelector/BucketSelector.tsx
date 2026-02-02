@@ -1,24 +1,14 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  Box,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Typography,
-  Alert,
-  CircularProgress,
-  List,
-  ListItemButton,
-  ListItemText,
-  Divider,
-  IconButton,
-} from '@mui/material';
-import CloudIcon from '@mui/icons-material/Cloud';
-import LogoutIcon from '@mui/icons-material/Logout';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import SettingsIcon from '@mui/icons-material/Settings';
+import { LogOut, RefreshCw, Settings } from 'lucide-react';
+import { BucketIcon } from '@/components/ui/bucket-icon';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import { useS3Client } from '../../hooks';
 import { listBuckets } from '../../services/api';
 import { buildBrowseUrl } from '../../utils/urlEncoding';
@@ -100,98 +90,79 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const displayError = error || contextError;
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
-        p: 2,
-      }}
-    >
-      <Card sx={{ maxWidth: 500, width: '100%' }}>
-        <CardContent sx={{ p: 4 }}>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mb: 3,
-            }}
-          >
-            <CloudIcon sx={{ fontSize: 40, color: 'primary.main', mr: 1 }} />
-            <Typography variant="h5" component="h1" fontWeight="bold">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="max-w-[500px] w-full">
+        <CardContent className="p-8">
+          <div className="flex items-center justify-center mb-6">
+            <BucketIcon className="h-10 w-10 mr-2 text-primary" />
+            <h1 className="text-2xl font-bold">
               Select Bucket
-            </Typography>
-          </Box>
+            </h1>
+          </div>
 
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            textAlign="center"
-            mb={3}
-          >
+          <p className="text-sm text-muted-foreground text-center mb-6">
             Choose a bucket to browse or enter one manually
-          </Typography>
+          </p>
 
           {displayError && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {displayError}
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{displayError}</AlertDescription>
             </Alert>
           )}
 
           {accessDenied && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              You do not have permission to list buckets. Please enter a bucket name manually.
+            <Alert className="mb-4">
+              <AlertDescription>
+                You do not have permission to list buckets. Please enter a bucket name manually.
+              </AlertDescription>
             </Alert>
           )}
 
           {isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
+            <div className="flex justify-center py-8">
+              <Spinner size="lg" />
+            </div>
           ) : (
             <>
               {!showManualInput && buckets.length > 0 && (
                 <>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                    <Typography variant="subtitle2" color="text.secondary">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-muted-foreground">
                       Available Buckets ({buckets.length})
-                    </Typography>
-                    <IconButton size="small" onClick={fetchBuckets} disabled={isSelecting}>
-                      <RefreshIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                  <List
-                    sx={{
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      maxHeight: 300,
-                      overflow: 'auto',
-                      mb: 2,
-                    }}
-                  >
-                    {buckets.map((bucket, index) => (
-                      <Box key={bucket.name}>
-                        <ListItemButton
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={fetchBuckets}
+                      disabled={isSelecting}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <ScrollArea className="h-[300px] rounded-md border mb-4">
+                    <div className="divide-y">
+                      {buckets.map((bucket) => (
+                        <button
+                          key={bucket.name}
                           onClick={() => handleSelectBucket(bucket.name)}
                           disabled={isSelecting}
+                          className="w-full text-left px-4 py-3 hover:bg-muted transition-colors disabled:opacity-50"
                         >
-                          <ListItemText
-                            primary={bucket.name}
-                            secondary={bucket.creationDate ? `Created: ${new Date(bucket.creationDate).toLocaleDateString()}` : undefined}
-                          />
-                        </ListItemButton>
-                        {index < buckets.length - 1 && <Divider />}
-                      </Box>
-                    ))}
-                  </List>
+                          <p className="font-medium">{bucket.name}</p>
+                          {bucket.creationDate && (
+                            <p className="text-xs text-muted-foreground">
+                              Created: {new Date(bucket.creationDate).toLocaleDateString()}
+                            </p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </ScrollArea>
                   <Button
-                    variant="text"
+                    variant="link"
                     onClick={() => setShowManualInput(true)}
-                    sx={{ mb: 2 }}
+                    className="mb-4"
                     disabled={isSelecting}
                   >
                     Enter bucket name manually
@@ -200,71 +171,65 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
               )}
 
               {(showManualInput || buckets.length === 0) && (
-                <Box component="form" onSubmit={handleManualSubmit}>
+                <form onSubmit={handleManualSubmit}>
                   {buckets.length > 0 && (
                     <Button
-                      variant="text"
+                      variant="link"
                       onClick={() => setShowManualInput(false)}
-                      sx={{ mb: 2 }}
+                      className="mb-4"
                       disabled={isSelecting}
+                      type="button"
                     >
                       Back to bucket list
                     </Button>
                   )}
-                  <TextField
-                    fullWidth
-                    label="Bucket Name"
+                  <Input
+                    placeholder="my-bucket-name"
                     value={manualBucket}
                     onChange={(e) => setManualBucket(e.target.value)}
-                    margin="normal"
                     required
                     autoComplete="off"
-                    placeholder="my-bucket-name"
                     disabled={isSelecting}
+                    className="mb-4"
                   />
                   <Button
                     type="submit"
-                    fullWidth
-                    variant="contained"
-                    size="large"
+                    className="w-full"
+                    size="lg"
                     disabled={!manualBucket.trim() || isSelecting}
-                    sx={{ mt: 2 }}
                   >
                     {isSelecting ? (
-                      <CircularProgress size={24} color="inherit" />
+                      <Spinner size="sm" className="text-white" />
                     ) : (
                       'Connect to Bucket'
                     )}
                   </Button>
-                </Box>
+                </form>
               )}
 
               {isSelecting && !showManualInput && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                  <CircularProgress size={24} />
-                </Box>
+                <div className="flex justify-center py-4">
+                  <Spinner size="md" />
+                </div>
               )}
             </>
           )}
 
-          <Divider sx={{ my: 3 }} />
+          <Separator className="my-6" />
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <div className="flex gap-2">
             <Button
-              fullWidth
-              variant="outlined"
-              color="primary"
-              startIcon={<SettingsIcon />}
+              variant="outline"
+              className="flex-1"
               onClick={() => void navigate('/')}
               disabled={isSelecting}
             >
+              <Settings className="h-4 w-4 mr-2" />
               Manage Connections
             </Button>
             <Button
-              fullWidth
-              variant="outlined"
-              color="inherit"
-              startIcon={<LogoutIcon />}
+              variant="outline"
+              className="flex-1"
               onClick={async () => {
                 try {
                   await disconnect();
@@ -275,11 +240,12 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
               }}
               disabled={isSelecting}
             >
+              <LogOut className="h-4 w-4 mr-2" />
               Sign Out
             </Button>
-          </Box>
+          </div>
         </CardContent>
       </Card>
-    </Box>
+    </div>
   );
 }
