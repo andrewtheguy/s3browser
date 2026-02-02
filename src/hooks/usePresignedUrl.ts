@@ -5,7 +5,7 @@ import { getPresignedUrl } from '../services/api/download';
 
 export interface CopyPresignedUrlResult {
   success: boolean;
-  /** Present when clipboard is unavailable - show in dialog for manual copy */
+  /** The URL that was copied (or attempted to copy). Present on success and when clipboard is unavailable. */
   url?: string;
 }
 
@@ -27,7 +27,7 @@ export function usePresignedUrl() {
       // Check if clipboard API is available (not available in SSR or insecure contexts)
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
-        return { success: true };
+        return { success: true, url };
       }
 
       // Clipboard unavailable - return URL for manual copy dialog
