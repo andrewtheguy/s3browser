@@ -7,6 +7,7 @@ import {
   Play,
   RefreshCw,
 } from 'lucide-react';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +38,10 @@ export function UploadProgress({
   onResume,
   onRetry,
 }: UploadProgressProps) {
-  const activeUploads = uploads.filter((upload) => upload.status !== 'completed');
+  const activeUploads = useMemo(
+    () => uploads.filter((upload) => upload.status !== 'completed'),
+    [uploads]
+  );
 
   if (activeUploads.length === 0 && completedStats.count === 0) {
     return null;

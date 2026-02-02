@@ -123,22 +123,7 @@ export function useUpload() {
         size: prev.size + fileSize,
       }));
       setUploadsAndSync((prev) => {
-        const cleared = prev.map((u) => {
-          if (u.id !== id) {
-            return u;
-          }
-          const updated: UploadProgress = {
-            ...u,
-            status: 'completed',
-            file: null,
-            loaded: fileSize,
-            total: fileSize,
-            percentage: 100,
-            error: undefined,
-          };
-          return updated;
-        });
-        return cleared.filter((u) => u.id !== id);
+        return prev.filter((u) => u.id !== id);
       });
     },
     [setUploadsAndSync]

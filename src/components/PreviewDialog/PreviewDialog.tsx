@@ -107,7 +107,11 @@ export function PreviewDialog({
     const previousResource = mediaResourceRef.current;
     if (
       previousResource
-      && (previousResource.type !== currentResource?.type || previousResource.src !== currentResource?.src)
+      && (
+        previousResource.type !== currentResource?.type
+        || previousResource.element !== currentResource?.element
+        || !currentResource
+      )
     ) {
       cleanupMediaResource(previousResource);
     }

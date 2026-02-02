@@ -147,7 +147,7 @@ export function UploadDialog({
     }
   }, [uploads, completedStats.count, onUploadComplete]);
 
-  const hasCancelableUploads = uploads.some((upload) => upload.status !== 'completed');
+  const hasCancelableUploads = uploads.some((item) => item.status !== 'completed');
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
