@@ -84,6 +84,13 @@ export function FileListItem({
   const IconComponent = iconMap[iconType];
   const iconColor = iconColors[iconType];
 
+  // State declarations
+  const [linkMenuAnchor, setLinkMenuAnchor] = useState<null | HTMLElement>(null);
+  const linkMenuOpen = Boolean(linkMenuAnchor);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const menuOpen = Boolean(menuAnchor);
+
   const handleClick = () => {
     if (item.isFolder) {
       onNavigate(item.key);
@@ -96,9 +103,6 @@ export function FileListItem({
     e.stopPropagation();
     onDownload(item.key);
   };
-
-  const [linkMenuAnchor, setLinkMenuAnchor] = useState<null | HTMLElement>(null);
-  const linkMenuOpen = Boolean(linkMenuAnchor);
 
   const handleLinkMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
@@ -131,10 +135,6 @@ export function FileListItem({
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
-
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const menuOpen = Boolean(menuAnchor);
 
   const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
