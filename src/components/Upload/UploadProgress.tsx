@@ -131,6 +131,7 @@ export function UploadProgress({
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
+                              aria-label="Pause upload"
                               onClick={() => onPause(upload.id)}
                             >
                               <Pause className="h-4 w-4" />
@@ -146,6 +147,7 @@ export function UploadProgress({
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
+                              aria-label="Resume upload"
                               onClick={() => onResume(upload.id)}
                             >
                               <Play className="h-4 w-4" />
@@ -161,6 +163,7 @@ export function UploadProgress({
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
+                              aria-label="Retry upload"
                               onClick={() => onRetry(upload.id)}
                             >
                               <RefreshCw className="h-4 w-4" />
@@ -175,6 +178,7 @@ export function UploadProgress({
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
+                            aria-label="Cancel upload"
                             onClick={() => onCancel(upload.id)}
                           >
                             <X className="h-4 w-4" />

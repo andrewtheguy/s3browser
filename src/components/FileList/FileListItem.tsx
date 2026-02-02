@@ -161,12 +161,12 @@ export function FileListItem({
           </Tooltip>
         </TableCell>
         <TableCell className="w-[72px] sm:w-[100px]">
-          <span className="text-sm text-muted-foreground truncate">
+          <span className="block text-sm text-muted-foreground truncate">
             {formatFileSize(item.size)}
           </span>
         </TableCell>
         <TableCell className="w-[120px] sm:w-[180px]">
-          <span className="text-sm text-muted-foreground truncate">
+          <span className="block text-sm text-muted-foreground truncate">
             {formatDate(item.lastModified)}
           </span>
         </TableCell>

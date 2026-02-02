@@ -318,13 +318,27 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
     [handleClick]
   );
 
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        handleClick();
+      }
+    },
+    [handleClick]
+  );
+
   return (
     <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      aria-label="Drop zone for file upload"
       className={cn(
         "border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200",
         isDragging ? "border-primary bg-accent" : "border-border bg-background",
