@@ -10,7 +10,7 @@ const router = Router();
 
 interface LifecycleRule {
   id?: string;
-  status: string;
+  status: 'Enabled' | 'Disabled' | 'Unknown';
   prefix?: string;
   expiration?: {
     days?: number;
