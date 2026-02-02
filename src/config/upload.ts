@@ -4,7 +4,7 @@ export const UPLOAD_CONFIG = {
   /** Files >= this size use multipart upload (10MB) */
   MULTIPART_THRESHOLD: 10 * 1024 * 1024,
   /** Number of parallel file uploads */
-  FILE_CONCURRENCY: 2,
+  FILE_CONCURRENCY: 5,
   /** Number of parallel part uploads */
   CONCURRENCY: 3,
   /** Presigned URL expiry in seconds (15 minutes) */
