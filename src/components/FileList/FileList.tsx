@@ -23,7 +23,8 @@ interface FileListProps {
   onDeleteRequest: (item: S3Object) => void;
   onCopyRequest: (item: S3Object) => void;
   onMoveRequest: (item: S3Object) => void;
-  onCopyUrl: (key: string) => void;
+  onCopyUrl: (key: string, ttl: number) => void;
+  onCopyS3Uri: (key: string) => void;
   onPreview: (item: S3Object) => void;
   selectedKeys: Set<string>;
   onSelectItem: (key: string, checked: boolean) => void;
@@ -36,6 +37,7 @@ export function FileList({
   onCopyRequest,
   onMoveRequest,
   onCopyUrl,
+  onCopyS3Uri,
   onPreview,
   selectedKeys,
   onSelectItem,
@@ -166,6 +168,7 @@ export function FileList({
               onNavigate={navigateTo}
               onDownload={handleDownload}
               onCopyUrl={onCopyUrl}
+              onCopyS3Uri={onCopyS3Uri}
               onDelete={onDeleteRequest}
               onCopy={onCopyRequest}
               onMove={onMoveRequest}

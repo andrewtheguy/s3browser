@@ -42,7 +42,7 @@ export function S3Browser() {
   const { refresh, currentPath, objects } = useBrowserContext();
   const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
-  const { copyPresignedUrl } = usePresignedUrl();
+  const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
   const { download } = useDownload();
   const preview = usePreview();
   const {
@@ -336,14 +336,24 @@ export function S3Browser() {
     setNewFolderName('');
   }, []);
 
-  const handleCopyUrl = useCallback(async (key: string) => {
-    const success = await copyPresignedUrl(key);
-    if (success) {
-      showSnackbar('URL copied to clipboard', 'success');
+  const handleCopyUrl = useCallback(async (key: string, ttl: number) => {
+    const result = await copyPresignedUrl(key, ttl);
+    if (result.success) {
+      const duration = ttl >= 86400 ? '1 day' : '1 hour';
+      showSnackbar(`Presigned URL (${duration}) copied to clipboard`, 'success');
     } else {
       showSnackbar('Failed to copy URL', 'error');
     }
   }, [copyPresignedUrl, showSnackbar]);
+
+  const handleCopyS3Uri = useCallback(async (key: string) => {
+    const success = await copyS3Uri(key);
+    if (success) {
+      showSnackbar('S3 URI copied to clipboard', 'success');
+    } else {
+      showSnackbar('Failed to copy S3 URI', 'error');
+    }
+  }, [copyS3Uri, showSnackbar]);
 
   const { openPreview } = preview;
   const handlePreview = useCallback((item: S3Object) => {
@@ -563,6 +573,7 @@ export function S3Browser() {
               onCopyRequest={handleCopyRequest}
               onMoveRequest={handleMoveRequest}
               onCopyUrl={handleCopyUrl}
+              onCopyS3Uri={handleCopyS3Uri}
               onPreview={handlePreview}
               selectedKeys={selectedKeys}
               onSelectItem={handleSelectItem}

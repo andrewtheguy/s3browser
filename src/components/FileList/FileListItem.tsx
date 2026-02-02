@@ -27,7 +27,8 @@ interface FileListItemProps {
   item: S3Object;
   onNavigate: (path: string) => void;
   onDownload: (key: string) => void;
-  onCopyUrl: (key: string) => void;
+  onCopyUrl: (key: string, ttl: number) => void;
+  onCopyS3Uri: (key: string) => void;
   onDelete: (item: S3Object) => void;
   onCopy: (item: S3Object) => void;
   onMove: (item: S3Object) => void;
@@ -70,6 +71,7 @@ export function FileListItem({
   onNavigate,
   onDownload,
   onCopyUrl,
+  onCopyS3Uri,
   onDelete,
   onCopy,
   onMove,
@@ -95,9 +97,31 @@ export function FileListItem({
     onDownload(item.key);
   };
 
-  const handleCopyUrl = (e: React.MouseEvent) => {
+  const [linkMenuAnchor, setLinkMenuAnchor] = useState<null | HTMLElement>(null);
+  const linkMenuOpen = Boolean(linkMenuAnchor);
+
+  const handleLinkMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
-    onCopyUrl(item.key);
+    setLinkMenuAnchor(e.currentTarget);
+  };
+
+  const handleLinkMenuClose = () => {
+    setLinkMenuAnchor(null);
+  };
+
+  const handleCopyUrl1Hour = () => {
+    handleLinkMenuClose();
+    onCopyUrl(item.key, 3600);
+  };
+
+  const handleCopyUrl1Day = () => {
+    handleLinkMenuClose();
+    onCopyUrl(item.key, 86400);
+  };
+
+  const handleCopyS3Uri = () => {
+    handleLinkMenuClose();
+    onCopyS3Uri(item.key);
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,8 +237,8 @@ export function FileListItem({
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           {!item.isFolder && (
             <>
-              <Tooltip title="Copy presigned URL (24h)" placement="top-start">
-                <IconButton size="small" onClick={handleCopyUrl}>
+              <Tooltip title="Copy URL" placement="top-start">
+                <IconButton size="small" onClick={handleLinkMenuOpen}>
                   <LinkIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
@@ -233,6 +257,24 @@ export function FileListItem({
         </Box>
       </TableCell>
     </TableRow>
+    <Menu
+      anchorEl={linkMenuAnchor}
+      open={linkMenuOpen}
+      onClose={handleLinkMenuClose}
+      onClick={(e) => e.stopPropagation()}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+    >
+      <MenuItem onClick={handleCopyUrl1Hour}>
+        <ListItemText>Presigned URL (1 hour)</ListItemText>
+      </MenuItem>
+      <MenuItem onClick={handleCopyUrl1Day}>
+        <ListItemText>Presigned URL (1 day)</ListItemText>
+      </MenuItem>
+      <MenuItem onClick={handleCopyS3Uri}>
+        <ListItemText>S3 URI (s3://...)</ListItemText>
+      </MenuItem>
+    </Menu>
     <Menu
       anchorEl={menuAnchor}
       open={menuOpen}
