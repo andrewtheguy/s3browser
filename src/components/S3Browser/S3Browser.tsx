@@ -1,23 +1,28 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
-  Box,
-  Paper,
-  Snackbar,
-  Alert,
+  Upload,
+  FolderPlus,
+  Trash2,
+  Hand,
+  X,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import {
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-  IconButton,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
   Tooltip,
-} from '@mui/material';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
-import DeleteIcon from '@mui/icons-material/Delete';
-import TouchAppIcon from '@mui/icons-material/TouchApp';
-import CloseIcon from '@mui/icons-material/Close';
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Toolbar } from '../Toolbar';
 import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
@@ -30,12 +35,6 @@ import { useBrowserContext } from '../../contexts';
 import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove } from '../../hooks';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
-
-interface SnackbarState {
-  open: boolean;
-  message: string;
-  severity: 'success' | 'error' | 'info' | 'warning';
-}
 
 const DELETE_PREVIEW_LIMIT = 50;
 
@@ -69,11 +68,6 @@ export function S3Browser() {
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
-  const [snackbar, setSnackbar] = useState<SnackbarState>({
-    open: false,
-    message: '',
-    severity: 'success',
-  });
 
   // Copy/Move state
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
@@ -97,13 +91,6 @@ export function S3Browser() {
   const handleBucketInfoClose = useCallback(() => {
     setBucketInfoOpen(false);
   }, []);
-
-  const showSnackbar = useCallback(
-    (message: string, severity: SnackbarState['severity']) => {
-      setSnackbar({ open: true, message, severity });
-    },
-    []
-  );
 
   const isDeleting = isDeletingBatch || isDeletingHook;
 
@@ -135,10 +122,6 @@ export function S3Browser() {
     itemsToDeleteRef.current = itemsToDelete;
   }, [itemsToDelete]);
 
-  const handleSnackbarClose = useCallback(() => {
-    setSnackbar((prev) => ({ ...prev, open: false }));
-  }, []);
-
   const handleUploadClick = useCallback(() => {
     setUploadDialogOpen(true);
   }, []);
@@ -149,8 +132,8 @@ export function S3Browser() {
 
   const handleUploadComplete = useCallback(() => {
     void refresh();
-    showSnackbar('Files uploaded successfully', 'success');
-  }, [refresh, showSnackbar]);
+    toast.success('Files uploaded successfully');
+  }, [refresh]);
 
   // Clear selection when path changes
   useEffect(() => {
@@ -248,7 +231,7 @@ export function S3Browser() {
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
     if (deleteMode === 'batch' && !deletePlan) {
-      showSnackbar('Delete list is still loading', 'warning');
+      toast.warning('Delete list is still loading');
       return;
     }
 
@@ -257,7 +240,7 @@ export function S3Browser() {
       if (deleteMode === 'single') {
         const item = itemsToDelete[0];
         await remove(item.key);
-        showSnackbar(item.isFolder ? 'Folder deleted successfully' : 'File deleted successfully', 'success');
+        toast.success(item.isFolder ? 'Folder deleted successfully' : 'File deleted successfully');
       } else {
         const plan = deletePlan ?? { fileKeys: [], folderKeys: [] };
         const result = await removeMany(plan.fileKeys);
@@ -286,7 +269,7 @@ export function S3Browser() {
               ? `Removed ${folderRemoved} folders, ${folderFailures} failed`
               : `${folderRemoved} folders removed`);
           }
-          showSnackbar(parts.join('. '), 'warning');
+          toast.warning(parts.join('. '));
         } else {
           const parts: string[] = [];
           if (plan.fileKeys.length > 0) {
@@ -295,14 +278,14 @@ export function S3Browser() {
           if (plan.folderKeys.length > 0) {
             parts.push(`${folderRemoved} folders removed`);
           }
-          showSnackbar(parts.length > 0 ? parts.join('. ') : 'Nothing to delete', 'success');
+          toast.success(parts.length > 0 ? parts.join('. ') : 'Nothing to delete');
         }
       }
       setSelectedKeys(new Set());
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Delete failed';
-      showSnackbar(message, 'error');
+      toast.error(message);
     } finally {
       setIsDeletingBatch(false);
       setDeleteDialogOpen(false);
@@ -310,7 +293,7 @@ export function S3Browser() {
       setDeletePlan(null);
       setDeleteResolveError(null);
     }
-  }, [itemsToDelete, deleteMode, deletePlan, remove, removeMany, refresh, showSnackbar]);
+  }, [itemsToDelete, deleteMode, deletePlan, remove, removeMany, refresh]);
 
   const handleDeleteCancel = useCallback(() => {
     setDeleteDialogOpen(false);
@@ -331,17 +314,17 @@ export function S3Browser() {
     setIsCreatingFolder(true);
     try {
       await createNewFolder(newFolderName.trim(), currentPath);
-      showSnackbar('Folder created successfully', 'success');
+      toast.success('Folder created successfully');
       await refresh();
       setCreateFolderDialogOpen(false);
       setNewFolderName('');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create folder';
-      showSnackbar(message, 'error');
+      toast.error(message);
     } finally {
       setIsCreatingFolder(false);
     }
-  }, [newFolderName, currentPath, createNewFolder, refresh, showSnackbar]);
+  }, [newFolderName, currentPath, createNewFolder, refresh]);
 
   const handleCreateFolderCancel = useCallback(() => {
     setCreateFolderDialogOpen(false);
@@ -369,20 +352,20 @@ export function S3Browser() {
     const result = await copyPresignedUrl(key, ttl);
     if (result.success) {
       const duration = formatTtlDuration(ttl);
-      showSnackbar(`Presigned URL (${duration}) copied to clipboard`, 'success');
+      toast.success(`Presigned URL (${duration}) copied to clipboard`);
     } else {
-      showSnackbar('Failed to copy URL', 'error');
+      toast.error('Failed to copy URL');
     }
-  }, [copyPresignedUrl, showSnackbar]);
+  }, [copyPresignedUrl]);
 
   const handleCopyS3Uri = useCallback(async (key: string) => {
     const result = await copyS3Uri(key);
     if (result.success) {
-      showSnackbar('S3 URI copied to clipboard', 'success');
+      toast.success('S3 URI copied to clipboard');
     } else {
-      showSnackbar('Failed to copy S3 URI', 'error');
+      toast.error('Failed to copy S3 URI');
     }
-  }, [copyS3Uri, showSnackbar]);
+  }, [copyS3Uri]);
 
   const { openPreview } = preview;
   const handlePreview = useCallback((item: S3Object) => {
@@ -394,9 +377,9 @@ export function S3Browser() {
       await download(key);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      showSnackbar(message || 'Download failed', 'error');
+      toast.error(message || 'Download failed');
     }
-  }, [download, showSnackbar]);
+  }, [download]);
 
   // Copy/Move handlers
   const handleCopyRequest = useCallback((item: S3Object) => {
@@ -520,14 +503,12 @@ export function S3Browser() {
         setCopyMoveProgress({ completed: result.successful.length, total: copyMovePlan.operations.length });
 
         if (result.errors.length > 0) {
-          showSnackbar(
-            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.successful.length} objects, ${result.errors.length} failed`,
-            'warning'
+          toast.warning(
+            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.successful.length} objects, ${result.errors.length} failed`
           );
         } else {
-          showSnackbar(
-            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.successful.length} objects successfully`,
-            'success'
+          toast.success(
+            `${copyMoveMode === 'copy' ? 'Copied' : 'Moved'} ${result.successful.length} objects successfully`
           );
         }
       } else {
@@ -539,16 +520,15 @@ export function S3Browser() {
           await move(op.sourceKey, op.destinationKey);
         }
         setCopyMoveProgress({ completed: 1, total: 1 });
-        showSnackbar(
-          `File ${copyMoveMode === 'copy' ? 'copied' : 'moved'} successfully`,
-          'success'
+        toast.success(
+          `File ${copyMoveMode === 'copy' ? 'copied' : 'moved'} successfully`
         );
       }
 
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : `${copyMoveMode === 'copy' ? 'Copy' : 'Move'} failed`;
-      showSnackbar(message, 'error');
+      toast.error(message);
     } finally {
       setCopyMoveDialogOpen(false);
       setCopyMoveItem(null);
@@ -556,7 +536,7 @@ export function S3Browser() {
       setCopyMoveProgress(undefined);
       setCopyMoveNewName('');
     }
-  }, [copyMoveItem, copyMovePlan, copyMoveMode, copy, move, copyMany, moveMany, refresh, showSnackbar]);
+  }, [copyMoveItem, copyMovePlan, copyMoveMode, copy, move, copyMany, moveMany, refresh]);
 
   const handleCopyMoveCancel = useCallback(() => {
     setCopyMoveDialogOpen(false);
@@ -569,15 +549,8 @@ export function S3Browser() {
   }, []);
 
   return (
-    <Box
-      sx={{
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        bgcolor: 'background.default',
-      }}
-    >
-      <Paper elevation={0} sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', m: 2, overflow: 'hidden' }}>
+    <div className="h-screen flex flex-col bg-background">
+      <div className="flex-1 flex flex-col m-4 bg-card rounded-lg border shadow-sm overflow-hidden">
         <Toolbar
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}
@@ -588,16 +561,8 @@ export function S3Browser() {
           selectionMode={selectionMode}
           onToggleSelection={handleToggleSelection}
         />
-        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <Box
-            sx={{
-              flexGrow: 1,
-              overflowY: 'auto',
-              overflowX: 'hidden',
-              scrollbarGutter: 'stable',
-              minHeight: 0,
-            }}
-          >
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
             <FileList
               onDeleteRequest={handleDeleteRequest}
               onCopyRequest={handleCopyRequest}
@@ -610,46 +575,61 @@ export function S3Browser() {
               onSelectAll={handleSelectAll}
               selectionMode={selectionMode}
             />
-          </Box>
-          <Box
-            sx={{
-              display: { xs: 'flex', sm: 'none' },
-              flexWrap: 'wrap',
-              gap: 1,
-              justifyContent: 'flex-start',
-              p: 1,
-              borderTop: 1,
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-            }}
-          >
-            <Tooltip title={selectionMode ? 'Cancel selection' : 'Select items'}>
-              <IconButton onClick={handleToggleSelection} color={selectionMode ? 'primary' : 'default'}>
-                {selectionMode ? <CloseIcon /> : <TouchAppIcon />}
-              </IconButton>
-            </Tooltip>
-            {selectionMode && selectedKeys.size > 0 && (
-              <Tooltip title={isDeleting ? 'Deleting...' : `Delete (${selectedKeys.size})`}>
-                <span>
-                  <IconButton onClick={handleBatchDeleteRequest} disabled={isDeleting} color="error">
-                    <DeleteIcon />
-                  </IconButton>
-                </span>
+          </div>
+          <TooltipProvider>
+            <div className="flex sm:hidden flex-wrap gap-2 justify-start p-2 border-t bg-card">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={selectionMode ? 'default' : 'ghost'}
+                    size="icon"
+                    onClick={handleToggleSelection}
+                  >
+                    {selectionMode ? <X className="h-4 w-4" /> : <Hand className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {selectionMode ? 'Cancel selection' : 'Select items'}
+                </TooltipContent>
               </Tooltip>
-            )}
-            <Tooltip title="New Folder">
-              <IconButton onClick={handleCreateFolderClick} color="default">
-                <CreateNewFolderIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Upload">
-              <IconButton onClick={handleUploadClick} color="primary">
-                <CloudUploadIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-      </Paper>
+              {selectionMode && selectedKeys.size > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleBatchDeleteRequest}
+                      disabled={isDeleting}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isDeleting ? 'Deleting...' : `Delete (${selectedKeys.size})`}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={handleCreateFolderClick}>
+                    <FolderPlus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>New Folder</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="default" size="icon" onClick={handleUploadClick}>
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Upload</TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
+        </div>
+      </div>
 
       <UploadDialog
         open={uploadDialogOpen}
@@ -708,60 +688,43 @@ export function S3Browser() {
         onCancel={handleCopyMoveCancel}
       />
 
-      <Dialog
-        open={createFolderDialogOpen}
-        onClose={handleCreateFolderCancel}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>Create New Folder</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            fullWidth
-            label="Folder Name"
-            value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-            margin="normal"
-            disabled={isCreatingFolder}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && newFolderName.trim() && !isCreatingFolder) {
-                void handleCreateFolderConfirm();
-              }
-            }}
-          />
+      <Dialog open={createFolderDialogOpen} onOpenChange={(open) => !open && handleCreateFolderCancel()}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Create New Folder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="folderName">Folder Name</Label>
+              <Input
+                id="folderName"
+                autoFocus
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                disabled={isCreatingFolder}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newFolderName.trim() && !isCreatingFolder) {
+                    void handleCreateFolderConfirm();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCreateFolderCancel} disabled={isCreatingFolder}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateFolderConfirm}
+              disabled={!newFolderName.trim() || isCreatingFolder}
+            >
+              {isCreatingFolder ? 'Creating...' : 'Create'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCreateFolderCancel} disabled={isCreatingFolder}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreateFolderConfirm}
-            variant="contained"
-            disabled={!newFolderName.trim() || isCreatingFolder}
-          >
-            {isCreatingFolder ? 'Creating...' : 'Create'}
-          </Button>
-        </DialogActions>
       </Dialog>
 
       <BucketInfoDialog open={bucketInfoOpen} onClose={handleBucketInfoClose} />
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={handleSnackbarClose}
-          severity={snackbar.severity}
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+    </div>
   );
 }

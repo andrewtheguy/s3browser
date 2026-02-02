@@ -16,7 +16,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
 import type { UploadProgress as UploadProgressType } from '../../types';
 import { formatFileSize } from '../../utils/formatters';
 

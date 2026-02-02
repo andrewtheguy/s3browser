@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router';
-import { ChevronDown } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
