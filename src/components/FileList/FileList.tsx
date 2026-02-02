@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FolderX } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, FolderX } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { useBrowserContext } from '../../contexts';
 import { useDownload } from '../../hooks';
 import { FileListItem } from './FileListItem';
@@ -30,6 +31,15 @@ interface FileListProps {
   selectionMode?: boolean;
 }
 
+type SortKey = 'name' | 'size' | 'lastModified';
+type SortDirection = 'asc' | 'desc';
+
+const DEFAULT_SORT_DIRECTION: Record<SortKey, SortDirection> = {
+  name: 'asc',
+  size: 'desc',
+  lastModified: 'desc',
+};
+
 export function FileList({
   onDeleteRequest,
   onCopyRequest,
@@ -44,15 +54,69 @@ export function FileList({
 }: FileListProps) {
   const { objects, isLoading, error, navigateTo } = useBrowserContext();
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
+    key: 'name',
+    direction: DEFAULT_SORT_DIRECTION.name,
+  });
   const pageSize = 500;
-  const totalItems = objects.length;
+  const nameCollator = useMemo(
+    () => new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }),
+    []
+  );
+  const sortedObjects = useMemo(() => {
+    if (objects.length === 0) {
+      return objects;
+    }
+
+    const folders: S3Object[] = [];
+    const files: S3Object[] = [];
+
+    for (const item of objects) {
+      if (item.isFolder) {
+        folders.push(item);
+      } else {
+        files.push(item);
+      }
+    }
+
+    const compareName = (a: S3Object, b: S3Object) => nameCollator.compare(a.name, b.name);
+    const compareFiles = (a: S3Object, b: S3Object) => {
+      if (sortConfig.key === 'size') {
+        const sizeDiff = (a.size ?? 0) - (b.size ?? 0);
+        if (sizeDiff !== 0) {
+          return sizeDiff;
+        }
+      } else if (sortConfig.key === 'lastModified') {
+        const timeDiff = (a.lastModified?.getTime() ?? 0) - (b.lastModified?.getTime() ?? 0);
+        if (timeDiff !== 0) {
+          return timeDiff;
+        }
+      }
+      return compareName(a, b);
+    };
+
+    const sortedFolders = [...folders].sort(compareName);
+    const sortedFiles = [...files].sort(sortConfig.key === 'name' ? compareName : compareFiles);
+
+    const filesOrdered =
+      sortConfig.direction === 'desc' ? [...sortedFiles].reverse() : sortedFiles;
+
+    let foldersOrdered = sortedFolders;
+    if (sortConfig.key === 'name' && sortConfig.direction === 'desc') {
+      foldersOrdered = [...sortedFolders].reverse();
+    }
+
+    return [...foldersOrdered, ...filesOrdered];
+  }, [objects, sortConfig, nameCollator]);
+
+  const totalItems = sortedObjects.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const clampedPage = Math.min(currentPage, totalPages);
   const pageStartIndex = (clampedPage - 1) * pageSize;
   const pageEndIndex = Math.min(pageStartIndex + pageSize, totalItems);
   const pageItems = useMemo(
-    () => objects.slice(pageStartIndex, pageEndIndex),
-    [objects, pageStartIndex, pageEndIndex]
+    () => sortedObjects.slice(pageStartIndex, pageEndIndex),
+    [sortedObjects, pageStartIndex, pageEndIndex]
   );
   const paginationItems = useMemo(() => {
     if (totalPages <= 7) {
@@ -82,7 +146,7 @@ export function FileList({
     return items;
   }, [totalPages, clampedPage]);
 
-  const selectableItems = objects;
+  const selectableItems = sortedObjects;
   const selectableCount = selectableItems.length;
   const selectedCount = selectableItems.filter((item) => selectedKeys.has(item.key)).length;
   const isAllSelected = selectableCount > 0 && selectedCount === selectableCount;
@@ -94,6 +158,36 @@ export function FileList({
       void download(key);
     },
     [download]
+  );
+
+  const handleSort = useCallback((key: SortKey) => {
+    setCurrentPage(1);
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        key,
+        direction: DEFAULT_SORT_DIRECTION[key],
+      };
+    });
+  }, []);
+
+  const renderSortIcon = useCallback(
+    (key: SortKey) => {
+      if (sortConfig.key !== key) {
+        return <ArrowUpDown className="h-3.5 w-3.5" />;
+      }
+      return sortConfig.direction === 'asc' ? (
+        <ArrowUp className="h-3.5 w-3.5" />
+      ) : (
+        <ArrowDown className="h-3.5 w-3.5" />
+      );
+    },
+    [sortConfig]
   );
 
   if (error) {
@@ -178,9 +272,45 @@ export function FileList({
                 </TableHead>
               )}
               <TableHead className="w-12" />
-              <TableHead className="min-w-[120px]">Name</TableHead>
-              <TableHead className="w-[72px] sm:w-[100px]">Size</TableHead>
-              <TableHead className="w-[120px] sm:w-[180px]">Last Modified</TableHead>
+              <TableHead className="min-w-[120px]">
+                <button
+                  type="button"
+                  onClick={() => handleSort('name')}
+                  className={cn(
+                    "inline-flex items-center gap-1 hover:text-foreground",
+                    sortConfig.key === 'name' ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  <span>Name</span>
+                  {renderSortIcon('name')}
+                </button>
+              </TableHead>
+              <TableHead className="w-[72px] sm:w-[100px]">
+                <button
+                  type="button"
+                  onClick={() => handleSort('size')}
+                  className={cn(
+                    "inline-flex items-center gap-1 hover:text-foreground",
+                    sortConfig.key === 'size' ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  <span>Size</span>
+                  {renderSortIcon('size')}
+                </button>
+              </TableHead>
+              <TableHead className="w-[120px] sm:w-[180px]">
+                <button
+                  type="button"
+                  onClick={() => handleSort('lastModified')}
+                  className={cn(
+                    "inline-flex items-center gap-1 hover:text-foreground",
+                    sortConfig.key === 'lastModified' ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  <span>Last Modified</span>
+                  {renderSortIcon('lastModified')}
+                </button>
+              </TableHead>
               <TableHead className="w-[160px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
