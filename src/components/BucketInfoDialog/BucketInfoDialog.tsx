@@ -157,6 +157,14 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                 <TableBody>
                   <TableRow>
                     <TableCell className="font-medium w-[140px]">
+                      Endpoint
+                    </TableCell>
+                    <TableCell className="break-all">
+                      {credentials?.endpoint || 'AWS S3 (default)'}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium w-[140px]">
                       Bucket
                     </TableCell>
                     <TableCell>{bucket}</TableCell>
