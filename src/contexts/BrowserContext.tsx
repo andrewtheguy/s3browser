@@ -17,19 +17,14 @@ import { decodeUrlToS3Path } from '../utils/urlEncoding';
 interface BrowserState {
   objects: S3Object[];
   isLoading: boolean;
-  isLoadingMore: boolean;
   error: string | null;
-  continuationToken?: string;
-  isTruncated: boolean;
 }
 
 type BrowserAction =
   | { type: 'FETCH_START' }
-  | { type: 'FETCH_SUCCESS'; objects: S3Object[]; continuationToken?: string; isTruncated: boolean }
+  | { type: 'FETCH_SUCCESS'; objects: S3Object[] }
   | { type: 'FETCH_ERROR'; error: string }
-  | { type: 'LOAD_MORE_START' }
-  | { type: 'LOAD_MORE_SUCCESS'; objects: S3Object[]; continuationToken?: string; isTruncated: boolean }
-  | { type: 'LOAD_MORE_ERROR'; error: string }
+  | { type: 'FETCH_LIMIT_EXCEEDED'; error: string }
   | { type: 'RESET' };
 
 function reducer(state: BrowserState, action: BrowserAction): BrowserState {
@@ -42,23 +37,11 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
         isLoading: false,
         objects: action.objects,
         error: null,
-        continuationToken: action.continuationToken,
-        isTruncated: action.isTruncated,
       };
     case 'FETCH_ERROR':
       return { ...state, isLoading: false, error: action.error };
-    case 'LOAD_MORE_START':
-      return { ...state, isLoadingMore: true, error: null };
-    case 'LOAD_MORE_SUCCESS':
-      return {
-        ...state,
-        isLoadingMore: false,
-        objects: action.objects,
-        continuationToken: action.continuationToken,
-        isTruncated: action.isTruncated,
-      };
-    case 'LOAD_MORE_ERROR':
-      return { ...state, isLoadingMore: false, error: action.error };
+    case 'FETCH_LIMIT_EXCEEDED':
+      return { ...state, isLoading: false, objects: [], error: action.error };
     case 'RESET':
       return initialState;
     default:
@@ -69,11 +52,10 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
 const initialState: BrowserState = {
   objects: [],
   isLoading: false,
-  isLoadingMore: false,
   error: null,
-  continuationToken: undefined,
-  isTruncated: false,
 };
+
+const MAX_OBJECTS = 10000;
 
 export const BrowserContext = createContext<BrowserContextValue | null>(null);
 
@@ -121,14 +103,46 @@ export function BrowserProvider({
       dispatch({ type: 'FETCH_START' });
 
       try {
-        const result = await listObjects(activeConnectionId, bucket, path, undefined, abortController.signal);
+        const aggregated: S3Object[] = [];
+        let continuationToken: string | undefined = undefined;
+
+        do {
+          const result = await listObjects(
+            activeConnectionId,
+            bucket,
+            path,
+            continuationToken,
+            abortController.signal
+          );
+
+          if (requestId !== requestIdRef.current) {
+            return;
+          }
+
+          aggregated.push(...result.objects);
+
+          const exceedsLimit = aggregated.length > MAX_OBJECTS
+            || (aggregated.length >= MAX_OBJECTS && result.isTruncated);
+
+          if (exceedsLimit) {
+            if (requestId === requestIdRef.current) {
+              dispatch({
+                type: 'FETCH_LIMIT_EXCEEDED',
+                error: `Folder contains more than ${MAX_OBJECTS} items. Please narrow the path.`,
+              });
+              lastFetchedPathRef.current = path;
+            }
+            return;
+          }
+
+          continuationToken = result.isTruncated ? result.continuationToken : undefined;
+        } while (continuationToken);
+
         if (requestId === requestIdRef.current) {
           // Sort client-side: folders first, then files, alphabetically
           dispatch({
             type: 'FETCH_SUCCESS',
-            objects: sortObjects(result.objects),
-            continuationToken: result.continuationToken,
-            isTruncated: result.isTruncated,
+            objects: sortObjects(aggregated),
           });
           lastFetchedPathRef.current = path;
         }
@@ -165,25 +179,6 @@ export function BrowserProvider({
   const refresh = useCallback(async () => {
     await fetchObjects(currentPath);
   }, [currentPath, fetchObjects]);
-
-  const loadMore = useCallback(async () => {
-    if (!state.continuationToken || state.isLoadingMore || !isConnected || !activeConnectionId || !bucket) return;
-
-    dispatch({ type: 'LOAD_MORE_START' });
-    try {
-      const result = await listObjects(activeConnectionId, bucket, currentPath, state.continuationToken);
-      // Append new objects to existing, re-sort
-      dispatch({
-        type: 'LOAD_MORE_SUCCESS',
-        objects: sortObjects([...state.objects, ...result.objects]),
-        continuationToken: result.continuationToken,
-        isTruncated: result.isTruncated,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load more objects';
-      dispatch({ type: 'LOAD_MORE_ERROR', error: message });
-    }
-  }, [state.continuationToken, state.isLoadingMore, state.objects, isConnected, activeConnectionId, bucket, currentPath]);
 
   // Reset when disconnected
   useEffect(() => {
@@ -224,12 +219,8 @@ export function BrowserProvider({
       navigateUp,
       refresh,
       pathSegments: getPathSegments(currentPath),
-      continuationToken: state.continuationToken,
-      isTruncated: state.isTruncated,
-      isLoadingMore: state.isLoadingMore,
-      loadMore,
     }),
-    [currentPath, state.objects, state.isLoading, state.error, navigateTo, navigateUp, refresh, state.continuationToken, state.isTruncated, state.isLoadingMore, loadMore]
+    [currentPath, state.objects, state.isLoading, state.error, navigateTo, navigateUp, refresh]
   );
 
   return (

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FolderX } from 'lucide-react';
 import {
   Table,
@@ -12,7 +12,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
 import { useBrowserContext } from '../../contexts';
 import { useDownload } from '../../hooks';
 import { FileListItem } from './FileListItem';
@@ -43,7 +42,18 @@ export function FileList({
   onSelectAll,
   selectionMode = false,
 }: FileListProps) {
-  const { objects, isLoading, error, navigateTo, isTruncated, isLoadingMore, loadMore } = useBrowserContext();
+  const { objects, isLoading, error, navigateTo } = useBrowserContext();
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 500;
+  const totalItems = objects.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const clampedPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (clampedPage - 1) * pageSize;
+  const pageEndIndex = Math.min(pageStartIndex + pageSize, totalItems);
+  const pageItems = useMemo(
+    () => objects.slice(pageStartIndex, pageEndIndex),
+    [objects, pageStartIndex, pageEndIndex]
+  );
 
   const selectableItems = objects;
   const selectableCount = selectableItems.length;
@@ -148,7 +158,7 @@ export function FileList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {objects.map((item) => (
+            {pageItems.map((item) => (
               <FileListItem
                 key={item.key}
                 item={item}
@@ -168,16 +178,32 @@ export function FileList({
           </TableBody>
         </Table>
       </div>
-      {isTruncated && (
-        <div className="flex justify-center py-4">
-          <Button
-            variant="outline"
-            onClick={loadMore}
-            disabled={isLoadingMore}
-          >
-            {isLoadingMore && <Spinner size="sm" className="mr-2" />}
-            {isLoadingMore ? 'Loading...' : 'Load More'}
-          </Button>
+      {totalItems > pageSize && (
+        <div className="flex flex-wrap items-center justify-between gap-2 py-4">
+          <div className="text-sm text-muted-foreground">
+            Showing {pageStartIndex + 1}-{pageEndIndex} of {totalItems}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.max(1, clampedPage - 1))}
+              disabled={clampedPage === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {clampedPage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.min(totalPages, clampedPage + 1))}
+              disabled={clampedPage === totalPages}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       )}
     </>
