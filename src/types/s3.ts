@@ -87,6 +87,8 @@ export interface BrowserContextValue {
   objects: S3Object[];
   isLoading: boolean;
   error: string | null;
+  isLimited: boolean;
+  limitMessage: string | null;
   navigateTo: (path: string) => void;
   navigateUp: () => void;
   refresh: () => Promise<void>;

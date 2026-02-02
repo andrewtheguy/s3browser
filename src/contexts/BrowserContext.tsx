@@ -18,30 +18,41 @@ interface BrowserState {
   objects: S3Object[];
   isLoading: boolean;
   error: string | null;
+  isLimited: boolean;
+  limitMessage: string | null;
 }
 
 type BrowserAction =
   | { type: 'FETCH_START' }
   | { type: 'FETCH_SUCCESS'; objects: S3Object[] }
   | { type: 'FETCH_ERROR'; error: string }
-  | { type: 'FETCH_LIMIT_EXCEEDED'; error: string }
+  | { type: 'FETCH_LIMIT_REACHED'; objects: S3Object[]; message: string }
   | { type: 'RESET' };
 
 function reducer(state: BrowserState, action: BrowserAction): BrowserState {
   switch (action.type) {
     case 'FETCH_START':
-      return { ...state, isLoading: true, error: null };
+      return { ...state, isLoading: true, error: null, isLimited: false, limitMessage: null };
     case 'FETCH_SUCCESS':
       return {
         ...state,
         isLoading: false,
         objects: action.objects,
         error: null,
+        isLimited: false,
+        limitMessage: null,
       };
     case 'FETCH_ERROR':
-      return { ...state, isLoading: false, error: action.error };
-    case 'FETCH_LIMIT_EXCEEDED':
-      return { ...state, isLoading: false, objects: [], error: action.error };
+      return { ...state, isLoading: false, error: action.error, isLimited: false, limitMessage: null };
+    case 'FETCH_LIMIT_REACHED':
+      return {
+        ...state,
+        isLoading: false,
+        objects: action.objects,
+        error: null,
+        isLimited: true,
+        limitMessage: action.message,
+      };
     case 'RESET':
       return initialState;
     default:
@@ -53,6 +64,8 @@ const initialState: BrowserState = {
   objects: [],
   isLoading: false,
   error: null,
+  isLimited: false,
+  limitMessage: null,
 };
 
 const MAX_OBJECTS = 10000;
@@ -126,9 +139,11 @@ export function BrowserProvider({
 
           if (exceedsLimit) {
             if (requestId === requestIdRef.current) {
+              const limitedObjects = sortObjects(aggregated.slice(0, MAX_OBJECTS));
               dispatch({
-                type: 'FETCH_LIMIT_EXCEEDED',
-                error: `Folders containing more than ${MAX_OBJECTS} items are not supported`,
+                type: 'FETCH_LIMIT_REACHED',
+                objects: limitedObjects,
+                message: `Results limited to the first ${MAX_OBJECTS} items because this folder contains more than ${MAX_OBJECTS} results.`,
               });
               lastFetchedPathRef.current = path;
             }
@@ -215,12 +230,14 @@ export function BrowserProvider({
       objects: state.objects,
       isLoading: state.isLoading,
       error: state.error,
+      isLimited: state.isLimited,
+      limitMessage: state.limitMessage,
       navigateTo,
       navigateUp,
       refresh,
       pathSegments: getPathSegments(currentPath),
     }),
-    [currentPath, state.objects, state.isLoading, state.error, navigateTo, navigateUp, refresh]
+    [currentPath, state.objects, state.isLoading, state.error, state.isLimited, state.limitMessage, navigateTo, navigateUp, refresh]
   );
 
   return (
