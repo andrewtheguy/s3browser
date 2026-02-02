@@ -3,6 +3,11 @@ import { getLoginPassword, createHmacSignature, timingSafeCompare } from '../db/
 
 const TOKEN_EXPIRATION_HOURS = 4;
 const CLOCK_SKEW_SECONDS = 30;
+const JWT_ALGORITHM = 'HS256';
+const JWT_TYPE = 'JWT';
+const JWT_HEADER_B64 = Buffer.from(
+  JSON.stringify({ alg: JWT_ALGORITHM, typ: JWT_TYPE })
+).toString('base64url');
 
 // Unique cookie name for this application
 export const AUTH_COOKIE_NAME = 's3browser_auth_token';
@@ -47,9 +52,10 @@ export function createAuthToken(): string {
   };
 
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const signature = createHmacSignature(payloadB64, getSigningKey());
+  const signingInput = `${JWT_HEADER_B64}.${payloadB64}`;
+  const signature = createHmacSignature(signingInput, getSigningKey());
 
-  return `${payloadB64}.${signature}`;
+  return `${JWT_HEADER_B64}.${payloadB64}.${signature}`;
 }
 
 export function verifyAuthToken(token: string): boolean {
@@ -58,14 +64,30 @@ export function verifyAuthToken(token: string): boolean {
   }
 
   const parts = token.split('.');
-  if (parts.length !== 2) {
+  if (parts.length !== 3) {
     return false;
   }
 
-  const [payloadB64, signature] = parts;
+  const [headerB64, payloadB64, signature] = parts;
+
+  // Parse and validate header
+  let header: { alg?: string; typ?: string };
+  try {
+    header = JSON.parse(Buffer.from(headerB64, 'base64url').toString('utf8')) as {
+      alg?: string;
+      typ?: string;
+    };
+  } catch {
+    return false;
+  }
+
+  if (header.alg !== JWT_ALGORITHM || header.typ !== JWT_TYPE) {
+    return false;
+  }
 
   // Verify signature
-  const expectedSignature = createHmacSignature(payloadB64, getSigningKey());
+  const signingInput = `${headerB64}.${payloadB64}`;
+  const expectedSignature = createHmacSignature(signingInput, getSigningKey());
   if (!timingSafeCompare(signature, expectedSignature)) {
     return false;
   }
