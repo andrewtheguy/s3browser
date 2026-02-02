@@ -44,8 +44,9 @@ export function UploadProgress({
         <h3 className="text-sm font-medium mb-2">
           Uploads ({uploads.length})
         </h3>
-        <ul className="space-y-2">
-          {uploads.map((upload) => {
+        <div className="max-h-[300px] overflow-y-auto">
+          <ul className="space-y-2">
+            {uploads.map((upload) => {
             const displayName = upload.relativePath || upload.fileName;
             return (
               <li
@@ -180,7 +181,8 @@ export function UploadProgress({
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </div>
       </div>
     </TooltipProvider>
   );
