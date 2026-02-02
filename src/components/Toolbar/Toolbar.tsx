@@ -30,6 +30,12 @@ import {
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { buildSelectBucketUrl } from '../../utils/urlEncoding';
 
+const SEED_TEST_ITEM_COUNT = 10005;
+const seedEnv = import.meta.env as { MODE?: string; VITE_FEATURE_SEED_TEST_ITEMS?: string };
+const seedFeatureEnabled = seedEnv.VITE_FEATURE_SEED_TEST_ITEMS === 'true'
+  || seedEnv.VITE_FEATURE_SEED_TEST_ITEMS === '1';
+const seedButtonEnabled = seedEnv.MODE !== 'production' || seedFeatureEnabled;
+
 interface ToolbarProps {
   onUploadClick: () => void;
   onCreateFolderClick: () => void;
@@ -134,6 +140,21 @@ export function Toolbar({
               </TooltipTrigger>
               <TooltipContent>Refresh</TooltipContent>
             </Tooltip>
+            {seedButtonEnabled && onSeedTestItems && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={onSeedTestItems}
+                    disabled={isSeedingTestItems}
+                  >
+                    <FlaskConical className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Seed {SEED_TEST_ITEM_COUNT} test items</TooltipContent>
+              </Tooltip>
+            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" size="icon" onClick={handleManageConnections}>
@@ -216,17 +237,17 @@ export function Toolbar({
               <TooltipContent>Upload</TooltipContent>
             </Tooltip>
 
-            {onSeedTestItems && (
+            {seedButtonEnabled && onSeedTestItems && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="outline" onClick={onSeedTestItems} disabled={isSeedingTestItems}>
                     <FlaskConical className="h-4 w-4 mr-2 sm:mr-1" />
                     <span className="hidden sm:inline">
-                      {isSeedingTestItems ? 'Seeding...' : 'Seed 10,005'}
+                      {isSeedingTestItems ? 'Seeding...' : `Seed ${SEED_TEST_ITEM_COUNT}`}
                     </span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Seed 10,005 test items</TooltipContent>
+                <TooltipContent>Seed {SEED_TEST_ITEM_COUNT} test items</TooltipContent>
               </Tooltip>
             )}
 

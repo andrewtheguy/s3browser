@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, FolderX } from 'lucide-react';
 import {
   Table,
@@ -118,6 +118,11 @@ export function FileList({
     () => sortedObjects.slice(pageStartIndex, pageEndIndex),
     [sortedObjects, pageStartIndex, pageEndIndex]
   );
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination when list changes
+    setCurrentPage(1);
+  }, [objects]);
   const paginationItems = useMemo(() => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, index) => index + 1);
