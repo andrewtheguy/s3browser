@@ -170,12 +170,12 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={info.versioning.status}
+                      label={info.versioning?.status || 'Disabled'}
                       size="small"
-                      color={info.versioning.status === 'Enabled' ? 'success' : 'default'}
+                      color={info.versioning?.status === 'Enabled' ? 'success' : 'default'}
                       variant="outlined"
                     />
-                    {info.versioning.mfaDelete === 'Enabled' && (
+                    {info.versioning?.mfaDelete === 'Enabled' && (
                       <Chip
                         label="MFA Delete"
                         size="small"
@@ -191,10 +191,22 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                     Default Encryption
                   </TableCell>
                   <TableCell>
-                    {info.encryption?.enabled === true ? (
+                    {info.encryptionError ? (
+                      <Box>
+                        <Chip label="Unknown" size="small" color="warning" variant="outlined" />
+                        <Typography
+                          variant="caption"
+                          display="block"
+                          color="text.secondary"
+                          sx={{ mt: 0.5 }}
+                        >
+                          {info.encryptionError}
+                        </Typography>
+                      </Box>
+                    ) : info.encryption?.algorithm ? (
                       <Box>
                         <Chip
-                          label={info.encryption.type}
+                          label={info.encryption.algorithm}
                           size="small"
                           color="success"
                           variant="outlined"
@@ -210,22 +222,8 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                           </Typography>
                         )}
                       </Box>
-                    ) : info.encryption?.enabled === false ? (
-                      <Chip label="None" size="small" variant="outlined" />
                     ) : (
-                      <Box>
-                        <Chip label="Unknown" size="small" color="warning" variant="outlined" />
-                        {info.encryption?.error && (
-                          <Typography
-                            variant="caption"
-                            display="block"
-                            color="text.secondary"
-                            sx={{ mt: 0.5 }}
-                          >
-                            {info.encryption.error}
-                          </Typography>
-                        )}
-                      </Box>
+                      <Chip label="None" size="small" variant="outlined" />
                     )}
                   </TableCell>
                 </TableRow>

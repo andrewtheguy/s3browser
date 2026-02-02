@@ -33,15 +33,14 @@ interface LifecycleRule {
 
 interface BucketInfo {
   versioning: {
-    status: 'Enabled' | 'Suspended' | 'Disabled';
-    mfaDelete?: 'Enabled' | 'Disabled';
-  };
-  encryption: {
-    enabled: boolean | null;
-    type?: string;
-    kmsKeyId?: string;
-    error?: string;
+    status?: string;
+    mfaDelete?: string;
   } | null;
+  encryption: {
+    algorithm?: string;
+    kmsKeyId?: string;
+  } | null;
+  encryptionError?: string;
   lifecycleRules: LifecycleRule[];
 }
 
@@ -56,7 +55,7 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
   }
 
   const result: BucketInfo = {
-    versioning: { status: 'Disabled' },
+    versioning: null,
     encryption: null,
     lifecycleRules: [],
   };
@@ -66,11 +65,11 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
     const versioningCommand = new GetBucketVersioningCommand({ Bucket: bucket });
     const versioningResponse = await client.send(versioningCommand);
     result.versioning = {
-      status: versioningResponse.Status ?? 'Disabled',
+      status: versioningResponse.Status,
       mfaDelete: versioningResponse.MFADelete,
     };
   } catch (err) {
-    // If we can't get versioning, leave as default
+    // If we can't get versioning, leave as null
     console.error('Failed to get bucket versioning:', err);
   }
 
@@ -82,32 +81,21 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
     if (rules && rules.length > 0) {
       const defaultRule = rules[0].ApplyServerSideEncryptionByDefault;
       if (defaultRule) {
-        let encryptionType: string | undefined = defaultRule.SSEAlgorithm;
-        if (encryptionType === 'AES256') {
-          encryptionType = 'SSE-S3 (AES-256)';
-        } else if (encryptionType === 'aws:kms') {
-          encryptionType = 'SSE-KMS';
-        }
         result.encryption = {
-          enabled: true,
-          type: encryptionType,
+          algorithm: defaultRule.SSEAlgorithm,
           kmsKeyId: defaultRule.KMSMasterKeyID,
         };
       }
     }
   } catch (err: unknown) {
     const errorName = (err as { name?: string })?.name;
-    if (errorName === 'ServerSideEncryptionConfigurationNotFoundError') {
-      // No encryption configured - this is a known state
-      result.encryption = { enabled: false };
-    } else {
-      // Other errors - unknown encryption state
+    if (errorName !== 'ServerSideEncryptionConfigurationNotFoundError') {
+      // Real error - store for display
       console.error('Failed to get bucket encryption:', err);
-      result.encryption = {
-        enabled: null,
-        error: 'Unable to retrieve encryption settings',
-      };
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      result.encryptionError = errorName ? `${errorName}: ${errorMessage}` : errorMessage;
     }
+    // ServerSideEncryptionConfigurationNotFoundError means no encryption - leave as null
   }
 
   // Get lifecycle rules

@@ -25,15 +25,14 @@ export interface LifecycleRule {
 
 export interface BucketInfo {
   versioning: {
-    status: 'Enabled' | 'Suspended' | 'Disabled';
-    mfaDelete?: 'Enabled' | 'Disabled';
-  };
-  encryption: {
-    enabled: boolean | null;
-    type?: string;
-    kmsKeyId?: string;
-    error?: string;
+    status?: string;
+    mfaDelete?: string;
   } | null;
+  encryption: {
+    algorithm?: string;
+    kmsKeyId?: string;
+  } | null;
+  encryptionError?: string;
   lifecycleRules: LifecycleRule[];
 }
 
