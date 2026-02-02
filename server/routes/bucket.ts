@@ -37,9 +37,10 @@ interface BucketInfo {
     mfaDelete?: 'Enabled' | 'Disabled';
   };
   encryption: {
-    enabled: boolean;
+    enabled: boolean | null;
     type?: string;
     kmsKeyId?: string;
+    error?: string;
   } | null;
   lifecycleRules: LifecycleRule[];
 }
@@ -95,12 +96,18 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
       }
     }
   } catch (err: unknown) {
-    // ServerSideEncryptionConfigurationNotFoundError means no encryption configured
     const errorName = (err as { name?: string })?.name;
-    if (errorName !== 'ServerSideEncryptionConfigurationNotFoundError') {
+    if (errorName === 'ServerSideEncryptionConfigurationNotFoundError') {
+      // No encryption configured - this is a known state
+      result.encryption = { enabled: false };
+    } else {
+      // Other errors - unknown encryption state
       console.error('Failed to get bucket encryption:', err);
+      result.encryption = {
+        enabled: null,
+        error: 'Unable to retrieve encryption settings',
+      };
     }
-    result.encryption = { enabled: false };
   }
 
   // Get lifecycle rules

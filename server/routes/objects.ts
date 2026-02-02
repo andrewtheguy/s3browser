@@ -184,9 +184,9 @@ router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req:
     return;
   }
 
-  // Validate key to prevent path traversal and invalid paths
-  if (key.includes('../') || key.startsWith('/')) {
-    res.status(400).json({ error: 'Invalid object key' });
+  const keyValidation = validateKey(key);
+  if (!keyValidation.valid) {
+    res.status(400).json({ error: keyValidation.error });
     return;
   }
 
@@ -708,7 +708,17 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     Key: key,
   });
 
-  const response = await client.send(command);
+  let response;
+  try {
+    response = await client.send(command);
+  } catch (err: unknown) {
+    const errorName = (err as { name?: string })?.name;
+    if (errorName === 'NotFound' || errorName === 'NoSuchKey') {
+      res.status(404).json({ error: 'Object not found' });
+      return;
+    }
+    throw err;
+  }
 
   // Build encryption info
   let encryption: string | null = null;

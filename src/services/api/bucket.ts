@@ -29,9 +29,10 @@ export interface BucketInfo {
     mfaDelete?: 'Enabled' | 'Disabled';
   };
   encryption: {
-    enabled: boolean;
+    enabled: boolean | null;
     type?: string;
     kmsKeyId?: string;
+    error?: string;
   } | null;
   lifecycleRules: LifecycleRule[];
 }

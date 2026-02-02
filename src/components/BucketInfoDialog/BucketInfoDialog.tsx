@@ -105,6 +105,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
     if (!open || !activeConnectionId || !bucket) {
       setInfo(null);
       setError(null);
+      setIsLoading(false);
       return;
     }
 
@@ -190,7 +191,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                     Default Encryption
                   </TableCell>
                   <TableCell>
-                    {info.encryption?.enabled ? (
+                    {info.encryption?.enabled === true ? (
                       <Box>
                         <Chip
                           label={info.encryption.type}
@@ -209,8 +210,22 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                           </Typography>
                         )}
                       </Box>
-                    ) : (
+                    ) : info.encryption?.enabled === false ? (
                       <Chip label="None" size="small" variant="outlined" />
+                    ) : (
+                      <Box>
+                        <Chip label="Unknown" size="small" color="warning" variant="outlined" />
+                        {info.encryption?.error && (
+                          <Typography
+                            variant="caption"
+                            display="block"
+                            color="text.secondary"
+                            sx={{ mt: 0.5 }}
+                          >
+                            {info.encryption.error}
+                          </Typography>
+                        )}
+                      </Box>
                     )}
                   </TableCell>
                 </TableRow>
