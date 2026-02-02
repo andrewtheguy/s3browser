@@ -680,4 +680,61 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
   res.json(result);
 });
 
+// GET /api/objects/:connectionId/:bucket/metadata?key=...
+router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const key = req.query.key as string | undefined;
+
+  if (!key) {
+    res.status(400).json({ error: 'Object key is required' });
+    return;
+  }
+
+  const keyValidation = validateKey(key);
+  if (!keyValidation.valid) {
+    res.status(400).json({ error: keyValidation.error });
+    return;
+  }
+
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
+
+  if (!bucket || !client) {
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+
+  const command = new HeadObjectCommand({
+    Bucket: bucket,
+    Key: key,
+  });
+
+  const response = await client.send(command);
+
+  // Build encryption info
+  let encryption: string | null = null;
+  if (response.ServerSideEncryption) {
+    if (response.ServerSideEncryption === 'AES256') {
+      encryption = 'SSE-S3 (AES-256)';
+    } else if (response.ServerSideEncryption === 'aws:kms') {
+      encryption = response.SSEKMSKeyId
+        ? `SSE-KMS (${response.SSEKMSKeyId})`
+        : 'SSE-KMS';
+    } else {
+      encryption = response.ServerSideEncryption;
+    }
+  } else if (response.SSECustomerAlgorithm) {
+    encryption = `SSE-C (${response.SSECustomerAlgorithm})`;
+  }
+
+  res.json({
+    key,
+    size: response.ContentLength,
+    lastModified: response.LastModified?.toISOString(),
+    contentType: response.ContentType,
+    etag: response.ETag,
+    encryption,
+    storageClass: response.StorageClass ?? 'STANDARD',
+  });
+});
+
 export default router;
