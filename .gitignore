@@ -44,3 +44,5 @@ package-lock.json
 .*.bun-build
 
 tsconfig.server.tsbuildinfo
+
+tmp/
