@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { TableRow, TableCell, IconButton, Tooltip, Box, Typography, Checkbox } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
@@ -15,9 +16,11 @@ import LinkIcon from '@mui/icons-material/Link';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { S3Object } from '../../types';
 import { formatFileSize, formatDate } from '../../utils/formatters';
 import { getFileIconType, type FileIconType } from '../../utils/fileIcons';
+import { FileDetailsDialog } from './FileDetailsDialog';
 
 interface FileListItemProps {
   item: S3Object;
@@ -119,7 +122,19 @@ export function FileListItem({
     e.stopPropagation();
   };
 
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDetailsOpen(true);
+  };
+
+  const handleDetailsClose = () => {
+    setDetailsOpen(false);
+  };
+
   return (
+  <>
     <TableRow
       hover
       onClick={handleClick}
@@ -148,21 +163,28 @@ export function FileListItem({
       </TableCell>
       <TableCell sx={{ minWidth: 120 }}>
         <Box>
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: item.isFolder ? 500 : 400,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              display: 'block',
-              maxWidth: 'clamp(140px, 35vw, 320px)',
-              '&:hover': item.isFolder ? { textDecoration: 'underline' } : {},
-            }}
+          <Tooltip
+            title={item.name + (item.isFolder ? '/' : '')}
+            placement="bottom-start"
+            enterDelay={500}
+            enterTouchDelay={300}
           >
-            {item.name}
-            {item.isFolder && '/'}
-          </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: item.isFolder ? 500 : 400,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                display: 'block',
+                maxWidth: 'clamp(140px, 35vw, 320px)',
+                '&:hover': item.isFolder ? { textDecoration: 'underline' } : {},
+              }}
+            >
+              {item.name}
+              {item.isFolder && '/'}
+            </Typography>
+          </Tooltip>
         </Box>
       </TableCell>
       <TableCell sx={{ width: { xs: 72, sm: 100 } }}>
@@ -175,8 +197,13 @@ export function FileListItem({
           {formatDate(item.lastModified)}
         </Typography>
       </TableCell>
-      <TableCell sx={{ width: 160 }} align="right">
+      <TableCell sx={{ width: 180 }} align="right">
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Tooltip title="Details" placement="top-start">
+            <IconButton size="small" onClick={handleInfoClick}>
+              <InfoOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           {!item.isFolder && (
             <>
               <Tooltip title="Copy presigned URL (24h)" placement="top-start">
@@ -212,5 +239,7 @@ export function FileListItem({
         </Box>
       </TableCell>
     </TableRow>
+    <FileDetailsDialog open={detailsOpen} item={item} onClose={handleDetailsClose} />
+  </>
   );
 }
