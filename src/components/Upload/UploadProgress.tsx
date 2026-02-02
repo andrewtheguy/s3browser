@@ -46,7 +46,7 @@ export function UploadProgress({
       </Typography>
       <List dense>
         {uploads.map((upload) => {
-          const displayName = upload.relativePath || upload.file.name;
+          const displayName = upload.relativePath || upload.fileName;
           return (
             <ListItem
               key={upload.id}
