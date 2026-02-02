@@ -17,12 +17,14 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import LogoutIcon from '@mui/icons-material/Logout';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SettingsIcon from '@mui/icons-material/Settings';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { buildSelectBucketUrl } from '../../utils/urlEncoding';
 
 interface ToolbarProps {
   onUploadClick: () => void;
   onCreateFolderClick: () => void;
+  onBucketInfoClick: () => void;
   selectedCount?: number;
   onBatchDelete?: () => void;
   isDeleting?: boolean;
@@ -33,6 +35,7 @@ interface ToolbarProps {
 export function Toolbar({
   onUploadClick,
   onCreateFolderClick,
+  onBucketInfoClick,
   selectedCount = 0,
   onBatchDelete,
   isDeleting = false,
@@ -182,15 +185,22 @@ export function Toolbar({
           mb: { xs: 1, sm: 2 },
         }}
       >
-        <Tooltip title="Click to change bucket">
-          <Chip
-            label={`Bucket: ${credentials?.bucket ?? '—'}`}
-            color="primary"
-            variant="outlined"
-            onClick={handleChangeBucket}
-            sx={{ fontWeight: 500, cursor: 'pointer' }}
-          />
-        </Tooltip>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Tooltip title="Click to change bucket">
+            <Chip
+              label={`Bucket: ${credentials?.bucket ?? '—'}`}
+              color="primary"
+              variant="outlined"
+              onClick={handleChangeBucket}
+              sx={{ fontWeight: 500, cursor: 'pointer' }}
+            />
+          </Tooltip>
+          <Tooltip title="Bucket settings">
+            <IconButton size="small" onClick={onBucketInfoClick}>
+              <InfoOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
 
         <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5 }}>
           {refreshAction}

@@ -25,6 +25,7 @@ import { DeleteDialog } from '../DeleteDialog';
 import { PreviewDialog } from '../PreviewDialog';
 import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDialog';
 import { CopyMoveDialog } from '../CopyMoveDialog';
+import { BucketInfoDialog } from '../BucketInfoDialog';
 import { useBrowserContext } from '../../contexts';
 import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove } from '../../hooks';
 import type { S3Object } from '../../types';
@@ -85,6 +86,17 @@ export function S3Browser() {
   const [copyMoveResolveError, setCopyMoveResolveError] = useState<string | null>(null);
   const [copyMoveProgress, setCopyMoveProgress] = useState<{ completed: number; total: number } | undefined>(undefined);
   const [copyMoveNewName, setCopyMoveNewName] = useState('');
+
+  // Bucket info state
+  const [bucketInfoOpen, setBucketInfoOpen] = useState(false);
+
+  const handleBucketInfoClick = useCallback(() => {
+    setBucketInfoOpen(true);
+  }, []);
+
+  const handleBucketInfoClose = useCallback(() => {
+    setBucketInfoOpen(false);
+  }, []);
 
   const showSnackbar = useCallback(
     (message: string, severity: SnackbarState['severity']) => {
@@ -552,6 +564,7 @@ export function S3Browser() {
         <Toolbar
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}
+          onBucketInfoClick={handleBucketInfoClick}
           selectedCount={selectedKeys.size}
           onBatchDelete={handleBatchDeleteRequest}
           isDeleting={isDeleting}
@@ -714,6 +727,8 @@ export function S3Browser() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <BucketInfoDialog open={bucketInfoOpen} onClose={handleBucketInfoClose} />
 
       <Snackbar
         open={snackbar.open}
