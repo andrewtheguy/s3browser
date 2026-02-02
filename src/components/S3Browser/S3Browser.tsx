@@ -631,11 +631,13 @@ export function S3Browser() {
         </div>
       </div>
 
-      <UploadDialog
-        open={uploadDialogOpen}
-        onClose={handleUploadDialogClose}
-        onUploadComplete={handleUploadComplete}
-      />
+      {uploadDialogOpen && (
+        <UploadDialog
+          open={uploadDialogOpen}
+          onClose={handleUploadDialogClose}
+          onUploadComplete={handleUploadComplete}
+        />
+      )}
 
       <DeleteDialog
         open={deleteDialogOpen}

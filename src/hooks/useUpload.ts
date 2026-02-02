@@ -42,6 +42,27 @@ export function useUpload() {
   const uploadsRef = useRef<UploadProgress[]>(uploads);
   const pendingResumableRef = useRef<PersistedUpload[]>(pendingResumable);
 
+  const releaseUploadFileReferences = useCallback(() => {
+    if (uploadsRef.current.length === 0) return;
+    for (const upload of uploadsRef.current) {
+      upload.file = null;
+    }
+  }, []);
+
+  const resetQueueState = useCallback(() => {
+    pendingQueueRef.current = [];
+    queuedIdsRef.current.clear();
+    inFlightIdsRef.current.clear();
+    cancelledIdsRef.current.clear();
+  }, []);
+
+  const releaseUploadFileReference = useCallback((id: string) => {
+    const uploadItem = uploadsRef.current.find((upload) => upload.id === id);
+    if (uploadItem) {
+      uploadItem.file = null;
+    }
+  }, []);
+
   // Keep refs in sync with state
   useEffect(() => {
     uploadsRef.current = uploads;
@@ -106,6 +127,12 @@ export function useUpload() {
     };
   }, []);
 
+  useEffect(() => {
+    if (uploads.length === 0) {
+      resetQueueState();
+    }
+  }, [uploads.length, resetQueueState]);
+
   const updateUpload = useCallback(
     (id: string, updates: Partial<UploadProgress>) => {
       setUploadsAndSync((prev) =>
@@ -122,11 +149,12 @@ export function useUpload() {
         count: prev.count + 1,
         size: prev.size + fileSize,
       }));
+      releaseUploadFileReference(id);
       setUploadsAndSync((prev) => {
         return prev.filter((u) => u.id !== id);
       });
     },
-    [setUploadsAndSync]
+    [releaseUploadFileReference, setUploadsAndSync]
   );
 
   const uploadSingleFileWithProxy = useCallback(
@@ -521,13 +549,21 @@ export function useUpload() {
         }
       }
 
+      releaseUploadFileReference(id);
       setUploadsAndSync((prev) => prev.filter((u) => u.id !== id));
 
       if (refresh) {
         void refreshPendingUploads();
       }
     },
-    [activeConnectionId, bucket, refreshPendingUploads, removeFromQueue, setUploadsAndSync]
+    [
+      activeConnectionId,
+      bucket,
+      refreshPendingUploads,
+      releaseUploadFileReference,
+      removeFromQueue,
+      setUploadsAndSync,
+    ]
   );
 
   const cancelUpload = useCallback(
@@ -606,9 +642,11 @@ export function useUpload() {
 
   const clearAll = useCallback(async () => {
     await cancelAll();
+    releaseUploadFileReferences();
+    resetQueueState();
     setUploadsAndSync(() => []);
     setCompletedStats({ count: 0, size: 0 });
-  }, [cancelAll, setUploadsAndSync]);
+  }, [cancelAll, releaseUploadFileReferences, resetQueueState, setUploadsAndSync]);
 
   const removePendingResumable = useCallback(async (persistenceId: string) => {
     // Get the persisted upload to abort S3 if needed (read from ref to avoid stale closure)
