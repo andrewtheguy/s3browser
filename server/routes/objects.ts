@@ -301,7 +301,11 @@ router.post('/:connectionId/:bucket/folder', s3Middleware, requireBucket, async 
 const MULTIPART_THRESHOLD = 5 * 1024 * 1024 * 1024;
 const PART_SIZE = 100 * 1024 * 1024; // 100MB parts
 
-// Maximum objects per batch operation (S3 DeleteObjects API limit is 1000)
+// Maximum objects per batch operation (S3 DeleteObjects API limit is 1000).
+// To support more than 1000 objects, batch operations would need to:
+// 1. Chunk operations into groups of 1000
+// 2. Use pagination (continuationToken) when listing objects for folder operations
+// 3. Handle partial failures across chunks
 const MAX_BATCH_OPERATIONS = 1000;
 
 function validateKey(key: string): { valid: true } | { valid: false; error: string } {
