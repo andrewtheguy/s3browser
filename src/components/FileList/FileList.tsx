@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { ArrowDown, ArrowUp, ArrowUpDown, FolderX } from 'lucide-react';
 import {
   Table,
@@ -40,6 +41,7 @@ const DEFAULT_SORT_DIRECTION: Record<SortKey, SortDirection> = {
   size: 'desc',
   lastModified: 'desc',
 };
+const PAGE_QUERY_PARAM = 'page';
 
 export function FileList({
   onDeleteRequest,
@@ -55,6 +57,7 @@ export function FileList({
 }: FileListProps) {
   const { objects, isLoading, error, navigateTo, isLimited, limitMessage } = useBrowserContext();
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
     key: 'name',
     direction: DEFAULT_SORT_DIRECTION.name,
@@ -121,9 +124,44 @@ export function FileList({
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination when list changes
-    setCurrentPage(1);
-  }, [objects]);
+    if (isLoading) {
+      return;
+    }
+
+    const pageParam = searchParams.get(PAGE_QUERY_PARAM);
+    const parsedPage = pageParam ? Number(pageParam) : NaN;
+    const hasValidPageParam = Number.isFinite(parsedPage) && parsedPage >= 1;
+
+    let nextPage = 1;
+    if (totalPages > 1 && hasValidPageParam) {
+      nextPage = Math.min(totalPages, Math.floor(parsedPage));
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync pagination with query params
+    setCurrentPage((prev) => (prev === nextPage ? prev : nextPage));
+  }, [isLoading, searchParams, totalPages]);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    if (totalPages <= 1) {
+      if (searchParams.has(PAGE_QUERY_PARAM)) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete(PAGE_QUERY_PARAM);
+        setSearchParams(nextParams, { replace: true });
+      }
+      return;
+    }
+
+    const pageValue = String(clampedPage);
+    if (searchParams.get(PAGE_QUERY_PARAM) !== pageValue) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(PAGE_QUERY_PARAM, pageValue);
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [clampedPage, isLoading, searchParams, setSearchParams, totalPages]);
   const paginationItems = useMemo(() => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, index) => index + 1);
