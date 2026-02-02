@@ -28,7 +28,9 @@ export interface S3ListResult {
 
 export interface UploadProgress {
   id: string;
-  file: File;
+  file: File | null;
+  fileName: string;
+  fileLastModified: number;
   key: string;
   relativePath?: string;
   loaded: number;

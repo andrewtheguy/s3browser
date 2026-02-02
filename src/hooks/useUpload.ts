@@ -115,6 +115,9 @@ export function useUpload() {
         throw new Error('Not connected to S3');
       }
       const { file, key } = uploadItem;
+      if (!file) {
+        throw new Error('File reference is no longer available for upload');
+      }
 
       // Upload through server proxy
       await uploadSingleFile(
@@ -147,6 +150,9 @@ export function useUpload() {
         throw new Error('Not connected to S3');
       }
       const { file, key } = uploadItem;
+      if (!file) {
+        throw new Error('File reference is no longer available for upload');
+      }
       const totalParts = Math.ceil(file.size / UPLOAD_CONFIG.PART_SIZE);
 
       // Save to persistence if this is a new upload
@@ -277,6 +283,14 @@ export function useUpload() {
         return;
       }
 
+      if (!uploadItem.file) {
+        updateUpload(id, {
+          status: 'error',
+          error: 'File reference is no longer available. Please re-add the file.',
+        });
+        return;
+      }
+
       const abortController = new AbortController();
       abortControllersRef.current.set(id, abortController);
       updateUpload(id, { status: 'uploading', error: undefined });
@@ -304,6 +318,7 @@ export function useUpload() {
             percentage: 100,
             canResume: false,
             completedParts: result.completedParts.length,
+            file: null,
           });
         } else {
           await uploadSingleFileWithProxy(uploadItem, abortController);
@@ -312,6 +327,7 @@ export function useUpload() {
             status: 'completed',
             percentage: 100,
             canResume: false,
+            file: null,
           });
         }
       } catch (err) {
@@ -413,6 +429,8 @@ export function useUpload() {
         const uploadProgress: UploadProgress = {
           id: crypto.randomUUID(),
           file,
+          fileName: file.name,
+          fileLastModified: file.lastModified,
           key,
           relativePath: displayPath,
           loaded: 0,
