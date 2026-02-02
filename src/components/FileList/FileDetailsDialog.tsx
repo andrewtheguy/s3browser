@@ -40,6 +40,7 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
     if (!open || !item || item.isFolder || !activeConnectionId || !bucket) {
       setMetadata(null);
       setError(null);
+      setIsLoading(false);
       return;
     }
 
