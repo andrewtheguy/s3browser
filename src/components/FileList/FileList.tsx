@@ -54,6 +54,33 @@ export function FileList({
     () => objects.slice(pageStartIndex, pageEndIndex),
     [objects, pageStartIndex, pageEndIndex]
   );
+  const paginationItems = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const items: Array<number | 'ellipsis'> = [];
+    const windowSize = 2;
+    const leftBoundary = Math.max(2, clampedPage - windowSize);
+    const rightBoundary = Math.min(totalPages - 1, clampedPage + windowSize);
+
+    items.push(1);
+
+    if (leftBoundary > 2) {
+      items.push('ellipsis');
+    }
+
+    for (let page = leftBoundary; page <= rightBoundary; page += 1) {
+      items.push(page);
+    }
+
+    if (rightBoundary < totalPages - 1) {
+      items.push('ellipsis');
+    }
+
+    items.push(totalPages);
+    return items;
+  }, [totalPages, clampedPage]);
 
   const selectableItems = objects;
   const selectableCount = selectableItems.length;
@@ -179,11 +206,19 @@ export function FileList({
         </Table>
       </div>
       {totalItems > pageSize && (
-        <div className="flex flex-wrap items-center justify-between gap-2 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 py-4">
           <div className="text-sm text-muted-foreground">
             Showing {pageStartIndex + 1}-{pageEndIndex} of {totalItems}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(1)}
+              disabled={clampedPage === 1}
+            >
+              First
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -192,9 +227,26 @@ export function FileList({
             >
               Previous
             </Button>
-            <span className="text-sm text-muted-foreground">
-              Page {clampedPage} of {totalPages}
-            </span>
+            {paginationItems.map((item, index) => {
+              if (item === 'ellipsis') {
+                return (
+                  <span key={`ellipsis-${index}`} className="px-2 text-sm text-muted-foreground">
+                    …
+                  </span>
+                );
+              }
+
+              return (
+                <Button
+                  key={item}
+                  variant={item === clampedPage ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCurrentPage(item)}
+                >
+                  {item}
+                </Button>
+              );
+            })}
             <Button
               variant="outline"
               size="sm"
@@ -202,6 +254,14 @@ export function FileList({
               disabled={clampedPage === totalPages}
             >
               Next
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={clampedPage === totalPages}
+            >
+              Last
             </Button>
           </div>
         </div>
