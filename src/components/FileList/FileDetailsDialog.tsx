@@ -168,9 +168,19 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                         Encryption
                       </TableCell>
                       <TableCell>
-                        {metadata.encryption ?? 'None'}
+                        {metadata.serverSideEncryption || metadata.sseCustomerAlgorithm || 'None'}
                       </TableCell>
                     </TableRow>
+                    {metadata.sseKmsKeyId && (
+                      <TableRow>
+                        <TableCell component="th" sx={{ fontWeight: 500 }}>
+                          KMS Key ID
+                        </TableCell>
+                        <TableCell sx={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.85em' }}>
+                          {metadata.sseKmsKeyId}
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {item.etag && (
                       <TableRow>
                         <TableCell component="th" sx={{ fontWeight: 500 }}>

@@ -164,7 +164,9 @@ export interface ObjectMetadata {
   lastModified?: string;
   contentType?: string;
   etag?: string;
-  encryption?: string | null;
+  serverSideEncryption?: string;
+  sseKmsKeyId?: string;
+  sseCustomerAlgorithm?: string;
   storageClass?: string;
 }
 

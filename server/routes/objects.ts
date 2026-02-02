@@ -720,30 +720,16 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     throw err;
   }
 
-  // Build encryption info
-  let encryption: string | null = null;
-  if (response.ServerSideEncryption) {
-    if (response.ServerSideEncryption === 'AES256') {
-      encryption = 'SSE-S3 (AES-256)';
-    } else if (response.ServerSideEncryption === 'aws:kms') {
-      encryption = response.SSEKMSKeyId
-        ? `SSE-KMS (${response.SSEKMSKeyId})`
-        : 'SSE-KMS';
-    } else {
-      encryption = response.ServerSideEncryption;
-    }
-  } else if (response.SSECustomerAlgorithm) {
-    encryption = `SSE-C (${response.SSECustomerAlgorithm})`;
-  }
-
   res.json({
     key,
     size: response.ContentLength,
     lastModified: response.LastModified?.toISOString(),
     contentType: response.ContentType,
     etag: response.ETag,
-    encryption,
-    storageClass: response.StorageClass ?? 'STANDARD',
+    serverSideEncryption: response.ServerSideEncryption,
+    sseKmsKeyId: response.SSEKMSKeyId,
+    sseCustomerAlgorithm: response.SSECustomerAlgorithm,
+    storageClass: response.StorageClass,
   });
 });
 
