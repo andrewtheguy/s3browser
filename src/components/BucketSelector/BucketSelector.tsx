@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, RefreshCw, Settings } from 'lucide-react';
+import { LogOut, RefreshCw, ArrowLeftRight } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -224,8 +224,8 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
               onClick={() => void navigate('/')}
               disabled={isSelecting}
             >
-              <Settings className="h-4 w-4 mr-2" />
-              Manage Connections
+              <ArrowLeftRight className="h-4 w-4 mr-2" />
+              Choose Connection
             </Button>
             <Button
               variant="outline"

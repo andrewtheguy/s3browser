@@ -1,12 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { Trash2, LogOut, ArrowRight } from 'lucide-react';
+import { Trash2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
 import {
   Select,
@@ -41,14 +40,12 @@ interface S3ConnectionFormProps {
   error: string | null;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
-  onLogout: () => void;
 }
 
 export function S3ConnectionForm({
   error,
   isLoading,
   setIsLoading,
-  onLogout,
 }: S3ConnectionFormProps) {
   const navigate = useNavigate();
   const { connect, isLoggedIn, activeConnectionId, credentials: activeCredentials, isConnected } = useS3Client();
@@ -70,6 +67,14 @@ export function S3ConnectionForm({
     bucket: '',
     endpoint: 'https://s3.amazonaws.com',
   });
+
+  useEffect(() => {
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.removeAttribute('data-select-open');
+      }
+    };
+  }, []);
 
   const endpointValid = isValidUrl(formData.endpoint);
   const showEndpointError = endpointTouched && !endpointValid;
@@ -179,6 +184,17 @@ export function S3ConnectionForm({
     }
   };
 
+  const handleSelectOpenChange = useCallback((open: boolean) => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (open) {
+      document.body.setAttribute('data-select-open', 'true');
+    } else {
+      document.body.removeAttribute('data-select-open');
+    }
+  }, []);
+
   // Secret key is optional when using an existing saved connection (unless user wants to change it)
   const isExistingConnection = selectedConnectionId !== null;
   const secretKeyRequired = !isExistingConnection || wantsToChangeSecretKey;
@@ -192,19 +208,6 @@ export function S3ConnectionForm({
 
   return (
     <>
-      <div className="flex items-center justify-end mb-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onLogout}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Sign Out
-        </Button>
-      </div>
-
-      <Separator className="mb-4" />
-
       {deletionError && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription className="flex items-center justify-between">
@@ -253,6 +256,7 @@ export function S3ConnectionForm({
         <Select
           value={selectedConnectionId !== null ? String(selectedConnectionId) : 'new'}
           onValueChange={handleConnectionChange}
+          onOpenChange={handleSelectOpenChange}
           disabled={connectionsLoading}
         >
           <SelectTrigger id="connection-select">

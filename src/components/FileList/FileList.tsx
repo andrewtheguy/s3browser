@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { ArrowDown, ArrowUp, ArrowUpDown, FolderX } from 'lucide-react';
 import {
   Table,
@@ -8,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -39,6 +40,7 @@ const DEFAULT_SORT_DIRECTION: Record<SortKey, SortDirection> = {
   size: 'desc',
   lastModified: 'desc',
 };
+const PAGE_QUERY_PARAM = 'page';
 
 export function FileList({
   onDeleteRequest,
@@ -52,8 +54,13 @@ export function FileList({
   onSelectAll,
   selectionMode = false,
 }: FileListProps) {
-  const { objects, isLoading, error, navigateTo } = useBrowserContext();
-  const [currentPage, setCurrentPage] = useState(1);
+  const { objects, isLoading, error, navigateTo, isLimited, limitMessage } = useBrowserContext();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [currentPage, setCurrentPage] = useState(() => {
+    const pageParam = searchParams.get(PAGE_QUERY_PARAM);
+    const parsedPage = pageParam ? Number(pageParam) : NaN;
+    return Number.isFinite(parsedPage) && parsedPage >= 1 ? Math.floor(parsedPage) : 1;
+  });
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
     key: 'name',
     direction: DEFAULT_SORT_DIRECTION.name,
@@ -120,9 +127,44 @@ export function FileList({
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination when list changes
-    setCurrentPage(1);
-  }, [objects]);
+    if (isLoading) {
+      return;
+    }
+
+    const pageParam = searchParams.get(PAGE_QUERY_PARAM);
+    const parsedPage = pageParam ? Number(pageParam) : NaN;
+    const hasValidPageParam = Number.isFinite(parsedPage) && parsedPage >= 1;
+
+    let nextPage = 1;
+    if (totalPages > 1 && hasValidPageParam) {
+      nextPage = Math.min(totalPages, Math.floor(parsedPage));
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync pagination with query params
+    setCurrentPage((prev) => (prev === nextPage ? prev : nextPage));
+  }, [isLoading, searchParams, totalPages]);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    if (totalPages <= 1) {
+      if (searchParams.has(PAGE_QUERY_PARAM)) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete(PAGE_QUERY_PARAM);
+        setSearchParams(nextParams, { replace: true });
+      }
+      return;
+    }
+
+    const pageValue = String(clampedPage);
+    if (searchParams.get(PAGE_QUERY_PARAM) !== pageValue) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set(PAGE_QUERY_PARAM, pageValue);
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [clampedPage, isLoading, searchParams, setSearchParams, totalPages]);
   const paginationItems = useMemo(() => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -262,7 +304,13 @@ export function FileList({
 
   return (
     <>
-      <div className="overflow-x-auto">
+      {isLimited && (
+        <Alert className="mb-3 border-yellow-300 bg-yellow-50 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-200">
+          <AlertTitle>Results limited</AlertTitle>
+          <AlertDescription>{limitMessage || 'Results are limited for this folder.'}</AlertDescription>
+        </Alert>
+      )}
+      <div className={cn("overflow-x-auto", isLimited && "bg-yellow-100/70 dark:bg-yellow-900/20")}>
         <Table>
           <TableHeader>
             <TableRow>
