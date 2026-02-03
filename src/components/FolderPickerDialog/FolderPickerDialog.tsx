@@ -117,6 +117,7 @@ export function FolderPickerDialog({
           activeConnectionId,
           bucket,
           browsePath,
+          false,
           undefined,
           controller.signal
         );
@@ -176,7 +177,14 @@ export function FolderPickerDialog({
       if (controller.signal.aborted) return;
 
       // Refresh folder list
-      const result = await listObjects(activeConnectionId, bucket, browsePath, undefined, controller.signal);
+      const result = await listObjects(
+        activeConnectionId,
+        bucket,
+        browsePath,
+        false,
+        undefined,
+        controller.signal
+      );
 
       // Check if aborted before updating state
       if (controller.signal.aborted) return;

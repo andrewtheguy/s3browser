@@ -123,6 +123,11 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
     res.status(400).json({ error: keyValidation.error });
     return;
   }
+  const versionId = typeof req.query.versionId === 'string' &&
+    req.query.versionId.trim() &&
+    !hasUnsafeChars(req.query.versionId)
+    ? req.query.versionId
+    : undefined;
 
   // Parse TTL from query parameter, default to 1 hour (3600 seconds)
   const DEFAULT_TTL = 3600;
@@ -131,6 +136,10 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
   let ttl = DEFAULT_TTL;
 
   if (req.query.ttl !== undefined) {
+    if (Array.isArray(req.query.ttl)) {
+      res.status(400).json({ error: 'TTL must be a single value' });
+      return;
+    }
     const parsedTtl = parseInt(req.query.ttl as string, 10);
     if (isNaN(parsedTtl) || parsedTtl < MIN_TTL || parsedTtl > MAX_TTL) {
       res.status(400).json({ error: `TTL must be between ${MIN_TTL} and ${MAX_TTL} seconds` });
@@ -150,6 +159,7 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: keyValidation.validatedKey,
+    ...(versionId && { VersionId: versionId }),
     ...(disposition === 'inline' && { ResponseContentDisposition: 'inline' }),
     ...(disposition === 'attachment' && {
       ResponseContentDisposition: `attachment; filename="${filename}"`,

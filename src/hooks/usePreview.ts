@@ -94,9 +94,12 @@ export function usePreview() {
           bucket,
           item.key,
           PREVIEW_TTL_SECONDS,
-          'inline',
-          mimeType,
-          abortController.signal
+          {
+            disposition: 'inline',
+            contentType: mimeType,
+            signal: abortController.signal,
+            versionId: item.versionId,
+          }
         );
 
         // Verify this request is still the active one before updating state

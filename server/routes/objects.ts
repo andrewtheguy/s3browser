@@ -1,11 +1,13 @@
 import { Router, Response } from 'express';
 import {
   ListObjectsV2Command,
+  ListObjectVersionsCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
   PutObjectCommand,
   CopyObjectCommand,
   HeadObjectCommand,
+  type HeadObjectCommandInput,
   CreateMultipartUploadCommand,
   UploadPartCopyCommand,
   CompleteMultipartUploadCommand,
@@ -46,21 +48,22 @@ interface FolderRequestBody {
 }
 
 interface BatchDeleteRequestBody {
-  keys?: string[];
+  keys?: Array<{ key?: string; versionId?: string }>;
 }
 
 interface BatchDeleteResponse {
-  deleted: string[];
+  deleted: Array<{ key: string; versionId?: string }>;
   errors: Array<{ key: string; message: string }>;
 }
 
 interface CopyRequestBody {
   sourceKey?: string;
   destinationKey?: string;
+  versionId?: string;
 }
 
 interface BatchCopyRequestBody {
-  operations?: Array<{ sourceKey: string; destinationKey: string }>;
+  operations?: Array<{ sourceKey: string; destinationKey: string; versionId?: string }>;
 }
 
 interface BatchCopyMoveResponse {
@@ -79,6 +82,9 @@ interface S3Object {
   lastModified?: string;
   isFolder: boolean;
   etag?: string;
+  versionId?: string;
+  isLatest?: boolean;
+  isDeleteMarker?: boolean;
 }
 
 function extractFileName(key: string): string {
@@ -129,6 +135,30 @@ function sanitizeFolderPath(path: string): { valid: true; path: string } | { val
   return { valid: true, path: folderPath };
 }
 
+function decodeVersionToken(token?: string): { keyMarker?: string; versionIdMarker?: string } {
+  if (!token) {
+    return {};
+  }
+  try {
+    const decoded = Buffer.from(token, 'base64').toString('utf8');
+    const parsed = JSON.parse(decoded) as { keyMarker?: string; versionIdMarker?: string };
+    return {
+      keyMarker: parsed.keyMarker,
+      versionIdMarker: parsed.versionIdMarker,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function encodeVersionToken(keyMarker?: string, versionIdMarker?: string): string | null {
+  if (!keyMarker) {
+    return null;
+  }
+  const payload = JSON.stringify({ keyMarker, versionIdMarker });
+  return Buffer.from(payload, 'utf8').toString('base64');
+}
+
 async function seedTestItems(
   client: AuthenticatedRequest['s3Client'],
   bucket: string,
@@ -168,6 +198,7 @@ async function seedTestItems(
 router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const prefix = (req.query.prefix as string) || '';
   const continuationToken = (req.query.continuationToken as string) || undefined;
+  const includeVersions = req.query.versions === '1';
 
   const bucket = req.s3Credentials?.bucket;
   const client = req.s3Client;
@@ -178,55 +209,137 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
     return;
   }
 
-  const command = new ListObjectsV2Command({
-    Bucket: bucket,
-    Prefix: prefix,
-    Delimiter: '/',
-    MaxKeys: 1000,
-    ContinuationToken: continuationToken,
-  });
-
-  let response;
-  try {
-    response = await client.send(command);
-  } catch (err: unknown) {
-    if (isAccessDenied(err)) {
-      res.status(403).json({ error: 'Access denied' });
-      return;
-    }
-    console.error('Failed to list objects:', err);
-    res.status(500).json({ error: 'Internal server error' });
-    return;
-  }
+  let nextContinuationToken: string | null | undefined = null;
+  let isTruncated = false;
   const objects: S3Object[] = [];
 
-  // Add folders (CommonPrefixes)
-  if (response.CommonPrefixes) {
-    for (const prefixObj of response.CommonPrefixes) {
-      if (prefixObj.Prefix) {
-        objects.push({
-          key: prefixObj.Prefix,
-          name: extractFileName(prefixObj.Prefix),
-          isFolder: true,
-        });
-      }
-    }
-  }
+  if (includeVersions) {
+    const { keyMarker, versionIdMarker } = decodeVersionToken(continuationToken);
+    const command = new ListObjectVersionsCommand({
+      Bucket: bucket,
+      Prefix: prefix,
+      Delimiter: '/',
+      MaxKeys: 1000,
+      KeyMarker: keyMarker,
+      VersionIdMarker: versionIdMarker,
+    });
 
-  // Add files (Contents)
-  if (response.Contents) {
-    for (const item of response.Contents) {
-      if (item.Key && item.Key !== prefix) {
-        objects.push({
-          key: item.Key,
-          name: extractFileName(item.Key),
-          size: item.Size,
-          lastModified: item.LastModified?.toISOString(),
-          isFolder: false,
-          etag: item.ETag,
-        });
+    let versionResponse;
+    try {
+      versionResponse = await client.send(command);
+    } catch (err: unknown) {
+      if (isAccessDenied(err)) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+      console.error('Failed to list object versions:', err);
+      res.status(500).json({ error: 'Internal server error' });
+      return;
+    }
+
+    if (versionResponse.CommonPrefixes) {
+      for (const prefixObj of versionResponse.CommonPrefixes) {
+        if (prefixObj.Prefix) {
+          objects.push({
+            key: prefixObj.Prefix,
+            name: extractFileName(prefixObj.Prefix),
+            isFolder: true,
+          });
+        }
       }
     }
+
+    if (versionResponse.Versions) {
+      for (const item of versionResponse.Versions) {
+        if (item.Key && item.Key !== prefix) {
+          objects.push({
+            key: item.Key,
+            name: extractFileName(item.Key),
+            size: item.Size,
+            lastModified: item.LastModified?.toISOString(),
+            isFolder: false,
+            etag: item.ETag,
+            versionId: item.VersionId,
+            isLatest: item.IsLatest,
+          });
+        }
+      }
+    }
+
+    if (versionResponse.DeleteMarkers) {
+      for (const item of versionResponse.DeleteMarkers) {
+        if (item.Key && item.Key !== prefix) {
+          objects.push({
+            key: item.Key,
+            name: extractFileName(item.Key),
+            lastModified: item.LastModified?.toISOString(),
+            isFolder: false,
+            versionId: item.VersionId,
+            isLatest: item.IsLatest,
+            isDeleteMarker: true,
+          });
+        }
+      }
+    }
+
+    nextContinuationToken = encodeVersionToken(
+      versionResponse.NextKeyMarker,
+      versionResponse.NextVersionIdMarker
+    );
+    isTruncated = versionResponse.IsTruncated ?? false;
+  } else {
+    const command = new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      Delimiter: '/',
+      MaxKeys: 1000,
+      ContinuationToken: continuationToken,
+    });
+
+    let listResponse;
+    try {
+      listResponse = await client.send(command);
+    } catch (err: unknown) {
+      if (isAccessDenied(err)) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+      console.error('Failed to list objects:', err);
+      res.status(500).json({ error: 'Internal server error' });
+      return;
+    }
+
+    // Add folders (CommonPrefixes)
+    if (listResponse.CommonPrefixes) {
+      for (const prefixObj of listResponse.CommonPrefixes) {
+        if (prefixObj.Prefix) {
+          objects.push({
+            key: prefixObj.Prefix,
+            name: extractFileName(prefixObj.Prefix),
+            isFolder: true,
+          });
+        }
+      }
+    }
+
+    // Add files (Contents)
+    if (listResponse.Contents) {
+      for (const item of listResponse.Contents) {
+        if (item.Key && item.Key !== prefix) {
+          objects.push({
+            key: item.Key,
+            name: extractFileName(item.Key),
+            size: item.Size,
+            lastModified: item.LastModified?.toISOString(),
+            isFolder: false,
+            etag: item.ETag,
+          });
+        }
+      }
+    }
+
+    nextContinuationToken = listResponse.NextContinuationToken;
+    isTruncated = listResponse.IsTruncated ?? false;
   }
 
   // Note: Objects are returned in S3's native order (typically lexicographic by key).
@@ -236,8 +349,8 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
 
   res.json({
     objects,
-    continuationToken: response.NextContinuationToken,
-    isTruncated: response.IsTruncated ?? false,
+    continuationToken: nextContinuationToken,
+    isTruncated,
   });
 });
 
@@ -278,6 +391,9 @@ router.post('/:connectionId/:bucket/seed-test-items', s3Middleware, requireBucke
 // DELETE /api/objects/:connectionId/:bucket?key=...
 router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const key = req.query.key as string | undefined;
+  const versionId = typeof req.query.versionId === 'string'
+    ? req.query.versionId.trim() || undefined
+    : undefined;
 
   if (!key) {
     res.status(400).json({ error: 'Object key is required' });
@@ -302,6 +418,7 @@ router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req:
   const command = new DeleteObjectCommand({
     Bucket: bucket,
     Key: key,
+    ...(versionId ? { VersionId: versionId } : {}),
   });
 
   await client.send(command);
@@ -318,8 +435,10 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
     return;
   }
 
-  // Filter out folder keys (ending with /) and empty/whitespace-only strings
-  const fileKeys = keys.filter((key) => typeof key === 'string' && key.trim().length > 0 && !key.endsWith('/'));
+  const fileKeys = keys
+    .filter((entry) => entry && typeof entry.key === 'string')
+    .map((entry) => ({ key: entry.key!.trim(), versionId: entry.versionId }))
+    .filter((entry) => entry.key.length > 0 && !entry.key.endsWith('/'));
 
   if (fileKeys.length === 0) {
     res.status(400).json({ error: 'No valid file keys provided' });
@@ -344,7 +463,10 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
   const command = new DeleteObjectsCommand({
     Bucket: bucket,
     Delete: {
-      Objects: fileKeys.map((key) => ({ Key: key })),
+      Objects: fileKeys.map((entry) => ({
+        Key: entry.key,
+        ...(entry.versionId ? { VersionId: entry.versionId } : {}),
+      })),
       Quiet: false,
     },
   });
@@ -353,8 +475,13 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
 
   const result: BatchDeleteResponse = {
     deleted: response.Deleted
-      ?.filter((d): d is { Key: string } => typeof d.Key === 'string')
-      .map((d) => d.Key) ?? [],
+      ?.filter((d): d is { Key: string; VersionId?: string; DeleteMarkerVersionId?: string } => typeof d.Key === 'string')
+      .map((d) => ({
+        key: d.Key,
+        ...(d.VersionId || d.DeleteMarkerVersionId
+          ? { versionId: d.VersionId ?? d.DeleteMarkerVersionId }
+          : {}),
+      })) ?? [],
     errors: response.Errors
       ?.filter((e): e is { Key: string; Message?: string } => typeof e.Key === 'string')
       .map((e) => ({
@@ -421,12 +548,21 @@ function validateKey(key: string): { valid: true } | { valid: false; error: stri
   return { valid: true };
 }
 
+function sanitizeVersionId(versionId?: string): string | undefined {
+  if (typeof versionId !== 'string') {
+    return undefined;
+  }
+  const trimmed = versionId.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 async function copyObjectWithMultipart(
   client: NonNullable<AuthenticatedRequest['s3Client']>,
   bucket: string,
   sourceKey: string,
   destinationKey: string,
-  objectSize: number
+  objectSize: number,
+  versionId?: string
 ): Promise<void> {
   const uploadId = await (async () => {
     const createCommand = new CreateMultipartUploadCommand({
@@ -451,7 +587,7 @@ async function copyObjectWithMultipart(
       const copyPartCommand = new UploadPartCopyCommand({
         Bucket: bucket,
         Key: destinationKey,
-        CopySource: encodeURIComponent(`${bucket}/${sourceKey}`),
+        CopySource: encodeURIComponent(`${bucket}/${sourceKey}${versionId ? `?versionId=${versionId}` : ''}`),
         UploadId: uploadId,
         PartNumber: partNumber,
         CopySourceRange: `bytes=${start}-${end}`,
@@ -493,23 +629,25 @@ async function copyObject(
   client: NonNullable<AuthenticatedRequest['s3Client']>,
   bucket: string,
   sourceKey: string,
-  destinationKey: string
+  destinationKey: string,
+  versionId?: string
 ): Promise<void> {
   // Get object size to determine copy method
   const headCommand = new HeadObjectCommand({
     Bucket: bucket,
     Key: sourceKey,
+    ...(versionId ? { VersionId: versionId } : {}),
   });
   const headResponse = await client.send(headCommand);
   const objectSize = headResponse.ContentLength ?? 0;
 
   if (objectSize > MULTIPART_THRESHOLD) {
-    await copyObjectWithMultipart(client, bucket, sourceKey, destinationKey, objectSize);
+    await copyObjectWithMultipart(client, bucket, sourceKey, destinationKey, objectSize, versionId);
   } else {
     const copyCommand = new CopyObjectCommand({
       Bucket: bucket,
       Key: destinationKey,
-      CopySource: encodeURIComponent(`${bucket}/${sourceKey}`),
+      CopySource: encodeURIComponent(`${bucket}/${sourceKey}${versionId ? `?versionId=${versionId}` : ''}`),
     });
     await client.send(copyCommand);
   }
@@ -518,7 +656,7 @@ async function copyObject(
 // POST /api/objects/:connectionId/:bucket/copy
 router.post('/:connectionId/:bucket/copy', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as CopyRequestBody;
-  const { sourceKey, destinationKey } = body;
+  const { sourceKey, destinationKey, versionId } = body;
 
   if (!sourceKey || !destinationKey) {
     res.status(400).json({ error: 'sourceKey and destinationKey are required' });
@@ -550,7 +688,7 @@ router.post('/:connectionId/:bucket/copy', s3Middleware, requireBucket, async (r
     return;
   }
 
-  await copyObject(client, bucket, sourceKey, destinationKey);
+  await copyObject(client, bucket, sourceKey, destinationKey, versionId);
   res.json({ success: true });
 });
 
@@ -600,10 +738,14 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
   }
 
   const result: BatchCopyMoveResponse = { successful: [], errors: [] };
+  const sanitizedOperations = operations.map((op) => ({
+    ...op,
+    versionId: sanitizeVersionId(op.versionId),
+  }));
 
-  for (const op of operations) {
+  for (const op of sanitizedOperations) {
     try {
-      await copyObject(client, bucket, op.sourceKey, op.destinationKey);
+      await copyObject(client, bucket, op.sourceKey, op.destinationKey, op.versionId);
       result.successful.push(op.sourceKey);
     } catch (err) {
       result.errors.push({
@@ -619,7 +761,7 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
 // POST /api/objects/:connectionId/:bucket/move
 router.post('/:connectionId/:bucket/move', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as CopyRequestBody;
-  const { sourceKey, destinationKey } = body;
+  const { sourceKey, destinationKey, versionId } = body;
 
   if (!sourceKey || !destinationKey) {
     res.status(400).json({ error: 'sourceKey and destinationKey are required' });
@@ -652,13 +794,14 @@ router.post('/:connectionId/:bucket/move', s3Middleware, requireBucket, async (r
   }
 
   // Copy first, then delete
-  await copyObject(client, bucket, sourceKey, destinationKey);
+  await copyObject(client, bucket, sourceKey, destinationKey, versionId);
 
   // Attempt to delete the source
   try {
     const deleteCommand = new DeleteObjectCommand({
       Bucket: bucket,
       Key: sourceKey,
+      ...(versionId ? { VersionId: versionId } : {}),
     });
     await client.send(deleteCommand);
   } catch (deleteErr) {
@@ -745,17 +888,22 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
   }
 
   const result: BatchCopyMoveResponse = { successful: [], errors: [] };
+  const sanitizedOperations = operations.map((op) => ({
+    ...op,
+    versionId: sanitizeVersionId(op.versionId),
+  }));
 
-  for (const op of operations) {
+  for (const op of sanitizedOperations) {
     try {
       // Copy first
-      await copyObject(client, bucket, op.sourceKey, op.destinationKey);
+      await copyObject(client, bucket, op.sourceKey, op.destinationKey, op.versionId);
 
       // Attempt to delete source - separate try/catch for better error reporting
       try {
         const deleteCommand = new DeleteObjectCommand({
           Bucket: bucket,
           Key: op.sourceKey,
+          ...(op.versionId ? { VersionId: op.versionId } : {}),
         });
         await client.send(deleteCommand);
         // Only mark as successful when both copy and delete succeed
@@ -795,6 +943,12 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     return;
   }
 
+  const versionIdQuery: unknown = req.query.versionId;
+  const versionId: string | undefined =
+    typeof versionIdQuery === 'string' && versionIdQuery.trim()
+      ? versionIdQuery.trim()
+      : undefined;
+
   const bucket = req.s3Credentials?.bucket;
   const client = req.s3Client;
 
@@ -803,10 +957,12 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     return;
   }
 
-  const command = new HeadObjectCommand({
+  const commandInput: HeadObjectCommandInput = {
     Bucket: bucket,
     Key: key,
-  });
+    ...(versionId ? { VersionId: versionId } : {}),
+  };
+  const command = new HeadObjectCommand(commandInput);
 
   let response;
   try {
@@ -826,6 +982,7 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     lastModified: response.LastModified?.toISOString(),
     contentType: response.ContentType,
     etag: response.ETag,
+    versionId: response.VersionId,
     serverSideEncryption: response.ServerSideEncryption,
     sseKmsKeyId: response.SSEKMSKeyId,
     sseCustomerAlgorithm: response.SSECustomerAlgorithm,

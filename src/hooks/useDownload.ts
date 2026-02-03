@@ -9,14 +9,14 @@ export function useDownload() {
   const bucket = urlBucket || credentials?.bucket;
 
   const download = useCallback(
-    async (key: string): Promise<void> => {
+    async (key: string, versionId?: string): Promise<void> => {
       if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error(
           `Missing S3 connection details: isConnected=${isConnected} | activeConnectionId=${activeConnectionId} | bucket=${bucket}`
         );
       }
 
-      await downloadFile(activeConnectionId, bucket, key);
+      await downloadFile(activeConnectionId, bucket, key, versionId);
     },
     [isConnected, activeConnectionId, bucket]
   );

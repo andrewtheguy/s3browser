@@ -13,7 +13,7 @@ interface ResolveDeletePlanOptions {
 }
 
 interface DeletePlan {
-  fileKeys: string[];
+  fileKeys: Array<{ key: string; versionId?: string }>;
   folderKeys: string[];
 }
 
@@ -21,11 +21,11 @@ const MAX_BATCH_DELETE = 1000;
 const MAX_BATCH_DELETE_BYTES = 90_000;
 const DELETE_CONTINUATION_PROMPT_EVERY = 10_000;
 
-function buildDeleteBatches(keys: string[]): string[][] {
+function buildDeleteBatches(keys: Array<{ key: string; versionId?: string }>): Array<Array<{ key: string; versionId?: string }>> {
   const encoder = new TextEncoder();
   const baseBytes = encoder.encode('{"keys":[]}').length;
-  const batches: string[][] = [];
-  let current: string[] = [];
+  const batches: Array<Array<{ key: string; versionId?: string }>> = [];
+  let current: Array<{ key: string; versionId?: string }> = [];
   let currentBytes = baseBytes;
 
   for (const key of keys) {
@@ -72,7 +72,7 @@ export function useDelete() {
   const [error, setError] = useState<string | null>(null);
 
   const remove = useCallback(
-    async (key: string): Promise<void> => {
+    async (key: string, versionId?: string): Promise<void> => {
       if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
@@ -81,7 +81,7 @@ export function useDelete() {
       setError(null);
 
       try {
-        await deleteObject(activeConnectionId, bucket, key);
+        await deleteObject(activeConnectionId, bucket, key, versionId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Delete failed';
         setError(message);
@@ -94,7 +94,12 @@ export function useDelete() {
   );
 
   const removeMany = useCallback(
-    async (keys: string[]): Promise<{ deleted: string[]; errors: Array<{ key: string; message: string }> }> => {
+    async (
+      keys: Array<{ key: string; versionId?: string }>
+    ): Promise<{
+      deleted: Array<{ key: string; versionId?: string }>;
+      errors: Array<{ key: string; message: string }>;
+    }> => {
       if (keys.length === 0) {
         return { deleted: [], errors: [] };
       }
@@ -106,9 +111,9 @@ export function useDelete() {
       setIsDeleting(true);
       setError(null);
 
-      const deleted: string[] = [];
+      const deleted: Array<{ key: string; versionId?: string }> = [];
       const errors: Array<{ key: string; message: string }> = [];
-      let currentBatch: string[] = [];
+      let currentBatch: Array<{ key: string; versionId?: string }> = [];
 
       try {
         const batches = buildDeleteBatches(keys);
@@ -126,8 +131,8 @@ export function useDelete() {
         setError(message);
         if (currentBatch.length > 0) {
           errors.push(
-            ...currentBatch.map((key) => ({
-              key,
+            ...currentBatch.map((entry) => ({
+              key: entry.key,
               message,
             }))
           );
@@ -147,7 +152,7 @@ export function useDelete() {
       }
 
       const includeFolderContents = options.includeFolderContents ?? false;
-      const fileKeys = new Set<string>();
+      const fileKeys = new Map<string, { key: string; versionId?: string }>();
       const folderKeys = new Set<string>();
       const queue: string[] = [];
       const promptEvery = Math.max(
@@ -169,12 +174,15 @@ export function useDelete() {
             }
           }
         } else {
-          fileKeys.add(item.key);
+          fileKeys.set(`${item.key}::${item.versionId ?? ''}`, {
+            key: item.key,
+            versionId: item.versionId,
+          });
         }
       }
 
       if (!includeFolderContents || queue.length === 0) {
-        return { fileKeys: Array.from(fileKeys), folderKeys: [] };
+        return { fileKeys: Array.from(fileKeys.values()), folderKeys: [] };
       }
 
       while (queue.length > 0) {
@@ -186,7 +194,14 @@ export function useDelete() {
         let continuationToken: string | undefined = undefined;
         do {
           throwIfAborted(options.signal);
-          const result = await listObjects(activeConnectionId, bucket, prefix, continuationToken, options.signal);
+          const result = await listObjects(
+            activeConnectionId,
+            bucket,
+            prefix,
+            false,
+            continuationToken,
+            options.signal
+          );
           for (const obj of result.objects) {
             if (obj.isFolder) {
               if (!folderKeys.has(obj.key)) {
@@ -194,7 +209,7 @@ export function useDelete() {
                 queue.push(obj.key);
               }
             } else {
-              fileKeys.add(obj.key);
+              fileKeys.set(`${obj.key}::`, { key: obj.key });
             }
           }
           continuationToken = result.isTruncated ? result.continuationToken : undefined;
@@ -207,14 +222,14 @@ export function useDelete() {
               options.onContinuationPrompt?.(fileKeys.size) ?? true
             );
             if (!shouldContinue) {
-              return { fileKeys: Array.from(fileKeys), folderKeys: Array.from(folderKeys) };
+              return { fileKeys: Array.from(fileKeys.values()), folderKeys: Array.from(folderKeys) };
             }
             nextContinuationPromptAt += promptEvery;
           }
         } while (continuationToken);
       }
 
-      return { fileKeys: Array.from(fileKeys), folderKeys: Array.from(folderKeys) };
+      return { fileKeys: Array.from(fileKeys.values()), folderKeys: Array.from(folderKeys) };
     },
     [isConnected, activeConnectionId, bucket]
   );

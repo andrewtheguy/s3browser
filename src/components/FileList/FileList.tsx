@@ -19,16 +19,17 @@ import { useDownload } from '../../hooks';
 import { BROWSE_WINDOW_LIMIT } from '../../config/browse';
 import { FileListItem } from './FileListItem';
 import type { S3Object } from '../../types';
+import { getObjectSelectionId } from '../../utils/formatters';
 
 interface FileListProps {
   onDeleteRequest: (item: S3Object) => void;
   onCopyRequest: (item: S3Object) => void;
   onMoveRequest: (item: S3Object) => void;
-  onCopyUrl: (key: string, ttl: number) => void;
+  onCopyUrl: (key: string, ttl: number, versionId?: string) => void;
   onCopyS3Uri: (key: string) => void;
   onPreview: (item: S3Object) => void;
-  selectedKeys: Set<string>;
-  onSelectItem: (key: string, checked: boolean) => void;
+  selectedIds: Set<string>;
+  onSelectItem: (id: string, checked: boolean) => void;
   onSelectAll: (checked: boolean) => void;
   selectionMode?: boolean;
 }
@@ -50,7 +51,7 @@ export function FileList({
   onCopyUrl,
   onCopyS3Uri,
   onPreview,
-  selectedKeys,
+  selectedIds,
   onSelectItem,
   onSelectAll,
   selectionMode = false,
@@ -67,6 +68,7 @@ export function FileList({
     loadNextWindow,
     hasPrevWindow,
     loadPrevWindow,
+    showVersions,
   } = useBrowserContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentPage, setCurrentPage] = useState(() => {
@@ -101,6 +103,18 @@ export function FileList({
 
     const compareName = (a: S3Object, b: S3Object) => nameCollator.compare(a.name, b.name);
     const compareFiles = (a: S3Object, b: S3Object) => {
+      const nameDiff = compareName(a, b);
+      if (showVersions && nameDiff === 0) {
+        const latestDiff = Number(b.isLatest ?? true) - Number(a.isLatest ?? true);
+        if (latestDiff !== 0) {
+          return latestDiff;
+        }
+        const versionTimeDiff = (b.lastModified?.getTime() ?? 0) - (a.lastModified?.getTime() ?? 0);
+        if (versionTimeDiff !== 0) {
+          return versionTimeDiff;
+        }
+      }
+
       if (sortConfig.key === 'size') {
         const sizeDiff = (a.size ?? 0) - (b.size ?? 0);
         if (sizeDiff !== 0) {
@@ -112,11 +126,11 @@ export function FileList({
           return timeDiff;
         }
       }
-      return compareName(a, b);
+      return nameDiff;
     };
 
     const sortedFolders = [...folders].sort(compareName);
-    const sortedFiles = [...files].sort(sortConfig.key === 'name' ? compareName : compareFiles);
+    const sortedFiles = [...files].sort(compareFiles);
 
     const filesOrdered =
       sortConfig.direction === 'desc' ? [...sortedFiles].reverse() : sortedFiles;
@@ -127,7 +141,7 @@ export function FileList({
     }
 
     return [...foldersOrdered, ...filesOrdered];
-  }, [objects, sortConfig, nameCollator]);
+  }, [objects, sortConfig, nameCollator, showVersions]);
 
   const totalItems = sortedObjects.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -208,14 +222,14 @@ export function FileList({
 
   const selectableItems = sortedObjects;
   const selectableCount = selectableItems.length;
-  const selectedCount = selectableItems.filter((item) => selectedKeys.has(item.key)).length;
+  const selectedCount = selectableItems.filter((item) => selectedIds.has(getObjectSelectionId(item))).length;
   const isAllSelected = selectableCount > 0 && selectedCount === selectableCount;
   const isIndeterminate = selectedCount > 0 && selectedCount < selectableCount;
   const { download } = useDownload();
 
   const handleDownload = useCallback(
-    (key: string) => {
-      void download(key);
+    (key: string, versionId?: string) => {
+      void download(key, versionId);
     },
     [download]
   );
@@ -269,6 +283,7 @@ export function FileList({
               <TableHead className="min-w-[120px]">Name</TableHead>
               <TableHead className="w-[72px] sm:w-[100px]">Size</TableHead>
               <TableHead className="w-[120px] sm:w-[180px]">Last Modified</TableHead>
+              {showVersions && <TableHead className="min-w-[160px]">Version Id</TableHead>}
               <TableHead className="w-[160px]" />
             </TableRow>
           </TableHeader>
@@ -289,9 +304,11 @@ export function FileList({
                 <TableCell>
                   <Skeleton className="w-4/5 h-4" />
                 </TableCell>
-                <TableCell>
-                  <Skeleton className="w-4/5 h-4" />
-                </TableCell>
+                {showVersions && (
+                  <TableCell>
+                    <Skeleton className="w-4/5 h-4" />
+                  </TableCell>
+                )}
                 <TableCell>
                   <Skeleton className="w-[60px] h-4" />
                 </TableCell>
@@ -423,27 +440,33 @@ export function FileList({
                   {renderSortIcon('lastModified')}
                 </button>
               </TableHead>
+              {showVersions && <TableHead className="min-w-[160px]">Version Id</TableHead>}
               <TableHead className="w-[160px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pageItems.map((item) => (
-              <FileListItem
-                key={item.key}
-                item={item}
-                onNavigate={navigateTo}
-                onDownload={handleDownload}
-                onCopyUrl={onCopyUrl}
-                onCopyS3Uri={onCopyS3Uri}
-                onDelete={onDeleteRequest}
-                onCopy={onCopyRequest}
-                onMove={onMoveRequest}
-                onPreview={onPreview}
-                isSelected={selectedKeys.has(item.key)}
-                onSelect={onSelectItem}
-                selectionMode={selectionMode}
-              />
-            ))}
+            {pageItems.map((item) => {
+              const selectionId = getObjectSelectionId(item);
+              return (
+                <FileListItem
+                  key={selectionId}
+                  item={item}
+                  showVersions={showVersions}
+                  selectionId={selectionId}
+                  onNavigate={navigateTo}
+                  onDownload={handleDownload}
+                  onCopyUrl={onCopyUrl}
+                  onCopyS3Uri={onCopyS3Uri}
+                  onDelete={onDeleteRequest}
+                  onCopy={onCopyRequest}
+                  onMove={onMoveRequest}
+                  onPreview={onPreview}
+                  isSelected={selectedIds.has(selectionId)}
+                  onSelect={onSelectItem}
+                  selectionMode={selectionMode}
+                />
+              );
+            })}
           </TableBody>
         </Table>
       </div>
