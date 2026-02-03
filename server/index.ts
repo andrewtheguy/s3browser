@@ -20,7 +20,6 @@ try {
 const app = express();
 const PORT = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3001;
 const HOST = process.env.HOST || 'localhost';
-
 // Middleware
 app.use(express.json({
   type: (req) => {

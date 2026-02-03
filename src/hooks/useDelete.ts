@@ -15,6 +15,38 @@ interface DeletePlan {
 }
 
 const MAX_BATCH_DELETE = 1000;
+const MAX_BATCH_DELETE_BYTES = 90_000;
+
+function buildDeleteBatches(keys: string[]): string[][] {
+  const encoder = new TextEncoder();
+  const batches: string[][] = [];
+  let current: string[] = [];
+
+  const willExceedLimit = (batch: string[]) =>
+    batch.length > MAX_BATCH_DELETE ||
+    encoder.encode(JSON.stringify({ keys: batch })).length > MAX_BATCH_DELETE_BYTES;
+
+  for (const key of keys) {
+    const next = [...current, key];
+    if (willExceedLimit(next)) {
+      if (current.length > 0) {
+        batches.push(current);
+        current = [key];
+      } else {
+        batches.push([key]);
+        current = [];
+      }
+    } else {
+      current = next;
+    }
+  }
+
+  if (current.length > 0) {
+    batches.push(current);
+  }
+
+  return batches;
+}
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
@@ -69,8 +101,8 @@ export function useDelete() {
       let currentBatch: string[] = [];
 
       try {
-        for (let i = 0; i < keys.length; i += MAX_BATCH_DELETE) {
-          const batch = keys.slice(i, i + MAX_BATCH_DELETE);
+        const batches = buildDeleteBatches(keys);
+        for (const batch of batches) {
           currentBatch = batch;
           const result = await deleteObjects(activeConnectionId, bucket, batch);
           deleted.push(...result.deleted);

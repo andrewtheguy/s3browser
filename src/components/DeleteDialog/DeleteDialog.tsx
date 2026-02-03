@@ -160,19 +160,21 @@ export function DeleteDialog({
           {isBatch && !isResolving && !resolutionError && previewKeys.length > 0 && (
             <div>
               <ScrollArea className="h-[320px] rounded-md border">
-                <ul className="p-2 space-y-1">
-                  {previewKeys.map((key) => (
-                    <li key={key} className="text-sm break-all py-1">
-                      {key}
-                    </li>
-                  ))}
-                </ul>
+                <div className="p-2 space-y-1">
+                  <ul className="space-y-1">
+                    {previewKeys.map((key) => (
+                      <li key={key} className="text-sm break-all py-1">
+                        {key}
+                      </li>
+                    ))}
+                  </ul>
+                  {remainingPreviewCount > 0 && (
+                    <div className="text-sm text-muted-foreground border-t pt-2 mt-2">
+                      ...and {remainingPreviewCount} more
+                    </div>
+                  )}
+                </div>
               </ScrollArea>
-              {remainingPreviewCount > 0 && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  ...and {remainingPreviewCount} more
-                </p>
-              )}
             </div>
           )}
         </div>
