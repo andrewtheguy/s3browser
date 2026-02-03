@@ -71,9 +71,10 @@ export function useResolveObjectPlan() {
             }
           }
         } else {
-          fileKeys.set(buildCompositeKey(item.key, item.versionId), {
+          const versionId = includeVersions ? item.versionId : undefined;
+          fileKeys.set(buildCompositeKey(item.key, versionId), {
             key: item.key,
-            versionId: item.versionId,
+            versionId,
             isLatest: item.isLatest,
             isDeleteMarker: item.isDeleteMarker,
           });
