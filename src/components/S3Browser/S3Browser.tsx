@@ -38,6 +38,8 @@ import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
 
 const DELETE_PREVIEW_LIMIT = 100;
+const DELETE_CONTINUATION_START_AT = 500;
+const DELETE_CONTINUATION_EVERY = 10_000;
 
 export function S3Browser() {
   const { refresh, currentPath, objects } = useBrowserContext();
@@ -67,6 +69,7 @@ export function S3Browser() {
   const [deleteResolveError, setDeleteResolveError] = useState<string | null>(null);
   const [deleteContinuationCount, setDeleteContinuationCount] = useState<number | null>(null);
   const deleteContinuationResolveRef = useRef<((value: boolean) => void) | null>(null);
+  const deleteResolveAbortRef = useRef<AbortController | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -120,6 +123,13 @@ export function S3Browser() {
       .map((item) => item.key)
       .sort((a, b) => a.localeCompare(b))
       .join('|');
+  }, [itemsToDelete]);
+
+  const deleteSelectionAllFiles = useMemo(() => {
+    if (itemsToDelete.length === 0) {
+      return false;
+    }
+    return itemsToDelete.every((item) => !item.isFolder);
   }, [itemsToDelete]);
 
   const itemsToDeleteRef = useRef<S3Object[]>([]);
@@ -230,15 +240,34 @@ export function S3Browser() {
       return;
     }
 
+    if (deleteSelectionAllFiles) {
+      if (deleteResolveAbortRef.current) {
+        deleteResolveAbortRef.current.abort();
+        deleteResolveAbortRef.current = null;
+      }
+      setDeletePlan({
+        fileKeys: itemsToDeleteRef.current.map((item) => item.key),
+        folderKeys: [],
+      });
+      setIsResolvingDelete(false);
+      setDeleteResolveError(null);
+      setDeleteContinuationCount(null);
+      return;
+    }
+
     const abortController = new AbortController();
+    deleteResolveAbortRef.current = abortController;
     setIsResolvingDelete(true);
     setDeleteResolveError(null);
 
     void (async () => {
       try {
+        const folderSelection = itemsToDeleteRef.current.some((item) => item.isFolder);
         const plan = await resolveDeletePlan(itemsToDeleteRef.current, {
           includeFolderContents: true,
           signal: abortController.signal,
+          continuationPromptStartAt: folderSelection ? DELETE_CONTINUATION_START_AT : undefined,
+          continuationPromptEvery: folderSelection ? DELETE_CONTINUATION_EVERY : undefined,
           onContinuationPrompt: (currentCount) =>
             new Promise<boolean>((resolve) => {
               deleteContinuationResolveRef.current = resolve;
@@ -262,13 +291,14 @@ export function S3Browser() {
 
     return () => {
       abortController.abort();
+      deleteResolveAbortRef.current = null;
       if (deleteContinuationResolveRef.current) {
         deleteContinuationResolveRef.current(false);
         deleteContinuationResolveRef.current = null;
       }
       setDeleteContinuationCount(null);
     };
-  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, resolveDeletePlan]);
+  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, deleteSelectionAllFiles, resolveDeletePlan]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
@@ -351,12 +381,12 @@ export function S3Browser() {
   }, []);
 
   const handleDeleteContinuationCancel = useCallback(() => {
-    if (deleteContinuationResolveRef.current) {
-      deleteContinuationResolveRef.current(false);
-      deleteContinuationResolveRef.current = null;
+    if (deleteResolveAbortRef.current) {
+      deleteResolveAbortRef.current.abort();
+      deleteResolveAbortRef.current = null;
     }
-    setDeleteContinuationCount(null);
-  }, []);
+    handleDeleteCancel();
+  }, [handleDeleteCancel]);
 
   const handleDeleteContinuationConfirm = useCallback(() => {
     if (deleteContinuationResolveRef.current) {
@@ -728,7 +758,7 @@ export function S3Browser() {
               Found {deleteContinuationCount ?? 0} objects so far. Continue gathering more to delete?
             </p>
             <p className="text-xs text-muted-foreground">
-              You can stop now to delete only the items gathered so far.
+              Stopping will cancel the delete.
             </p>
           </div>
           <DialogFooter>

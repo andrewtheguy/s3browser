@@ -8,6 +8,8 @@ interface ResolveDeletePlanOptions {
   includeFolderContents?: boolean;
   signal?: AbortSignal;
   onContinuationPrompt?: (currentCount: number) => boolean | Promise<boolean>;
+  continuationPromptEvery?: number;
+  continuationPromptStartAt?: number;
 }
 
 interface DeletePlan {
@@ -148,7 +150,15 @@ export function useDelete() {
       const fileKeys = new Set<string>();
       const folderKeys = new Set<string>();
       const queue: string[] = [];
-      let nextContinuationPromptAt = DELETE_CONTINUATION_PROMPT_EVERY;
+      const promptEvery = Math.max(
+        options.continuationPromptEvery ?? DELETE_CONTINUATION_PROMPT_EVERY,
+        1
+      );
+      const promptStartAt = Math.max(
+        options.continuationPromptStartAt ?? promptEvery,
+        1
+      );
+      let nextContinuationPromptAt = promptStartAt;
 
       for (const item of items) {
         if (item.isFolder) {
@@ -199,7 +209,7 @@ export function useDelete() {
             if (!shouldContinue) {
               return { fileKeys: Array.from(fileKeys), folderKeys: Array.from(folderKeys) };
             }
-            nextContinuationPromptAt += DELETE_CONTINUATION_PROMPT_EVERY;
+            nextContinuationPromptAt += promptEvery;
           }
         } while (continuationToken);
       }
