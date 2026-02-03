@@ -138,7 +138,7 @@ export function FileListItem({
           "group",
           isInteractive ? "cursor-pointer hover:bg-muted/50" : "cursor-default",
           isSelected && "bg-muted",
-          isPreviousVersion && "text-muted-foreground"
+          (isPreviousVersion || isDeleteMarker) && "text-muted-foreground"
         )}
       >
         {selectionMode && (
