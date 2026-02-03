@@ -31,7 +31,16 @@ import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDial
 import { CopyMoveDialog } from '../CopyMoveDialog';
 import { BucketInfoDialog } from '../BucketInfoDialog';
 import { useBrowserContext } from '../../contexts';
-import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove, useSeedTestItems } from '../../hooks';
+import {
+  useDelete,
+  useUpload,
+  usePresignedUrl,
+  useDownload,
+  usePreview,
+  useCopyMove,
+  useSeedTestItems,
+  useResolveObjectPlan,
+} from '../../hooks';
 import { FEATURES } from '../../config';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
@@ -46,12 +55,13 @@ const DOWNLOAD_CONTINUATION_EVERY = 10_000;
 
 export function S3Browser() {
   const { refresh, currentPath, objects, showVersions, toggleShowVersions, versioningSupported } = useBrowserContext();
-  const { remove, removeMany, resolveDeletePlan, resolveDownloadPlan, isDeleting: isDeletingHook } = useDelete();
+  const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
   const { download, getProxyDownloadUrl } = useDownload();
   const preview = usePreview();
   const { seedTestItems } = useSeedTestItems();
+  const { resolveObjectPlan } = useResolveObjectPlan();
   const seedTestItemsEnabled = FEATURES.seedTestItems;
   const supportsBatchDownload = useMemo(() => {
     if (typeof window === 'undefined') {
@@ -438,7 +448,7 @@ export function S3Browser() {
     void (async () => {
       try {
         const folderSelection = itemsToDownloadRef.current.some((item) => item.isFolder);
-        const plan = await resolveDownloadPlan(itemsToDownloadRef.current, {
+        const plan = await resolveObjectPlan(itemsToDownloadRef.current, {
           includeFolderContents: true,
           signal: abortController.signal,
           continuationPromptStartAt: folderSelection ? DOWNLOAD_CONTINUATION_START_AT : undefined,
@@ -473,7 +483,7 @@ export function S3Browser() {
       }
       setDownloadContinuationCount(null);
     };
-  }, [downloadDialogOpen, downloadSelectionAllFiles, itemsToDownloadKey, resolveDownloadPlan]);
+  }, [downloadDialogOpen, downloadSelectionAllFiles, itemsToDownloadKey, resolveObjectPlan]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
