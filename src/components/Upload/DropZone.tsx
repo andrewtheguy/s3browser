@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type DragEvent, type MouseEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -52,6 +52,7 @@ interface DropZoneProps {
 export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const dragDepthRef = useRef(0);
   const supportsFileSystemAccess = useMemo(() => {
     if (typeof window === 'undefined') {
       return { files: false, directory: false };
@@ -200,45 +201,57 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
   const handleDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    dragDepthRef.current += 1;
     setIsDragging(true);
   }, []);
 
   const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsDragging(false);
+    }
   }, []);
 
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-  }, []);
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isDragging) {
+      setIsDragging(true);
+    }
+  }, [isDragging]);
 
   const handleDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
+      dragDepthRef.current = 0;
       setIsDragging(false);
 
       if (disabled || isProcessing) return;
 
       void (async () => {
+        setIsProcessing(true);
         const fallback = Array.from(e.dataTransfer.files).map((file) => mapFileToCandidate(file));
         try {
           const files = await collectFilesFromDataTransfer(e.dataTransfer.items, e.dataTransfer.files);
-          await handleSelectedFiles(files);
+          await Promise.resolve(onFilesSelected(files));
         } catch (error) {
           console.error('Failed to process dropped files:', error);
-          await handleSelectedFiles(fallback);
+          await Promise.resolve(onFilesSelected(fallback));
+        } finally {
+          setIsProcessing(false);
         }
       })();
     },
     [
       collectFilesFromDataTransfer,
       disabled,
-      handleSelectedFiles,
       isProcessing,
       mapFileToCandidate,
+      onFilesSelected,
     ]
   );
 
@@ -378,10 +391,10 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
             )}
           />
           <h3 className="text-lg font-semibold mb-1">
-            Drag and drop files or folders here
+            {isDragging ? 'Drop to upload' : 'Drag and drop files or folders here'}
           </h3>
           <p className="text-sm text-muted-foreground">
-            or click to browse files or folders
+            {isDragging ? 'Release to start uploading' : 'or click to browse files or folders'}
           </p>
         </>
       )}
