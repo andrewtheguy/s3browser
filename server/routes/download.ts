@@ -42,7 +42,10 @@ async function pipeWebStreamToResponse(stream: WebReadableStreamLike, res: Respo
     try {
       await reader.cancel?.(reason);
     } catch (err) {
-      console.error('pipeWebStreamToResponse: failed to cancel reader', err);
+      console.error('pipeWebStreamToResponse: failed to cancel reader', {
+        error: err,
+        reason,
+      });
     }
   };
   try {
@@ -77,14 +80,14 @@ async function pipeWebStreamToResponse(stream: WebReadableStreamLike, res: Respo
               res.once('close', onClose);
               res.once('finish', onFinish);
             });
-          } catch {
-            await safeCancel();
+          } catch (reason) {
+            await safeCancel(reason);
             break;
           }
         }
       }
       if (res.writableEnded) {
-        await safeCancel();
+        await safeCancel(new Error('Response ended while streaming'));
         break;
       }
     }
