@@ -178,11 +178,26 @@ All data is stored in `~/.s3browser/`:
 
 | Action | Limit / behavior |
 | --- | --- |
-| Browse (list objects) | UI caps results to the first 5,000 items per folder view; use the in-app “Load previous/next 5,000” controls to page through larger folders. |
+| Browse (list objects) | S3 lists keys in lexicographic order. The UI then sorts entries with folders first, then files, alphabetically. The 5,000-item window applies to the combined list of folders + files returned for that prefix. **Caveat:** sorting happens within the current window only, so a folder that falls into a later window won’t appear at the top until you page to the window that includes it. Use the in-app “Load previous/next 5,000” controls to page through larger folders. |
 | Upload | No item-count cap; constrained by per-file size limits and concurrency. Max file size 5GB; files >= 10MB use multipart with 10MB parts (single uploads are for files < 10MB). |
 | Delete | No hard item cap overall; requests are batched in 1,000 objects (S3 DeleteObjects API limit). |
 | Copy / Move | No hard item cap overall; requests are batched in 1,000 operations per request. |
 | Download | Presigned URL TTL must be between 60 seconds (application-level validation) and 7 days (AWS S3 presigned URL limit) (default 1 hour if not provided). |
+
+### Browse window caveats (examples)
+
+The browse window is built from the server’s lexicographic S3 listing, then the UI re-sorts only the current window with folders first and files second. This means folders that fall into later windows won’t appear “at the top” until you page to the window that contains them.
+
+**Example 1: Folder name pushes it to a later window**
+- Suppose a prefix contains 6,000 items.
+- The first 5,000 lexicographic keys are mostly files like `a-0001.txt` … `m-4999.txt`.
+- A folder named `z-logs/` appears after those keys lexicographically, so it lands in the 5,001–6,000 window.
+- In the first window, you won’t see `z-logs/` at the top, even though the UI sorts folders first—because it isn’t in that window yet.
+- When you load the next 5,000 window, `z-logs/` will appear at the top of that window.
+
+**Example 2: Mixed folders and files**
+- If a window contains both folders and files, the UI will show all folders first.
+- But folders in later windows (e.g., `reports/` or `yearly/`) won’t be visible until you page forward.
 
 ## Security
 
