@@ -273,6 +273,9 @@ export function Toolbar({
               </Tooltip>
             )}
 
+            {/* Show versions button when:
+                - onToggleVersions is provided (versioning supported, button is clickable)
+                - OR !versioningSupported (show disabled button to indicate feature exists but unavailable) */}
             {(onToggleVersions || !versioningSupported) && (
               <Tooltip>
                 <TooltipTrigger asChild>

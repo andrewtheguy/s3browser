@@ -18,7 +18,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useS3ClientContext } from '../../contexts';
 import { getObjectMetadata, type ObjectMetadata } from '../../services/api/objects';
 import type { S3Object } from '../../types';
-import { formatFileSizeDetailed, formatDate } from '../../utils/formatters';
+import { formatFileSizeDetailed, formatDateFull } from '../../utils/formatters';
 
 interface FileDetailsDialogProps {
   open: boolean;
@@ -128,7 +128,7 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                     Last Modified
                   </TableCell>
                   <TableCell>
-                    {formatDate(item.lastModified)}
+                    {formatDateFull(item.lastModified)}
                   </TableCell>
                 </TableRow>
                 {isLoading ? (
