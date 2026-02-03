@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router';
 import {
   Dialog,
@@ -116,6 +116,14 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<null | 'aws' | 'rclone'>(null);
+  const isMountedRef = useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open || !activeConnectionId || !bucket) {
@@ -164,13 +172,21 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
     setExportingFormat(format);
     try {
       const response = await exportConnectionProfile(activeConnectionId, format, bucket || undefined);
+      if (!isMountedRef.current) {
+        return;
+      }
       downloadTextFile(response.filename, response.content);
       toast.success(`${format === 'aws' ? 'AWS' : 'rclone'} profile exported`);
     } catch (err) {
+      if (!isMountedRef.current) {
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Failed to export profile';
       toast.error(message);
     } finally {
-      setExportingFormat(null);
+      if (isMountedRef.current) {
+        setExportingFormat(null);
+      }
     }
   };
 

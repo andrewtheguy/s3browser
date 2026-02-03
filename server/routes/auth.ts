@@ -46,7 +46,6 @@ type ExportProfileFormat = 'aws' | 'rclone';
 
 interface ExportProfileRequestBody {
   format?: ExportProfileFormat;
-  bucket?: string;
 }
 
 interface ExportProfileResponse {
@@ -85,6 +84,8 @@ function sanitizeFilename(name: string): string {
     const code = trimmed.charCodeAt(i);
     if (
       code <= 0x1f
+      || code === 0x7f
+      || (code >= 0x80 && code <= 0x9f)
       || char === '\\'
       || char === '/'
       || char === ':'
@@ -102,7 +103,42 @@ function sanitizeFilename(name: string): string {
     }
   }
 
-  return result || 's3-connection';
+  let sanitized = result.replace(/[. ]+$/g, '');
+
+  if (!sanitized) {
+    return 's3-connection';
+  }
+
+  const reservedNames = new Set([
+    'CON',
+    'PRN',
+    'AUX',
+    'NUL',
+    'COM1',
+    'COM2',
+    'COM3',
+    'COM4',
+    'COM5',
+    'COM6',
+    'COM7',
+    'COM8',
+    'COM9',
+    'LPT1',
+    'LPT2',
+    'LPT3',
+    'LPT4',
+    'LPT5',
+    'LPT6',
+    'LPT7',
+    'LPT8',
+    'LPT9',
+  ]);
+
+  if (reservedNames.has(sanitized.toUpperCase())) {
+    sanitized = `_${sanitized}`;
+  }
+
+  return sanitized || 's3-connection';
 }
 
 function buildAwsProfile(
@@ -568,7 +604,7 @@ router.post('/connections/:id/export', loginMiddleware, (req: AuthenticatedReque
       profileName,
       connection.access_key_id,
       decryptedSecret,
-      connection.region || 'us-east-1',
+      region,
       provider,
       normalizedEndpoint
     );
