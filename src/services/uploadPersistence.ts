@@ -79,6 +79,7 @@ export function saveUploadState(
 
 /**
  * Get an upload by its ID.
+ * Note: returns a direct reference to the stored object; callers must not mutate it.
  */
 export function getUploadById(id: string): Promise<PersistedUpload | null> {
   return Promise.resolve(uploadsById.get(id) ?? null);
@@ -86,6 +87,7 @@ export function getUploadById(id: string): Promise<PersistedUpload | null> {
 
 /**
  * Find a resumable upload by file fingerprint.
+ * Note: returns a direct reference to the stored object; callers must not mutate it.
  */
 export function getUploadByFile(
   fileName: string,
@@ -100,7 +102,10 @@ export function getUploadByFile(
   let newest: PersistedUpload | null = null;
   for (const id of ids.values()) {
     const upload = uploadsById.get(id);
-    if (!upload) continue;
+    if (!upload) {
+      ids.delete(id);
+      continue;
+    }
     if (!newest || upload.updatedAt > newest.updatedAt) {
       newest = upload;
     }
@@ -121,6 +126,7 @@ export function deleteUploadState(id: string): Promise<void> {
 
 /**
  * List all pending uploads, sorted by creation time (newest first).
+ * Note: returns direct references to stored objects; callers must not mutate them.
  */
 export function listPendingUploads(): Promise<PersistedUpload[]> {
   return Promise.resolve(Array.from(uploadsById.values()).sort((a, b) => b.createdAt - a.createdAt));
