@@ -135,11 +135,12 @@ export async function exportConnectionProfile(
     throw new Error('Invalid connection ID');
   }
 
+  const trimmedBucket = bucket?.trim();
   const response = await apiPost<ExportProfileResponse>(
     `/auth/connections/${connectionId}/export`,
     {
       format,
-      bucket: bucket?.trim() ? bucket : undefined,
+      bucket: trimmedBucket ? trimmedBucket : undefined,
     }
   );
 

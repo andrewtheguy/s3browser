@@ -162,7 +162,7 @@ export async function validateCredentialsOnly(
 ): Promise<{ valid: boolean; error?: string }> {
   const normalizedEndpoint = normalizeEndpoint(endpoint);
 
-  console.log('Validating credentials (no bucket):', 'endpoint:', normalizedEndpoint || 'AWS');
+  console.debug('Validating credentials (no bucket):', 'endpoint:', normalizedEndpoint || 'AWS');
 
   // For custom endpoints, use S3 ListBuckets as STS may not be available
   if (normalizedEndpoint) {

@@ -528,7 +528,18 @@ router.post('/connections/:id/export', loginMiddleware, (req: AuthenticatedReque
     return;
   }
 
-  const decryptedSecret = decryptConnectionSecretKey(connection);
+  let decryptedSecret: string;
+  try {
+    decryptedSecret = decryptConnectionSecretKey(connection);
+  } catch (error) {
+    console.error('Failed to decrypt connection secret key for export:', {
+      connectionId: connection.id,
+      connectionName: connection.name,
+      error,
+    });
+    res.status(422).json({ error: 'Failed to decrypt connection secret key' });
+    return;
+  }
   const profileName = sanitizeProfileName(connection.name, `connection-${connection.id}`);
   const filenameBase = sanitizeFilename(profileName);
   const normalizedEndpoint = normalizeEndpoint(connection.endpoint);
