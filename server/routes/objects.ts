@@ -548,6 +548,14 @@ function validateKey(key: string): { valid: true } | { valid: false; error: stri
   return { valid: true };
 }
 
+function sanitizeVersionId(versionId?: string): string | undefined {
+  if (typeof versionId !== 'string') {
+    return undefined;
+  }
+  const trimmed = versionId.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 async function copyObjectWithMultipart(
   client: NonNullable<AuthenticatedRequest['s3Client']>,
   bucket: string,
@@ -730,8 +738,12 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
   }
 
   const result: BatchCopyMoveResponse = { successful: [], errors: [] };
+  const sanitizedOperations = operations.map((op) => ({
+    ...op,
+    versionId: sanitizeVersionId(op.versionId),
+  }));
 
-  for (const op of operations) {
+  for (const op of sanitizedOperations) {
     try {
       await copyObject(client, bucket, op.sourceKey, op.destinationKey, op.versionId);
       result.successful.push(op.sourceKey);
@@ -876,8 +888,12 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
   }
 
   const result: BatchCopyMoveResponse = { successful: [], errors: [] };
+  const sanitizedOperations = operations.map((op) => ({
+    ...op,
+    versionId: sanitizeVersionId(op.versionId),
+  }));
 
-  for (const op of operations) {
+  for (const op of sanitizedOperations) {
     try {
       // Copy first
       await copyObject(client, bucket, op.sourceKey, op.destinationKey, op.versionId);
@@ -944,7 +960,7 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
   const commandInput: HeadObjectCommandInput = {
     Bucket: bucket,
     Key: key,
-    VersionId: versionId,
+    ...(versionId ? { VersionId: versionId } : {}),
   };
   const command = new HeadObjectCommand(commandInput);
 
