@@ -4,6 +4,101 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Middleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
 
+interface NodeReadableStreamLike {
+  pipe: (destination: Response) => unknown;
+  on: (event: 'data' | 'end' | 'error' | 'close', handler: (chunk?: unknown) => void) => void;
+  destroy?: (error?: unknown) => void;
+}
+
+interface WebReadableStreamReaderLike {
+  read: () => Promise<{ done: boolean; value?: Uint8Array }>;
+  cancel?: (reason?: unknown) => Promise<void>;
+  releaseLock?: () => void;
+}
+
+interface WebReadableStreamLike {
+  getReader: () => WebReadableStreamReaderLike;
+}
+
+function isNodeReadableStream(value: unknown): value is NodeReadableStreamLike {
+  return typeof value === 'object'
+    && value !== null
+    && 'pipe' in value
+    && typeof (value as { pipe?: unknown }).pipe === 'function'
+    && 'on' in value
+    && typeof (value as { on?: unknown }).on === 'function';
+}
+
+function isWebReadableStream(value: unknown): value is WebReadableStreamLike {
+  return typeof value === 'object'
+    && value !== null
+    && 'getReader' in value
+    && typeof (value as { getReader?: unknown }).getReader === 'function';
+}
+
+async function pipeWebStreamToResponse(stream: WebReadableStreamLike, res: Response): Promise<void> {
+  const reader = stream.getReader();
+  const safeCancel = async (reason?: unknown) => {
+    try {
+      await reader.cancel?.(reason);
+    } catch (err) {
+      console.error('pipeWebStreamToResponse: failed to cancel reader', {
+        error: err,
+        reason,
+      });
+    }
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (value && !res.writableEnded) {
+        const canContinue = res.write(Buffer.from(value));
+        if (!canContinue) {
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const onDrain = () => {
+                cleanup();
+                resolve();
+              };
+              const onClose = () => {
+                cleanup();
+                reject(new Error('Response closed'));
+              };
+              const onFinish = () => {
+                cleanup();
+                reject(new Error('Response finished'));
+              };
+              const cleanup = () => {
+                res.off('drain', onDrain);
+                res.off('close', onClose);
+                res.off('finish', onFinish);
+              };
+              res.once('drain', onDrain);
+              res.once('close', onClose);
+              res.once('finish', onFinish);
+            });
+          } catch (reason) {
+            await safeCancel(reason);
+            break;
+          }
+        }
+      }
+      if (res.writableEnded) {
+        await safeCancel(new Error('Response ended while streaming'));
+        break;
+      }
+    }
+  } finally {
+    reader.releaseLock?.();
+    if (!res.writableEnded) {
+      res.end();
+    }
+  }
+}
+
 // Check for control characters (0x00-0x1f, 0x7f) or backslashes
 function hasUnsafeChars(str: string): boolean {
   for (let i = 0; i < str.length; i++) {
@@ -95,6 +190,33 @@ function validateKey(key: unknown): { valid: false; error: string } | { valid: t
   return { valid: true, validatedKey: normalized };
 }
 
+function isAccessDenied(err: unknown): boolean {
+  if (!err || typeof err !== 'object') {
+    return false;
+  }
+
+  const named = err as { name?: string; Code?: string; code?: string; message?: string };
+  const name = (named.name ?? named.Code ?? named.code ?? '').toLowerCase();
+  const message = (named.message ?? '').toLowerCase();
+
+  return name === 'accessdenied'
+    || name === 'forbidden'
+    || message.includes('accessdenied')
+    || message.includes('forbidden');
+}
+
+function isNotFound(err: unknown): boolean {
+  if (!err || typeof err !== 'object') {
+    return false;
+  }
+
+  const named = err as { name?: string; Code?: string; code?: string; $metadata?: { httpStatusCode?: number } };
+  const name = (named.name ?? named.Code ?? named.code ?? '').toLowerCase();
+  const status = named.$metadata?.httpStatusCode;
+
+  return name === 'nosuchkey' || name === 'notfound' || status === 404;
+}
+
 const router = Router();
 
 // All routes use s3Middleware which checks auth and creates S3 client from connectionId
@@ -173,6 +295,109 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
   } catch (error) {
     console.error('Failed to generate presigned URL:', error);
     res.status(500).json({ error: 'Failed to generate presigned URL' });
+  }
+});
+
+// GET /api/download/:connectionId/:bucket/object?key=
+router.get('/:connectionId/:bucket/object', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const bucket = req.s3Credentials?.bucket;
+  const client = req.s3Client;
+
+  if (!bucket || !client) {
+    console.error('Download object route missing S3 context:', {
+      route: 'GET /api/download/:connectionId/:bucket/object',
+      method: req.method,
+      path: req.path,
+      hasBucket: !!bucket,
+      hasClient: !!client,
+    });
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+
+  const keyValidation = validateKey(req.query.key);
+  if (!keyValidation.valid) {
+    res.status(400).json({ error: keyValidation.error });
+    return;
+  }
+
+  const versionId = typeof req.query.versionId === 'string'
+    && req.query.versionId.trim()
+    && !hasUnsafeChars(req.query.versionId)
+    ? req.query.versionId
+    : undefined;
+
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: keyValidation.validatedKey,
+    ...(versionId && { VersionId: versionId }),
+  });
+
+  try {
+    const response = await client.send(command);
+    const body = response.Body;
+    if (!body) {
+      res.status(500).json({ error: 'Missing response body' });
+      return;
+    }
+
+    const rawFilename = keyValidation.validatedKey.split('/').pop() || 'download';
+    const filename = sanitizeFilename(rawFilename);
+
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    if (response.ContentType) {
+      res.setHeader('Content-Type', response.ContentType);
+    } else {
+      res.setHeader('Content-Type', 'application/octet-stream');
+    }
+    if (typeof response.ContentLength === 'number') {
+      res.setHeader('Content-Length', response.ContentLength.toString());
+    }
+
+    if (isNodeReadableStream(body)) {
+      res.on('close', () => {
+        if (!res.writableEnded) {
+          body.destroy?.();
+        }
+      });
+      body.on('error', (err) => {
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to stream object' });
+          return;
+        }
+        res.end();
+        console.error('Stream error while downloading object:', err);
+      });
+      body.pipe(res);
+      return;
+    }
+
+    if (isWebReadableStream(body)) {
+      await pipeWebStreamToResponse(body, res);
+      return;
+    }
+
+    res.status(500).json({ error: 'Unsupported response body type' });
+  } catch (error) {
+    if (res.headersSent) {
+      console.error('Error while streaming response after headers were sent', {
+        error,
+        headersSent: res.headersSent,
+        handler: 'GET /api/download/:connectionId/:bucket/object',
+      });
+      res.end();
+      return;
+    }
+    if (isAccessDenied(error)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    if (isNotFound(error)) {
+      res.status(404).json({ error: 'Object not found' });
+      return;
+    }
+    console.error('Failed to stream object:', error);
+    res.status(500).json({ error: 'Failed to stream object' });
   }
 });
 

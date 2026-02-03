@@ -25,12 +25,22 @@ import { Toolbar } from '../Toolbar';
 import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
 import { DeleteDialog } from '../DeleteDialog';
+import { BatchDownloadDialog } from '../BatchDownloadDialog';
 import { PreviewDialog } from '../PreviewDialog';
 import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDialog';
 import { CopyMoveDialog } from '../CopyMoveDialog';
 import { BucketInfoDialog } from '../BucketInfoDialog';
 import { useBrowserContext } from '../../contexts';
-import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopyMove, useSeedTestItems } from '../../hooks';
+import {
+  useDelete,
+  useUpload,
+  usePresignedUrl,
+  useDownload,
+  usePreview,
+  useCopyMove,
+  useSeedTestItems,
+  useResolveObjectPlan,
+} from '../../hooks';
 import { FEATURES } from '../../config';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
@@ -39,16 +49,28 @@ import { getObjectSelectionId } from '../../utils/formatters';
 const DELETE_PREVIEW_LIMIT = 100;
 const DELETE_CONTINUATION_START_AT = 500;
 const DELETE_CONTINUATION_EVERY = 10_000;
+const DOWNLOAD_PREVIEW_LIMIT = 100;
+const DOWNLOAD_CONTINUATION_START_AT = 500;
+const DOWNLOAD_CONTINUATION_EVERY = 10_000;
 
 export function S3Browser() {
   const { refresh, currentPath, objects, showVersions, toggleShowVersions, versioningSupported } = useBrowserContext();
-  const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
+  const { remove, removeMany, resolveObjectPlan: resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
-  const { download } = useDownload();
+  const { download, getProxyDownloadUrl } = useDownload();
   const preview = usePreview();
   const { seedTestItems } = useSeedTestItems();
+  const { resolveObjectPlan } = useResolveObjectPlan();
   const seedTestItemsEnabled = FEATURES.seedTestItems;
+  const supportsBatchDownload = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    const win = window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
+    return typeof win.showDirectoryPicker === 'function';
+  }, []);
+  const batchDownloadEnabled = supportsBatchDownload && !showVersions;
   const {
     copy,
     move,
@@ -70,6 +92,16 @@ export function S3Browser() {
   const deleteContinuationResolveRef = useRef<((value: boolean) => void) | null>(null);
   const deleteResolveAbortRef = useRef<AbortController | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [itemsToDownload, setItemsToDownload] = useState<S3Object[]>([]);
+  const [downloadPlan, setDownloadPlan] = useState<{ fileKeys: Array<{ key: string; versionId?: string }> } | null>(null);
+  const [isResolvingDownload, setIsResolvingDownload] = useState(false);
+  const [downloadResolveError, setDownloadResolveError] = useState<string | null>(null);
+  const [downloadContinuationCount, setDownloadContinuationCount] = useState<number | null>(null);
+  const downloadContinuationResolveRef = useRef<((value: boolean) => void) | null>(null);
+  const downloadResolveAbortRef = useRef<AbortController | null>(null);
+  const [isDownloadingBatch, setIsDownloadingBatch] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ completed: number; total: number } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
@@ -116,6 +148,19 @@ export function S3Browser() {
     };
   }, [deleteMode, deletePlan]);
 
+  const downloadPreview = useMemo(() => {
+    if (!downloadPlan) {
+      return null;
+    }
+    const sortedKeys = [...downloadPlan.fileKeys]
+      .map((entry) => entry.key)
+      .sort((a, b) => a.localeCompare(b));
+    return {
+      previewKeys: sortedKeys.slice(0, DOWNLOAD_PREVIEW_LIMIT),
+      totalKeys: sortedKeys.length,
+    };
+  }, [downloadPlan]);
+
   const itemsToDeleteKey = useMemo(() => {
     if (itemsToDelete.length === 0) {
       return '';
@@ -133,6 +178,28 @@ export function S3Browser() {
     return itemsToDelete.every((item) => !item.isFolder);
   }, [itemsToDelete]);
 
+  const itemsToDownloadKey = useMemo(() => {
+    if (itemsToDownload.length === 0) {
+      return '';
+    }
+    return itemsToDownload
+      .map((item) => item.key)
+      .sort((a, b) => a.localeCompare(b))
+      .join('|');
+  }, [itemsToDownload]);
+
+  const downloadSelectionAllFiles = useMemo(() => {
+    if (itemsToDownload.length === 0) {
+      return false;
+    }
+    return itemsToDownload.every((item) => !item.isFolder);
+  }, [itemsToDownload]);
+
+  const downloadSelectionFolderCount = useMemo(
+    () => itemsToDownload.filter((item) => item.isFolder).length,
+    [itemsToDownload]
+  );
+
   const resolveDeleteVersionId = useCallback((item: S3Object): string | undefined => {
     if (item.isDeleteMarker) {
       return item.versionId;
@@ -148,6 +215,12 @@ export function S3Browser() {
   useEffect(() => {
     itemsToDeleteRef.current = itemsToDelete;
   }, [itemsToDelete]);
+
+  const itemsToDownloadRef = useRef<S3Object[]>([]);
+
+  useEffect(() => {
+    itemsToDownloadRef.current = itemsToDownload;
+  }, [itemsToDownload]);
 
   const handleUploadClick = useCallback(() => {
     setUploadDialogOpen(true);
@@ -243,6 +316,26 @@ export function S3Browser() {
     }
   }, [objects, selectedIds]);
 
+  const handleBatchDownloadRequest = useCallback(() => {
+    const items = objects.filter((item) => selectedIds.has(getObjectSelectionId(item)));
+    if (items.length > 0) {
+      setItemsToDownload(items);
+      setDownloadPlan(null);
+      setDownloadResolveError(null);
+      setDownloadDialogOpen(true);
+    }
+  }, [objects, selectedIds]);
+
+  const handleBatchDownloadItem = useCallback((item: S3Object) => {
+    if (!item.isFolder) {
+      return;
+    }
+    setItemsToDownload([item]);
+    setDownloadPlan(null);
+    setDownloadResolveError(null);
+    setDownloadDialogOpen(true);
+  }, []);
+
   useEffect(() => {
     if (!deleteDialogOpen || deleteMode !== 'batch') {
       setDeletePlan(null);
@@ -322,6 +415,76 @@ export function S3Browser() {
     showVersions,
   ]);
 
+  useEffect(() => {
+    if (!downloadDialogOpen) {
+      setDownloadPlan(null);
+      setIsResolvingDownload(false);
+      setDownloadResolveError(null);
+      return;
+    }
+
+    if (downloadSelectionAllFiles) {
+      if (downloadResolveAbortRef.current) {
+        downloadResolveAbortRef.current.abort();
+        downloadResolveAbortRef.current = null;
+      }
+      setDownloadPlan({
+        fileKeys: itemsToDownloadRef.current.map((item) => ({
+          key: item.key,
+          versionId: item.versionId,
+        })),
+      });
+      setIsResolvingDownload(false);
+      setDownloadResolveError(null);
+      setDownloadContinuationCount(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+    downloadResolveAbortRef.current = abortController;
+    setIsResolvingDownload(true);
+    setDownloadResolveError(null);
+
+    void (async () => {
+      try {
+        const folderSelection = itemsToDownloadRef.current.some((item) => item.isFolder);
+        const plan = await resolveObjectPlan(itemsToDownloadRef.current, {
+          includeFolderContents: true,
+          signal: abortController.signal,
+          continuationPromptStartAt: folderSelection ? DOWNLOAD_CONTINUATION_START_AT : undefined,
+          continuationPromptEvery: folderSelection ? DOWNLOAD_CONTINUATION_EVERY : undefined,
+          onContinuationPrompt: (currentCount) =>
+            new Promise<boolean>((resolve) => {
+              downloadContinuationResolveRef.current = resolve;
+              setDownloadContinuationCount(currentCount);
+            }),
+        });
+        if (!abortController.signal.aborted) {
+          setDownloadPlan({ fileKeys: plan.fileKeys });
+        }
+      } catch (err) {
+        if (!abortController.signal.aborted) {
+          const message = err instanceof Error ? err.message : 'Failed to list items for download';
+          setDownloadResolveError(message);
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsResolvingDownload(false);
+        }
+      }
+    })();
+
+    return () => {
+      abortController.abort();
+      downloadResolveAbortRef.current = null;
+      if (downloadContinuationResolveRef.current) {
+        downloadContinuationResolveRef.current(false);
+        downloadContinuationResolveRef.current = null;
+      }
+      setDownloadContinuationCount(null);
+    };
+  }, [downloadDialogOpen, downloadSelectionAllFiles, itemsToDownloadKey, resolveObjectPlan]);
+
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
     if (deleteMode === 'batch' && !deletePlan) {
@@ -389,6 +552,140 @@ export function S3Browser() {
     }
   }, [itemsToDelete, deleteMode, deletePlan, remove, removeMany, refresh, resolveDeleteVersionId]);
 
+  const handleBatchDownloadCancel = useCallback(() => {
+    setDownloadDialogOpen(false);
+    setItemsToDownload([]);
+    setDownloadPlan(null);
+    setDownloadResolveError(null);
+    setDownloadContinuationCount(null);
+    setDownloadProgress(null);
+    if (downloadResolveAbortRef.current) {
+      downloadResolveAbortRef.current.abort();
+      downloadResolveAbortRef.current = null;
+    }
+    if (downloadContinuationResolveRef.current) {
+      downloadContinuationResolveRef.current(false);
+      downloadContinuationResolveRef.current = null;
+    }
+  }, []);
+
+  const handleBatchDownloadConfirm = useCallback(async () => {
+    if (!batchDownloadEnabled) {
+      return;
+    }
+    if (!downloadPlan) {
+      toast.warning('Download list is still loading');
+      return;
+    }
+
+    const totalFiles = downloadPlan.fileKeys.length;
+    if (totalFiles === 0) {
+      toast.warning('No objects to download');
+      return;
+    }
+
+    const win = window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
+    if (typeof win.showDirectoryPicker !== 'function') {
+      toast.error('Batch download is not supported in this browser');
+      return;
+    }
+
+    setIsDownloadingBatch(true);
+    setDownloadProgress({ completed: 0, total: totalFiles });
+
+    try {
+      const directoryHandle = await win.showDirectoryPicker();
+      if (!directoryHandle) {
+        setDownloadProgress(null);
+        return;
+      }
+
+      const errors: Array<{ key: string; message: string }> = [];
+      let completed = 0;
+
+      for (const entry of downloadPlan.fileKeys) {
+        try {
+          const url = getProxyDownloadUrl(entry.key, entry.versionId);
+          const response = await fetch(url, { credentials: 'include' });
+          if (!response.ok) {
+            throw new Error(`Failed to download ${entry.key}: ${response.status} ${response.statusText}`);
+          }
+
+          const relativeKey = currentPath && entry.key.startsWith(currentPath)
+            ? entry.key.slice(currentPath.length)
+            : entry.key;
+          const cleanedKey = relativeKey.replace(/^\/+/, '');
+          const segments = cleanedKey.split('/').filter(Boolean);
+          const fileName = segments.pop();
+
+          if (!fileName) {
+            continue;
+          }
+
+          let targetDir = directoryHandle;
+          for (const segment of segments) {
+            targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
+          }
+
+          const fileHandle = await targetDir.getFileHandle(fileName, { create: true });
+          const writable = await fileHandle.createWritable();
+          try {
+            if (response.body) {
+              await response.body.pipeTo(writable);
+            } else {
+              const blob = await response.blob();
+              await writable.write(blob);
+              await writable.close();
+            }
+          } catch (err) {
+            try {
+              await writable.abort();
+            } catch {
+              // Ignore abort errors
+            }
+            throw err;
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Download failed';
+          errors.push({ key: entry.key, message });
+        } finally {
+          completed += 1;
+          setDownloadProgress({ completed, total: totalFiles });
+        }
+      }
+
+      if (errors.length > 0) {
+        toast.warning(
+          `Downloaded ${totalFiles - errors.length} of ${totalFiles} objects. ${errors.length} failed.`
+        );
+      } else {
+        toast.success(`Downloaded ${totalFiles} object${totalFiles === 1 ? '' : 's'}.`);
+      }
+
+      setSelectedIds(new Set());
+      handleBatchDownloadCancel();
+    } catch (err) {
+      if (
+        err instanceof DOMException &&
+        (err.name === 'AbortError' || err.name === 'NotAllowedError')
+      ) {
+        setDownloadProgress(null);
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Batch download failed';
+      toast.error(message);
+    } finally {
+      setIsDownloadingBatch(false);
+      setDownloadProgress(null);
+    }
+  }, [
+    batchDownloadEnabled,
+    downloadPlan,
+    getProxyDownloadUrl,
+    currentPath,
+    handleBatchDownloadCancel,
+  ]);
+
   const handleDeleteCancel = useCallback(() => {
     setDeleteDialogOpen(false);
     setItemsToDelete([]);
@@ -410,12 +707,28 @@ export function S3Browser() {
     handleDeleteCancel();
   }, [handleDeleteCancel]);
 
+  const handleDownloadContinuationCancel = useCallback(() => {
+    if (downloadResolveAbortRef.current) {
+      downloadResolveAbortRef.current.abort();
+      downloadResolveAbortRef.current = null;
+    }
+    handleBatchDownloadCancel();
+  }, [handleBatchDownloadCancel]);
+
   const handleDeleteContinuationConfirm = useCallback(() => {
     if (deleteContinuationResolveRef.current) {
       deleteContinuationResolveRef.current(true);
       deleteContinuationResolveRef.current = null;
     }
     setDeleteContinuationCount(null);
+  }, []);
+
+  const handleDownloadContinuationConfirm = useCallback(() => {
+    if (downloadContinuationResolveRef.current) {
+      downloadContinuationResolveRef.current(true);
+      downloadContinuationResolveRef.current = null;
+    }
+    setDownloadContinuationCount(null);
   }, []);
 
   const handleCreateFolderClick = useCallback(() => {
@@ -680,8 +993,10 @@ export function S3Browser() {
           onCreateFolderClick={handleCreateFolderClick}
           onBucketInfoClick={handleBucketInfoClick}
           selectedCount={selectedIds.size}
+          onBatchDownload={batchDownloadEnabled ? handleBatchDownloadRequest : undefined}
           onBatchDelete={handleBatchDeleteRequest}
           isDeleting={isDeleting}
+          isDownloading={isDownloadingBatch}
           selectionMode={selectionMode}
           onToggleSelection={handleToggleSelection}
           showVersions={showVersions}
@@ -699,6 +1014,7 @@ export function S3Browser() {
               onCopyUrl={handleCopyUrl}
               onCopyS3Uri={handleCopyS3Uri}
               onPreview={handlePreview}
+              onBatchDownload={batchDownloadEnabled ? handleBatchDownloadItem : undefined}
               selectedIds={selectedIds}
               onSelectItem={handleSelectItem}
               onSelectAll={handleSelectAll}
@@ -744,6 +1060,20 @@ export function S3Browser() {
         />
       )}
 
+      <BatchDownloadDialog
+        open={downloadDialogOpen}
+        items={itemsToDownload}
+        isDownloading={isDownloadingBatch}
+        isResolving={isResolvingDownload}
+        previewKeys={downloadPreview?.previewKeys}
+        totalKeys={downloadPreview?.totalKeys}
+        folderCount={downloadSelectionFolderCount}
+        resolutionError={downloadResolveError}
+        progress={downloadProgress}
+        onConfirm={handleBatchDownloadConfirm}
+        onCancel={handleBatchDownloadCancel}
+      />
+
       <DeleteDialog
         open={deleteDialogOpen}
         items={itemsToDelete}
@@ -776,6 +1106,30 @@ export function S3Browser() {
               Stop
             </Button>
             <Button onClick={handleDeleteContinuationConfirm}>
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={downloadContinuationCount !== null} onOpenChange={(open) => !open && handleDownloadContinuationCancel()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Continue gathering downloads?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Found {downloadContinuationCount ?? 0} objects so far. Continue gathering more to download?
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Stopping will cancel the download.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleDownloadContinuationCancel}>
+              Stop
+            </Button>
+            <Button onClick={handleDownloadContinuationConfirm}>
               Continue
             </Button>
           </DialogFooter>

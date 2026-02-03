@@ -48,6 +48,7 @@ interface FileListItemProps {
   onCopy: (item: S3Object) => void;
   onMove: (item: S3Object) => void;
   onPreview: (item: S3Object) => void;
+  onBatchDownload?: (item: S3Object) => void;
   selectionId: string;
   showVersions: boolean;
   isSelected?: boolean;
@@ -93,6 +94,7 @@ export function FileListItem({
   onCopy,
   onMove,
   onPreview,
+  onBatchDownload,
   selectionId,
   showVersions,
   isSelected = false,
@@ -106,6 +108,7 @@ export function FileListItem({
   const isDeleteMarker = showVersions && item.isDeleteMarker === true;
   const canPreview = !isDeleteMarker;
   const canCopyMove = !isDeleteMarker && !isPreviousVersion;
+  const canBatchDownload = Boolean(onBatchDownload) && item.isFolder && !isDeleteMarker && !isPreviousVersion;
   const isInteractive = canPreview;
   const isSelectable = true;
 
@@ -305,6 +308,12 @@ export function FileListItem({
                   <FolderInput className="h-4 w-4 mr-2" />
                   Move to...
                 </DropdownMenuItem>
+                {canBatchDownload && (
+                  <DropdownMenuItem onClick={() => onBatchDownload?.(item)}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Download folder contents
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={() => onDelete(item)}
                   className="text-destructive focus:text-destructive"

@@ -7,6 +7,7 @@ import {
   RefreshCw,
   LogOut,
   Trash2,
+  Download,
   ArrowLeftRight,
   Info,
   FlaskConical,
@@ -52,8 +53,10 @@ interface ToolbarProps {
   onCreateFolderClick: () => void;
   onBucketInfoClick: () => void;
   selectedCount?: number;
+  onBatchDownload?: () => void;
   onBatchDelete?: () => void;
   isDeleting?: boolean;
+  isDownloading?: boolean;
   selectionMode?: boolean;
   onToggleSelection?: () => void;
   showVersions?: boolean;
@@ -69,8 +72,10 @@ export function Toolbar({
   onCreateFolderClick,
   onBucketInfoClick,
   selectedCount = 0,
+  onBatchDownload,
   onBatchDelete,
   isDeleting = false,
+  isDownloading = false,
   selectionMode = false,
   onToggleSelection,
   showVersions = false,
@@ -171,6 +176,22 @@ export function Toolbar({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{selectionMode ? 'Cancel selection' : 'Select items'}</TooltipContent>
+              </Tooltip>
+            )}
+
+            {selectionMode && selectedCount > 0 && onBatchDownload && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={onBatchDownload}
+                    disabled={isDownloading}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isDownloading ? 'Downloading...' : `Download ${selectedCount} item(s)`}</TooltipContent>
               </Tooltip>
             )}
 
@@ -302,6 +323,24 @@ export function Toolbar({
                       ? 'Versioning not supported by this storage'
                       : showVersions ? 'Hide versions' : 'Show versions'}
                 </TooltipContent>
+              </Tooltip>
+            )}
+
+            {selectionMode && selectedCount > 0 && onBatchDownload && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    onClick={onBatchDownload}
+                    disabled={isDownloading}
+                  >
+                    <Download className="h-4 w-4 mr-2 sm:mr-1" />
+                    <span className="hidden sm:inline">
+                      {isDownloading ? 'Downloading...' : `Download (${selectedCount})`}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isDownloading ? 'Downloading...' : `Download ${selectedCount} item(s)`}</TooltipContent>
               </Tooltip>
             )}
 
