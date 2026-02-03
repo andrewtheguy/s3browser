@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useBrowserContext } from '../../contexts';
 import { useDownload } from '../../hooks';
+import { BROWSE_WINDOW_LIMIT } from '../../config/browse';
 import { FileListItem } from './FileListItem';
 import type { S3Object } from '../../types';
 
@@ -336,7 +337,7 @@ export function FileList({
                     onClick={() => void loadPrevWindow()}
                     disabled={isLoading}
                   >
-                    Load previous 10,000
+                    Load previous {BROWSE_WINDOW_LIMIT.toLocaleString()}
                   </Button>
                 )}
                 {hasNextWindow && (
@@ -346,7 +347,7 @@ export function FileList({
                     onClick={() => void loadNextWindow()}
                     disabled={isLoading}
                   >
-                    Load next 10,000
+                    Load next {BROWSE_WINDOW_LIMIT.toLocaleString()}
                   </Button>
                 )}
               </div>

@@ -13,6 +13,7 @@ import { useS3ClientContext } from './useS3ClientContext';
 import { listObjects } from '../services/api';
 import { getPathSegments, sortObjects } from '../utils/formatters';
 import { decodeUrlToS3Path } from '../utils/urlEncoding';
+import { BROWSE_WINDOW_LIMIT } from '../config/browse';
 
 interface BrowserState {
   objects: S3Object[];
@@ -95,7 +96,7 @@ const initialState: BrowserState = {
   windowIndex: 0,
 };
 
-const MAX_OBJECTS = 10000;
+const MAX_OBJECTS = BROWSE_WINDOW_LIMIT;
 
 export const BrowserContext = createContext<BrowserContextValue | null>(null);
 

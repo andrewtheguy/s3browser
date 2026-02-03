@@ -178,7 +178,7 @@ All data is stored in `~/.s3browser/`:
 
 | Action | Limit / behavior |
 | --- | --- |
-| Browse (list objects) | UI caps results to the first 10,000 items per folder view; items beyond the cap are not displayed (truncated) and can only be reached by deleting some files to drop under the limit. |
+| Browse (list objects) | UI caps results to the first 5,000 items per folder view; use the in-app “Load previous/next 5,000” controls to page through larger folders. |
 | Upload | No item-count cap; constrained by per-file size limits and concurrency. Max file size 5GB; files >= 10MB use multipart with 10MB parts (single uploads are for files < 10MB). |
 | Delete | No hard item cap overall; requests are batched in 1,000 objects (S3 DeleteObjects API limit). |
 | Copy / Move | No hard item cap overall; requests are batched in 1,000 operations per request. |

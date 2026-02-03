@@ -1,0 +1,1 @@
+export const BROWSE_WINDOW_LIMIT = 5000;
