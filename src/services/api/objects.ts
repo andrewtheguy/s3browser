@@ -190,6 +190,7 @@ export interface ObjectMetadata {
   sseKmsKeyId?: string;
   sseCustomerAlgorithm?: string;
   storageClass?: string;
+  vendor?: 'aws' | 'b2' | 'other';
 }
 
 export async function getObjectMetadata(
