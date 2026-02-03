@@ -79,12 +79,13 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {item.isFolder ? 'Folder Details' : 'File Details'}
           </DialogTitle>
         </DialogHeader>
+        <div className="overflow-y-auto flex-1 min-h-0">
         <Table>
           <TableBody>
             <TableRow>
@@ -152,6 +153,26 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                   </TableRow>
                 ) : metadata && (
                   <>
+                    <TableRow>
+                      <TableCell className="font-medium">
+                        Encryption
+                      </TableCell>
+                      <TableCell>
+                        {metadata.serverSideEncryption
+                          || metadata.sseCustomerAlgorithm
+                          || (metadata.vendor === 'aws' || metadata.vendor === 'b2' ? 'None' : 'Unknown')}
+                      </TableCell>
+                    </TableRow>
+                    {metadata.sseKmsKeyId && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          KMS Key ID
+                        </TableCell>
+                        <TableCell className="break-all font-mono text-xs">
+                          {metadata.sseKmsKeyId}
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {metadata.contentType && (
                       <TableRow>
                         <TableCell className="font-medium">
@@ -202,26 +223,6 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                         </TableCell>
                       </TableRow>
                     )}
-                    <TableRow>
-                      <TableCell className="font-medium">
-                        Encryption
-                      </TableCell>
-                      <TableCell>
-                        {metadata.serverSideEncryption
-                          || metadata.sseCustomerAlgorithm
-                          || (metadata.vendor === 'aws' || metadata.vendor === 'b2' ? 'None' : 'Unknown')}
-                      </TableCell>
-                    </TableRow>
-                    {metadata.sseKmsKeyId && (
-                      <TableRow>
-                        <TableCell className="font-medium">
-                          KMS Key ID
-                        </TableCell>
-                        <TableCell className="break-all font-mono text-xs">
-                          {metadata.sseKmsKeyId}
-                        </TableCell>
-                      </TableRow>
-                    )}
                     {item.etag && (
                       <TableRow>
                         <TableCell className="font-medium">
@@ -257,6 +258,7 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
             )}
           </TableBody>
         </Table>
+        </div>
         <DialogFooter>
           <Button onClick={onClose}>Close</Button>
         </DialogFooter>
