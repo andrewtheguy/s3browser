@@ -50,6 +50,13 @@ export function useUpload() {
   const cancelledIdsRef = useRef<Set<string>>(new Set());
   const mountGenerationRef = useRef(0);
   const sessionIdRef = useRef(crypto.randomUUID());
+  const pendingUpdatesRef = useRef<Map<string, Partial<UploadProgress>>>(new Map());
+  const updateFlushScheduledRef = useRef(false);
+  const progressTimersRef = useRef<Map<string, number>>(new Map());
+  const progressPendingRef = useRef<Map<string, { loaded: number; total: number }>>(new Map());
+  const progressLastRef = useRef<Map<string, number>>(new Map());
+
+  const PROGRESS_UPDATE_INTERVAL_MS = 150;
 
   // Refs to avoid stale closures in callbacks
   const uploadsRef = useRef<UploadProgress[]>(uploads);
@@ -95,6 +102,42 @@ export function useUpload() {
     },
     []
   );
+
+  const flushBatchedUpdates = useCallback(() => {
+    updateFlushScheduledRef.current = false;
+    const pendingUpdates = pendingUpdatesRef.current;
+    if (pendingUpdates.size === 0) return;
+    pendingUpdatesRef.current = new Map();
+
+    setUploadsAndSync((prev) =>
+      prev.map((upload) => {
+        const updates = pendingUpdates.get(upload.id);
+        if (!updates) return upload;
+        return { ...upload, ...updates };
+      })
+    );
+  }, [setUploadsAndSync]);
+
+  const scheduleBatchedUpdatesFlush = useCallback(() => {
+    if (updateFlushScheduledRef.current) return;
+    updateFlushScheduledRef.current = true;
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(flushBatchedUpdates);
+      return;
+    }
+    void Promise.resolve().then(flushBatchedUpdates);
+  }, [flushBatchedUpdates]);
+
+  const clearProgressState = useCallback((id: string) => {
+    const timerId = progressTimersRef.current.get(id);
+    if (timerId) {
+      window.clearTimeout(timerId);
+    }
+    progressTimersRef.current.delete(id);
+    progressPendingRef.current.delete(id);
+    progressLastRef.current.delete(id);
+  }, []);
+
 
   const readUploadLock = useCallback((): UploadLockRecord | null => {
     if (typeof window === 'undefined') return null;
@@ -170,11 +213,20 @@ export function useUpload() {
   // Cleanup on unmount: abort all in-progress uploads
   useEffect(() => {
     const controllers = abortControllersRef.current;
+    const progressTimers = progressTimersRef.current;
+    const progressPending = progressPendingRef.current;
+    const progressLast = progressLastRef.current;
     return () => {
       for (const controller of controllers.values()) {
         controller.abort();
       }
       controllers.clear();
+      for (const timerId of progressTimers.values()) {
+        window.clearTimeout(timerId);
+      }
+      progressTimers.clear();
+      progressPending.clear();
+      progressLast.clear();
     };
   }, []);
 
@@ -202,16 +254,53 @@ export function useUpload() {
 
   const updateUpload = useCallback(
     (id: string, updates: Partial<UploadProgress>) => {
-      setUploadsAndSync((prev) =>
-        prev.map((u) => (u.id === id ? { ...u, ...updates } : u))
-      );
+      const existingUpdates = pendingUpdatesRef.current.get(id);
+      pendingUpdatesRef.current.set(id, existingUpdates ? { ...existingUpdates, ...updates } : updates);
+      scheduleBatchedUpdatesFlush();
     },
-    [setUploadsAndSync]
+    [scheduleBatchedUpdatesFlush]
+  );
+
+  const scheduleProgressUpdate = useCallback(
+    (id: string, loaded: number, total: number) => {
+      const now = Date.now();
+      const lastUpdate = progressLastRef.current.get(id) ?? 0;
+      const elapsed = now - lastUpdate;
+      const percentage = total > 0 ? Math.round((loaded / total) * 100) : 0;
+
+      if (elapsed >= PROGRESS_UPDATE_INTERVAL_MS && !progressTimersRef.current.has(id)) {
+        progressLastRef.current.set(id, now);
+        updateUpload(id, { loaded, total, percentage });
+        return;
+      }
+
+      progressPendingRef.current.set(id, { loaded, total });
+      if (!progressTimersRef.current.has(id)) {
+        const delay = Math.max(PROGRESS_UPDATE_INTERVAL_MS - elapsed, 0);
+        const timerId = window.setTimeout(() => {
+          progressTimersRef.current.delete(id);
+          const pending = progressPendingRef.current.get(id);
+          if (!pending) return;
+          progressPendingRef.current.delete(id);
+          progressLastRef.current.set(id, Date.now());
+          const nextPercentage =
+            pending.total > 0 ? Math.round((pending.loaded / pending.total) * 100) : 0;
+          updateUpload(id, {
+            loaded: pending.loaded,
+            total: pending.total,
+            percentage: nextPercentage,
+          });
+        }, delay);
+        progressTimersRef.current.set(id, timerId);
+      }
+    },
+    [updateUpload]
   );
 
   // Mark upload as completed: update stats and clear file reference
   const markCompleted = useCallback(
     (id: string, fileSize: number) => {
+      clearProgressState(id);
       setCompletedStats((prev) => ({
         count: prev.count + 1,
         size: prev.size + fileSize,
@@ -221,7 +310,7 @@ export function useUpload() {
         return prev.filter((u) => u.id !== id);
       });
     },
-    [releaseUploadFileReference, setUploadsAndSync]
+    [clearProgressState, releaseUploadFileReference, setUploadsAndSync]
   );
 
   const uploadSingleFileWithProxy = useCallback(
@@ -241,16 +330,12 @@ export function useUpload() {
         key,
         file,
         (loaded, total) => {
-          updateUpload(uploadItem.id, {
-            loaded,
-            total,
-            percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
-          });
+          scheduleProgressUpdate(uploadItem.id, loaded, total);
         },
         abortController.signal
       );
     },
-    [updateUpload, activeConnectionId, bucket]
+    [scheduleProgressUpdate, activeConnectionId, bucket]
   );
 
   const uploadMultipartFile = useCallback(
@@ -311,11 +396,7 @@ export function useUpload() {
         existingParts,
         abortSignal: abortController.signal,
         onProgress: (loaded, total) => {
-          updateUpload(uploadItem.id, {
-            loaded,
-            total,
-            percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
-          });
+          scheduleProgressUpdate(uploadItem.id, loaded, total);
         },
         onInitiated: (initiatedUploadId, initiatedSanitizedKey) => {
           uploadId = initiatedUploadId;
@@ -367,7 +448,7 @@ export function useUpload() {
 
       return result;
     },
-    [updateUpload, activeConnectionId, bucket]
+    [scheduleProgressUpdate, updateUpload, activeConnectionId, bucket]
   );
 
   const normalizePrefix = useCallback((prefix: string) => {
@@ -622,6 +703,7 @@ export function useUpload() {
         }
       }
 
+      clearProgressState(id);
       releaseUploadFileReference(id);
       setUploadsAndSync((prev) => prev.filter((u) => u.id !== id));
 
@@ -632,6 +714,7 @@ export function useUpload() {
     [
       activeConnectionId,
       bucket,
+      clearProgressState,
       refreshPendingUploads,
       releaseUploadFileReference,
       removeFromQueue,
