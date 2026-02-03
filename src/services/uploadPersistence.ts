@@ -97,13 +97,15 @@ export function getUploadByFile(
   if (!ids || ids.size === 0) {
     return Promise.resolve(null);
   }
+  let newest: PersistedUpload | null = null;
   for (const id of ids.values()) {
     const upload = uploadsById.get(id);
-    if (upload) {
-      return Promise.resolve(upload);
+    if (!upload) continue;
+    if (!newest || upload.updatedAt > newest.updatedAt) {
+      newest = upload;
     }
   }
-  return Promise.resolve(null);
+  return Promise.resolve(newest);
 }
 
 /**
