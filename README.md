@@ -176,7 +176,13 @@ All data is stored in `~/.s3browser/`:
 
 ## Limitations
 
-- Maximum file size: 5GB
+| Action | Limit / behavior |
+| --- | --- |
+| Browse (list objects) | UI caps results to the first 10,000 items per folder view. |
+| Upload | No item-count cap; constrained by per-file size limits and concurrency. Max file size 5GB; files >= 10MB use multipart with 10MB parts (single uploads are for files < 10MB). |
+| Delete | No hard item cap overall; requests are batched in 1,000 objects (S3 DeleteObjects API limit). |
+| Copy / Move | No hard item cap overall; requests are batched in 1,000 operations per request. |
+| Download | Presigned URL TTL must be 60 seconds–7 days (default 1 hour if not provided). |
 
 ## Security
 
