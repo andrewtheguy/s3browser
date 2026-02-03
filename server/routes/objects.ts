@@ -994,6 +994,10 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     sseCustomerAlgorithm: response.SSECustomerAlgorithm,
     storageClass: response.StorageClass,
     vendor: detectS3Vendor(req.s3Credentials?.endpoint),
+    cacheControl: response.CacheControl,
+    contentDisposition: response.ContentDisposition,
+    contentEncoding: response.ContentEncoding,
+    userMetadata: response.Metadata,
   });
 });
 

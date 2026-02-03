@@ -79,12 +79,13 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {item.isFolder ? 'Folder Details' : 'File Details'}
           </DialogTitle>
         </DialogHeader>
+        <div className="overflow-y-auto flex-1 min-h-0">
         <Table>
           <TableBody>
             <TableRow>
@@ -152,26 +153,6 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                   </TableRow>
                 ) : metadata && (
                   <>
-                    {metadata.contentType && (
-                      <TableRow>
-                        <TableCell className="font-medium">
-                          Content Type
-                        </TableCell>
-                        <TableCell>
-                          {metadata.contentType}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    {metadata.storageClass && (
-                      <TableRow>
-                        <TableCell className="font-medium">
-                          Storage Class
-                        </TableCell>
-                        <TableCell>
-                          {metadata.storageClass}
-                        </TableCell>
-                      </TableRow>
-                    )}
                     <TableRow>
                       <TableCell className="font-medium">
                         Encryption
@@ -192,6 +173,56 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                         </TableCell>
                       </TableRow>
                     )}
+                    {metadata.contentType && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Content Type
+                        </TableCell>
+                        <TableCell>
+                          {metadata.contentType}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.cacheControl && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Cache-Control
+                        </TableCell>
+                        <TableCell>
+                          {metadata.cacheControl}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.contentDisposition && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Content-Disposition
+                        </TableCell>
+                        <TableCell className="break-all">
+                          {metadata.contentDisposition}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.contentEncoding && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Content-Encoding
+                        </TableCell>
+                        <TableCell>
+                          {metadata.contentEncoding}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.storageClass && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Storage Class
+                        </TableCell>
+                        <TableCell>
+                          {metadata.storageClass}
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {item.etag && (
                       <TableRow>
                         <TableCell className="font-medium">
@@ -202,12 +233,32 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                         </TableCell>
                       </TableRow>
                     )}
+                    {metadata.userMetadata && Object.keys(metadata.userMetadata).length > 0 && (
+                      <>
+                        <TableRow>
+                          <TableCell colSpan={2} className="font-semibold text-muted-foreground pt-4">
+                            Custom Metadata
+                          </TableCell>
+                        </TableRow>
+                        {Object.entries(metadata.userMetadata).map(([key, value]) => (
+                          <TableRow key={key}>
+                            <TableCell className="font-medium break-all">
+                              {key}
+                            </TableCell>
+                            <TableCell className="break-all">
+                              {value}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </>
+                    )}
                   </>
                 )}
               </>
             )}
           </TableBody>
         </Table>
+        </div>
         <DialogFooter>
           <Button onClick={onClose}>Close</Button>
         </DialogFooter>
