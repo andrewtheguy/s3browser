@@ -224,7 +224,7 @@ export function Toolbar({
                     variant={showVersions ? 'default' : 'outline'}
                     onClick={onToggleVersions}
                   >
-                    {showVersions ? 'Versions On' : 'Show Versions'}
+                    {showVersions ? 'Hide Versions' : 'Show Versions'}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{showVersions ? 'Hide versions' : 'Show versions'}</TooltipContent>

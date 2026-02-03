@@ -123,7 +123,9 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
     res.status(400).json({ error: keyValidation.error });
     return;
   }
-  const versionId = typeof req.query.versionId === 'string' && req.query.versionId.trim()
+  const versionId = typeof req.query.versionId === 'string' &&
+    req.query.versionId.trim() &&
+    !hasUnsafeChars(req.query.versionId)
     ? req.query.versionId
     : undefined;
 
