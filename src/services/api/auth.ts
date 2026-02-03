@@ -57,6 +57,11 @@ export interface ConnectionsResponse {
   connections: ServerSavedConnection[];
 }
 
+export interface ExportProfileResponse {
+  filename: string;
+  content: string;
+}
+
 export async function login(credentials: LoginCredentials): Promise<LoginResponse> {
   const response = await apiPost<LoginResponse>('/auth/login', credentials);
   if (!response) {
@@ -119,4 +124,28 @@ export async function getConnection(connectionId: number): Promise<ServerSavedCo
 
 export async function deleteConnectionFromServer(connectionId: number): Promise<void> {
   await apiDelete(`/auth/connections/${connectionId}`);
+}
+
+export async function exportConnectionProfile(
+  connectionId: number,
+  format: 'aws' | 'rclone',
+  bucket?: string
+): Promise<ExportProfileResponse> {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+
+  const response = await apiPost<ExportProfileResponse>(
+    `/auth/connections/${connectionId}/export`,
+    {
+      format,
+      bucket: bucket?.trim() ? bucket : undefined,
+    }
+  );
+
+  if (!response) {
+    throw new Error('Failed to export profile: empty response');
+  }
+
+  return response;
 }

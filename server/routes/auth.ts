@@ -9,6 +9,8 @@ import {
   AuthenticatedRequest,
   listUserBuckets,
   validateBucket,
+  normalizeEndpoint,
+  detectS3Vendor,
 } from '../middleware/auth.js';
 import {
   getAllConnections,
@@ -40,6 +42,18 @@ interface SelectBucketRequestBody {
   bucket?: string;
 }
 
+type ExportProfileFormat = 'aws' | 'rclone';
+
+interface ExportProfileRequestBody {
+  format?: ExportProfileFormat;
+  bucket?: string;
+}
+
+interface ExportProfileResponse {
+  filename: string;
+  content: string;
+}
+
 interface DbConnectionRow {
   id: number;
   name: string;
@@ -52,6 +66,81 @@ interface DbConnectionRow {
 }
 
 const router = Router();
+
+function sanitizeProfileName(name: string, fallback: string): string {
+  const trimmed = name.trim();
+  const base = trimmed.length > 0 ? trimmed : fallback;
+  return base.replace(/[^a-zA-Z0-9+=,.@_-]/g, '_');
+}
+
+function sanitizeFilename(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return 's3-connection';
+  }
+
+  let result = '';
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    const code = trimmed.charCodeAt(i);
+    if (
+      code <= 0x1f
+      || char === '\\'
+      || char === '/'
+      || char === ':'
+      || char === '*'
+      || char === '?'
+      || char === '"'
+      || char === '<'
+      || char === '>'
+      || char === '|'
+      || /\s/.test(char)
+    ) {
+      result += '_';
+    } else {
+      result += char;
+    }
+  }
+
+  return result || 's3-connection';
+}
+
+function buildAwsProfile(profileName: string, accessKeyId: string, secretAccessKey: string, region: string): string {
+  return [
+    `[${profileName}]`,
+    `aws_access_key_id = ${accessKeyId}`,
+    `aws_secret_access_key = ${secretAccessKey}`,
+    `region = ${region}`,
+    '',
+  ].join('\n');
+}
+
+function buildRcloneProfile(
+  profileName: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  region: string | null,
+  provider: string,
+  endpoint?: string
+): string {
+  const lines = [
+    `[${profileName}]`,
+    'type = s3',
+    `provider = ${provider}`,
+    `access_key_id = ${accessKeyId}`,
+    `secret_access_key = ${secretAccessKey}`,
+  ];
+
+  if (region) {
+    lines.push(`region = ${region}`);
+  }
+  if (endpoint) {
+    lines.push(`endpoint = ${endpoint}`);
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
 
 // POST /api/auth/login - Authenticate with password
 router.post('/login', (req: Request, res: Response): void => {
@@ -397,6 +486,64 @@ router.post('/test-connection', loginMiddleware, async (req: AuthenticatedReques
   }
 
   res.json({ success: true });
+});
+
+// POST /api/auth/connections/:id/export - Export connection credentials as a config profile
+router.post('/connections/:id/export', loginMiddleware, (req: AuthenticatedRequest, res: Response): void => {
+  const connectionId = parseInt(req.params.id as string, 10);
+
+  if (isNaN(connectionId) || connectionId <= 0) {
+    res.status(400).json({ error: 'Valid connection ID is required' });
+    return;
+  }
+
+  const connection = getConnectionById(connectionId);
+  if (!connection) {
+    res.status(404).json({ error: 'Connection not found' });
+    return;
+  }
+
+  const body = req.body as ExportProfileRequestBody;
+  const format = body.format;
+
+  if (format !== 'aws' && format !== 'rclone') {
+    res.status(400).json({ error: 'Invalid export format' });
+    return;
+  }
+
+  const decryptedSecret = decryptConnectionSecretKey(connection);
+  const profileName = sanitizeProfileName(connection.name, `connection-${connection.id}`);
+  const filenameBase = sanitizeFilename(profileName);
+  const normalizedEndpoint = normalizeEndpoint(connection.endpoint);
+  const region = connection.region || 'us-east-1';
+  let content: string;
+  let filename: string;
+
+  if (format === 'aws') {
+    content = buildAwsProfile(profileName, connection.access_key_id, decryptedSecret, region);
+    filename = `${filenameBase}.aws-credentials`;
+  } else {
+    const provider = (() => {
+      const vendor = detectS3Vendor(normalizedEndpoint);
+      if (vendor === 'b2') return 'Backblaze';
+      if (vendor === 'aws') return 'AWS';
+      return 'Other';
+    })();
+
+    content = buildRcloneProfile(
+      profileName,
+      connection.access_key_id,
+      decryptedSecret,
+      connection.region || 'us-east-1',
+      provider,
+      normalizedEndpoint
+    );
+    filename = `${filenameBase}.rclone.conf`;
+  }
+
+  const response: ExportProfileResponse = { filename, content };
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(response);
 });
 
 export default router;

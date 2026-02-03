@@ -115,7 +115,7 @@ export async function getBucketRegion(
 export async function validateCredentials(credentials: S3Credentials): Promise<{ valid: boolean; error?: string }> {
   const endpoint = normalizeEndpoint(credentials.endpoint);
 
-  console.log('Validating credentials for bucket:', credentials.bucket, 'endpoint:', endpoint || 'AWS S3');
+  console.debug('Validating credentials for bucket:', credentials.bucket, 'endpoint:', endpoint || 'AWS S3');
 
   const client = new S3Client({
     region: credentials.region,
