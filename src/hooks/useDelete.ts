@@ -7,6 +7,7 @@ import type { S3Object } from '../types';
 interface ResolveDeletePlanOptions {
   includeFolderContents?: boolean;
   signal?: AbortSignal;
+  onContinuationPrompt?: (currentCount: number) => boolean | Promise<boolean>;
 }
 
 interface DeletePlan {
@@ -16,6 +17,7 @@ interface DeletePlan {
 
 const MAX_BATCH_DELETE = 1000;
 const MAX_BATCH_DELETE_BYTES = 90_000;
+const DELETE_CONTINUATION_PROMPT_EVERY = 10_000;
 
 function buildDeleteBatches(keys: string[]): string[][] {
   const encoder = new TextEncoder();
@@ -140,6 +142,7 @@ export function useDelete() {
       const fileKeys = new Set<string>();
       const folderKeys = new Set<string>();
       const queue: string[] = [];
+      let nextContinuationPromptAt = DELETE_CONTINUATION_PROMPT_EVERY;
 
       for (const item of items) {
         if (item.isFolder) {
@@ -179,6 +182,19 @@ export function useDelete() {
             }
           }
           continuationToken = result.isTruncated ? result.continuationToken : undefined;
+
+          if (
+            fileKeys.size >= nextContinuationPromptAt &&
+            (continuationToken || queue.length > 0)
+          ) {
+            const shouldContinue = await Promise.resolve(
+              options.onContinuationPrompt?.(fileKeys.size) ?? true
+            );
+            if (!shouldContinue) {
+              return { fileKeys: Array.from(fileKeys), folderKeys: Array.from(folderKeys) };
+            }
+            nextContinuationPromptAt += DELETE_CONTINUATION_PROMPT_EVERY;
+          }
         } while (continuationToken);
       }
 

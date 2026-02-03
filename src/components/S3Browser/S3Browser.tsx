@@ -65,6 +65,8 @@ export function S3Browser() {
   const [deletePlan, setDeletePlan] = useState<{ fileKeys: string[]; folderKeys: string[] } | null>(null);
   const [isResolvingDelete, setIsResolvingDelete] = useState(false);
   const [deleteResolveError, setDeleteResolveError] = useState<string | null>(null);
+  const [deleteContinuationCount, setDeleteContinuationCount] = useState<number | null>(null);
+  const deleteContinuationResolveRef = useRef<((value: boolean) => void) | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -237,6 +239,11 @@ export function S3Browser() {
         const plan = await resolveDeletePlan(itemsToDeleteRef.current, {
           includeFolderContents: true,
           signal: abortController.signal,
+          onContinuationPrompt: (currentCount) =>
+            new Promise<boolean>((resolve) => {
+              deleteContinuationResolveRef.current = resolve;
+              setDeleteContinuationCount(currentCount);
+            }),
         });
         if (!abortController.signal.aborted) {
           setDeletePlan(plan);
@@ -255,6 +262,11 @@ export function S3Browser() {
 
     return () => {
       abortController.abort();
+      if (deleteContinuationResolveRef.current) {
+        deleteContinuationResolveRef.current(false);
+        deleteContinuationResolveRef.current = null;
+      }
+      setDeleteContinuationCount(null);
     };
   }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, resolveDeletePlan]);
 
@@ -331,6 +343,27 @@ export function S3Browser() {
     setDeletePlan(null);
     setDeleteResolveError(null);
     setDeleteMode('single');
+    if (deleteContinuationResolveRef.current) {
+      deleteContinuationResolveRef.current(false);
+      deleteContinuationResolveRef.current = null;
+    }
+    setDeleteContinuationCount(null);
+  }, []);
+
+  const handleDeleteContinuationCancel = useCallback(() => {
+    if (deleteContinuationResolveRef.current) {
+      deleteContinuationResolveRef.current(false);
+      deleteContinuationResolveRef.current = null;
+    }
+    setDeleteContinuationCount(null);
+  }, []);
+
+  const handleDeleteContinuationConfirm = useCallback(() => {
+    if (deleteContinuationResolveRef.current) {
+      deleteContinuationResolveRef.current(true);
+      deleteContinuationResolveRef.current = null;
+    }
+    setDeleteContinuationCount(null);
   }, []);
 
   const handleCreateFolderClick = useCallback(() => {
@@ -684,6 +717,30 @@ export function S3Browser() {
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
       />
+
+      <Dialog open={deleteContinuationCount !== null} onOpenChange={(open) => !open && handleDeleteContinuationCancel()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Continue gathering deletes?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Found {deleteContinuationCount ?? 0} objects so far. Continue gathering more to delete?
+            </p>
+            <p className="text-xs text-muted-foreground">
+              You can stop now to delete only the items gathered so far.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleDeleteContinuationCancel}>
+              Stop
+            </Button>
+            <Button onClick={handleDeleteContinuationConfirm}>
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <PreviewDialog
         open={preview.isOpen}

@@ -133,7 +133,7 @@ export function UploadDialog({
               <Accordion type="single" collapsible>
                 <AccordionItem value="pending-uploads">
                   <AccordionTrigger className="text-sm font-medium text-yellow-700">
-                    Pending Uploads ({pendingResumable.length})
+                    Pending Resumes ({pendingResumable.length})
                   </AccordionTrigger>
                   <AccordionContent>
                     {pendingResumable.length === 0 ? (
