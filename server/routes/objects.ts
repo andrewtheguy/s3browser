@@ -32,13 +32,13 @@ function isAccessDenied(err: unknown): boolean {
   }
 
   const named = err as { name?: string; Code?: string; code?: string; message?: string };
-  const name = named.name ?? named.Code ?? named.code;
-  const message = named.message ?? '';
+  const name = (named.name ?? named.Code ?? named.code ?? '').toLowerCase();
+  const message = (named.message ?? '').toLowerCase();
 
-  return name === 'AccessDenied'
-    || name === 'Forbidden'
-    || message.includes('AccessDenied')
-    || message.includes('Forbidden');
+  return name === 'accessdenied'
+    || name === 'forbidden'
+    || message.includes('accessdenied')
+    || message.includes('forbidden');
 }
 
 interface FolderRequestBody {
