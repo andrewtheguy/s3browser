@@ -22,10 +22,12 @@ interface BrowserState {
   limitMessage: string | null;
   limitContinuationToken: string | null;
   windowStart: number;
+  windowTokens: Array<string | null>;
+  windowIndex: number;
 }
 
 type BrowserAction =
-  | { type: 'FETCH_START'; windowStart: number }
+  | { type: 'FETCH_START'; windowStart: number; windowIndex: number; windowTokens: Array<string | null> }
   | { type: 'FETCH_SUCCESS'; objects: S3Object[] }
   | { type: 'FETCH_ERROR'; error: string }
   | { type: 'FETCH_LIMIT_REACHED'; objects: S3Object[]; message: string; continuationToken: string | null }
@@ -42,6 +44,8 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
         limitMessage: null,
         limitContinuationToken: null,
         windowStart: action.windowStart,
+        windowIndex: action.windowIndex,
+        windowTokens: action.windowTokens,
       };
     case 'FETCH_SUCCESS':
       return {
@@ -87,6 +91,8 @@ const initialState: BrowserState = {
   limitMessage: null,
   limitContinuationToken: null,
   windowStart: 0,
+  windowTokens: [null],
+  windowIndex: 0,
 };
 
 const MAX_OBJECTS = 10000;
@@ -131,7 +137,12 @@ export function BrowserProvider({
   }, []);
 
   const fetchObjectsWindow = useCallback(
-    async (path: string, startToken: string | undefined, windowStart: number) => {
+    async (
+      path: string,
+      startToken: string | undefined,
+      windowIndex: number,
+      windowTokens: Array<string | null>
+    ) => {
       if (!isConnected || !activeConnectionId || !bucket) return;
 
       // Abort any in-flight request
@@ -143,7 +154,7 @@ export function BrowserProvider({
       abortControllerRef.current = abortController;
 
       const requestId = ++requestIdRef.current;
-      dispatch({ type: 'FETCH_START', windowStart });
+      dispatch({ type: 'FETCH_START', windowStart: windowIndex * MAX_OBJECTS, windowIndex, windowTokens });
 
       try {
         const aggregated: S3Object[] = [];
@@ -168,7 +179,7 @@ export function BrowserProvider({
               dispatch({
                 type: 'FETCH_LIMIT_REACHED',
                 objects: limitedObjects,
-                message: buildLimitMessage(windowStart, limitedObjects.length),
+                message: buildLimitMessage(windowIndex * MAX_OBJECTS, limitedObjects.length),
                 continuationToken: continuationToken ?? null,
               });
               lastFetchedPathRef.current = path;
@@ -184,7 +195,7 @@ export function BrowserProvider({
               dispatch({
                 type: 'FETCH_LIMIT_REACHED',
                 objects: limitedObjects,
-                message: buildLimitMessage(windowStart, limitedObjects.length),
+                message: buildLimitMessage(windowIndex * MAX_OBJECTS, limitedObjects.length),
                 continuationToken: result.continuationToken ?? null,
               });
               lastFetchedPathRef.current = path;
@@ -234,15 +245,27 @@ export function BrowserProvider({
   }, [currentPath, navigateTo]);
 
   const refresh = useCallback(async () => {
-    await fetchObjectsWindow(currentPath, undefined, 0);
+    await fetchObjectsWindow(currentPath, undefined, 0, [null]);
   }, [currentPath, fetchObjectsWindow]);
 
   const loadNextWindow = useCallback(async () => {
     if (!state.limitContinuationToken) {
       return;
     }
-    await fetchObjectsWindow(currentPath, state.limitContinuationToken, state.windowStart + MAX_OBJECTS);
-  }, [currentPath, fetchObjectsWindow, state.limitContinuationToken, state.windowStart]);
+    const nextIndex = state.windowIndex + 1;
+    const nextTokens = [...state.windowTokens];
+    nextTokens[nextIndex] = state.limitContinuationToken;
+    await fetchObjectsWindow(currentPath, state.limitContinuationToken, nextIndex, nextTokens);
+  }, [currentPath, fetchObjectsWindow, state.limitContinuationToken, state.windowIndex, state.windowTokens]);
+
+  const loadPrevWindow = useCallback(async () => {
+    if (state.windowIndex === 0) {
+      return;
+    }
+    const prevIndex = state.windowIndex - 1;
+    const startToken = state.windowTokens[prevIndex] ?? undefined;
+    await fetchObjectsWindow(currentPath, startToken, prevIndex, state.windowTokens);
+  }, [currentPath, fetchObjectsWindow, state.windowIndex, state.windowTokens]);
 
   // Reset when disconnected
   useEffect(() => {
@@ -269,7 +292,7 @@ export function BrowserProvider({
   // Fetch objects when path changes (URL-driven)
   useEffect(() => {
     if (isConnected && lastFetchedPathRef.current !== currentPath) {
-      void fetchObjectsWindow(currentPath, undefined, 0);
+      void fetchObjectsWindow(currentPath, undefined, 0, [null]);
     }
   }, [isConnected, currentPath, fetchObjectsWindow]);
 
@@ -281,8 +304,11 @@ export function BrowserProvider({
       error: state.error,
       isLimited: state.isLimited,
       limitMessage: state.limitMessage,
+      windowStart: state.windowStart,
       hasNextWindow: Boolean(state.limitContinuationToken),
       loadNextWindow,
+      hasPrevWindow: state.windowIndex > 0,
+      loadPrevWindow,
       navigateTo,
       navigateUp,
       refresh,
@@ -295,8 +321,11 @@ export function BrowserProvider({
       state.error,
       state.isLimited,
       state.limitMessage,
+      state.windowStart,
       state.limitContinuationToken,
       loadNextWindow,
+      state.windowIndex,
+      loadPrevWindow,
       navigateTo,
       navigateUp,
       refresh,

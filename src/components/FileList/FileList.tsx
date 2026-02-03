@@ -61,8 +61,11 @@ export function FileList({
     navigateTo,
     isLimited,
     limitMessage,
+    windowStart,
     hasNextWindow,
     loadNextWindow,
+    hasPrevWindow,
+    loadPrevWindow,
   } = useBrowserContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentPage, setCurrentPage] = useState(() => {
@@ -313,20 +316,40 @@ export function FileList({
 
   return (
     <>
-      {isLimited && (
+      {(isLimited || hasPrevWindow) && (
         <Alert className="mb-3 border-yellow-300 bg-yellow-50 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-200">
           <AlertTitle>Results limited</AlertTitle>
           <AlertDescription>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span>{limitMessage || 'Results are limited for this folder.'}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void loadNextWindow()}
-                disabled={!hasNextWindow || isLoading}
-              >
-                Load next 10,000
-              </Button>
+              <span>
+                {limitMessage || (
+                  totalItems > 0
+                    ? `Showing items ${windowStart + 1}-${windowStart + totalItems}.`
+                    : 'Results are limited for this folder.'
+                )}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {hasPrevWindow && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void loadPrevWindow()}
+                    disabled={isLoading}
+                  >
+                    Load previous 10,000
+                  </Button>
+                )}
+                {hasNextWindow && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void loadNextWindow()}
+                    disabled={isLoading}
+                  >
+                    Load next 10,000
+                  </Button>
+                )}
+              </div>
             </div>
           </AlertDescription>
         </Alert>
