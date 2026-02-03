@@ -225,7 +225,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
               disabled={isSelecting}
             >
               <Settings className="h-4 w-4 mr-2" />
-              Manage Connections
+              Choose Connection
             </Button>
             <Button
               variant="outline"
