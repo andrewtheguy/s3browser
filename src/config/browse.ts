@@ -9,4 +9,5 @@ if (CONFIGURED_BROWSE_WINDOW_LIMIT % S3_MAX_KEYS !== 0) {
   throw new Error(`BROWSE_WINDOW_LIMIT must be a multiple of ${S3_MAX_KEYS}.`);
 }
 
+// Number of items to fetch per browse window; must align with S3 MaxKeys (1000).
 export const BROWSE_WINDOW_LIMIT = CONFIGURED_BROWSE_WINDOW_LIMIT;
