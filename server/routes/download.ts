@@ -38,6 +38,13 @@ function isWebReadableStream(value: unknown): value is WebReadableStreamLike {
 
 async function pipeWebStreamToResponse(stream: WebReadableStreamLike, res: Response): Promise<void> {
   const reader = stream.getReader();
+  const safeCancel = async (reason?: unknown) => {
+    try {
+      await reader.cancel?.(reason);
+    } catch (err) {
+      console.error('pipeWebStreamToResponse: failed to cancel reader', err);
+    }
+  };
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -71,13 +78,13 @@ async function pipeWebStreamToResponse(stream: WebReadableStreamLike, res: Respo
               res.once('finish', onFinish);
             });
           } catch {
-            await reader.cancel?.();
+            await safeCancel();
             break;
           }
         }
       }
       if (res.writableEnded) {
-        await reader.cancel?.();
+        await safeCancel();
         break;
       }
     }
