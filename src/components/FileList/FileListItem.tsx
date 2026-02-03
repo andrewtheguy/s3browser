@@ -245,17 +245,15 @@ export function FileListItem({
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenuItem
                       onClick={() => onCopyUrl(item.key, 3600, showVersions ? item.versionId : undefined)}
-                      disabled={!canPreview}
                     >
                       Presigned URL (1 hour)
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => onCopyUrl(item.key, 86400, showVersions ? item.versionId : undefined)}
-                      disabled={!canPreview}
                     >
                       Presigned URL (1 day)
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onCopyS3Uri(item.key)} disabled={!canPreview}>
+                    <DropdownMenuItem onClick={() => onCopyS3Uri(item.key)}>
                       S3 URI (s3://...)
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -287,7 +285,6 @@ export function FileListItem({
                         size="icon"
                         className="h-8 w-8"
                         onClick={(e) => e.stopPropagation()}
-                        disabled={false}
                       >
                         <MoreVertical className="h-4 w-4" />
                       </Button>
