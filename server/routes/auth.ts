@@ -105,14 +105,31 @@ function sanitizeFilename(name: string): string {
   return result || 's3-connection';
 }
 
-function buildAwsProfile(profileName: string, accessKeyId: string, secretAccessKey: string, region: string): string {
-  return [
-    `[${profileName}]`,
+function buildAwsProfile(
+  profileName: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  region: string,
+  endpoint?: string
+): string {
+  const header = profileName === 'default' ? '[default]' : `[profile ${profileName}]`;
+  const lines = [
+    header,
+    `region = ${region}`,
+    'output = json',
+  ];
+
+  if (endpoint) {
+    lines.push(`endpoint_url = ${endpoint}`);
+  }
+
+  lines.push(
     `aws_access_key_id = ${accessKeyId}`,
     `aws_secret_access_key = ${secretAccessKey}`,
-    `region = ${region}`,
-    '',
-  ].join('\n');
+    ''
+  );
+
+  return lines.join('\n');
 }
 
 function buildRcloneProfile(
@@ -520,8 +537,14 @@ router.post('/connections/:id/export', loginMiddleware, (req: AuthenticatedReque
   let filename: string;
 
   if (format === 'aws') {
-    content = buildAwsProfile(profileName, connection.access_key_id, decryptedSecret, region);
-    filename = `${filenameBase}.aws-credentials`;
+    const endpointForAws = (() => {
+      if (!normalizedEndpoint) return undefined;
+      const vendor = detectS3Vendor(normalizedEndpoint);
+      return vendor === 'aws' ? undefined : normalizedEndpoint;
+    })();
+
+    content = buildAwsProfile(profileName, connection.access_key_id, decryptedSecret, region, endpointForAws);
+    filename = `${filenameBase}.aws-config`;
   } else {
     const provider = (() => {
       const vendor = detectS3Vendor(normalizedEndpoint);
