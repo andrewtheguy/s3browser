@@ -60,6 +60,8 @@ export function S3Browser() {
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePreconfirmOpen, setDeletePreconfirmOpen] = useState(false);
+  const [deletePreconfirmCounts, setDeletePreconfirmCounts] = useState({ files: 0, folders: 0 });
   const [itemsToDelete, setItemsToDelete] = useState<S3Object[]>([]);
   const [deleteMode, setDeleteMode] = useState<'single' | 'batch'>('single');
   const [deletePlan, setDeletePlan] = useState<{ fileKeys: string[]; folderKeys: string[] } | null>(null);
@@ -222,11 +224,19 @@ export function S3Browser() {
   const handleBatchDeleteRequest = useCallback(() => {
     const items = objects.filter((item) => selectedKeys.has(item.key));
     if (items.length > 0) {
+      const fileCount = items.filter((item) => !item.isFolder).length;
+      const folderCount = items.length - fileCount;
       setDeleteMode('batch');
       setItemsToDelete(items);
       setDeletePlan(null);
       setDeleteResolveError(null);
-      setDeleteDialogOpen(true);
+      if (folderCount > 0) {
+        setDeletePreconfirmCounts({ files: fileCount, folders: folderCount });
+        setDeletePreconfirmOpen(true);
+        setDeleteDialogOpen(false);
+      } else {
+        setDeleteDialogOpen(true);
+      }
     }
   }, [objects, selectedKeys]);
 
@@ -364,6 +374,8 @@ export function S3Browser() {
 
   const handleDeleteCancel = useCallback(() => {
     setDeleteDialogOpen(false);
+    setDeletePreconfirmOpen(false);
+    setDeletePreconfirmCounts({ files: 0, folders: 0 });
     setItemsToDelete([]);
     setDeletePlan(null);
     setDeleteResolveError(null);
@@ -373,6 +385,15 @@ export function S3Browser() {
       deleteContinuationResolveRef.current = null;
     }
     setDeleteContinuationCount(null);
+  }, []);
+
+  const handleDeletePreconfirmCancel = useCallback(() => {
+    handleDeleteCancel();
+  }, [handleDeleteCancel]);
+
+  const handleDeletePreconfirmContinue = useCallback(() => {
+    setDeletePreconfirmOpen(false);
+    setDeleteDialogOpen(true);
   }, []);
 
   const handleDeleteContinuationCancel = useCallback(() => {
@@ -728,6 +749,33 @@ export function S3Browser() {
           onUploadComplete={handleUploadComplete}
         />
       )}
+
+      <Dialog
+        open={deletePreconfirmOpen}
+        onOpenChange={(open) => !open && handleDeletePreconfirmCancel()}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Review delete selection</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              You selected {deletePreconfirmCounts.files} file{deletePreconfirmCounts.files === 1 ? '' : 's'} and {deletePreconfirmCounts.folders} folder{deletePreconfirmCounts.folders === 1 ? '' : 's'}.
+            </p>
+            <p>
+              We need to gather the folder contents before showing the final delete confirmation.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleDeletePreconfirmCancel}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeletePreconfirmContinue}>
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DeleteDialog
         open={deleteDialogOpen}
