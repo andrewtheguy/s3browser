@@ -445,25 +445,28 @@ export function FileList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pageItems.map((item) => (
-              <FileListItem
-                key={getObjectSelectionId(item)}
-                item={item}
-                showVersions={showVersions}
-                selectionId={getObjectSelectionId(item)}
-                onNavigate={navigateTo}
-                onDownload={handleDownload}
-                onCopyUrl={onCopyUrl}
-                onCopyS3Uri={onCopyS3Uri}
-                onDelete={onDeleteRequest}
-                onCopy={onCopyRequest}
-                onMove={onMoveRequest}
-                onPreview={onPreview}
-                isSelected={selectedIds.has(getObjectSelectionId(item))}
-                onSelect={onSelectItem}
-                selectionMode={selectionMode}
-              />
-            ))}
+            {pageItems.map((item) => {
+              const selectionId = getObjectSelectionId(item);
+              return (
+                <FileListItem
+                  key={selectionId}
+                  item={item}
+                  showVersions={showVersions}
+                  selectionId={selectionId}
+                  onNavigate={navigateTo}
+                  onDownload={handleDownload}
+                  onCopyUrl={onCopyUrl}
+                  onCopyS3Uri={onCopyS3Uri}
+                  onDelete={onDeleteRequest}
+                  onCopy={onCopyRequest}
+                  onMove={onMoveRequest}
+                  onPreview={onPreview}
+                  isSelected={selectedIds.has(selectionId)}
+                  onSelect={onSelectItem}
+                  selectionMode={selectionMode}
+                />
+              );
+            })}
           </TableBody>
         </Table>
       </div>

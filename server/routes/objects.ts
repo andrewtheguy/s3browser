@@ -7,6 +7,7 @@ import {
   PutObjectCommand,
   CopyObjectCommand,
   HeadObjectCommand,
+  type HeadObjectCommandInput,
   CreateMultipartUploadCommand,
   UploadPartCopyCommand,
   CompleteMultipartUploadCommand,
@@ -402,6 +403,10 @@ router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req:
     res.status(400).json({ error: keyValidation.error });
     return;
   }
+
+  const versionId = typeof req.query.versionId === 'string'
+    ? req.query.versionId.trim()
+    : '';
 
   const bucket = req.s3Credentials?.bucket;
   const client = req.s3Client;
@@ -932,10 +937,14 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     return;
   }
 
-  const command = new HeadObjectCommand({
+  const commandInput: HeadObjectCommandInput = {
     Bucket: bucket,
     Key: key,
-  });
+  };
+  if (versionId) {
+    commandInput.VersionId = versionId;
+  }
+  const command = new HeadObjectCommand(commandInput);
 
   let response;
   try {
