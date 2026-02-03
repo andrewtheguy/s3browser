@@ -225,7 +225,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
               disabled={isSelecting}
             >
               <ArrowLeftRight className="h-4 w-4 mr-2" />
-              Choose Connection
+              Change Connection
             </Button>
             <Button
               variant="outline"
