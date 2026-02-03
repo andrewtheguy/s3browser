@@ -162,7 +162,6 @@ export function useUpload() {
       return;
     }
     if (isLockStale(lock)) {
-      window.localStorage.removeItem(UPLOAD_LOCK_KEY);
       setIsUploadBlocked(false);
       return;
     }
@@ -586,9 +585,32 @@ export function useUpload() {
 
   const upload = useCallback(
     async (files: UploadCandidate[], prefix: string = ''): Promise<void> => {
+      const claimLock = () => {
+        if (typeof window === 'undefined') return;
+        const lock: UploadLockRecord = {
+          id: sessionIdRef.current,
+          updatedAt: Date.now(),
+          active: true,
+        };
+        window.localStorage.setItem(UPLOAD_LOCK_KEY, JSON.stringify(lock));
+      };
+
       const existingLock = readUploadLock();
-      if (existingLock && !isLockStale(existingLock) && existingLock.active && existingLock.id !== sessionIdRef.current) {
-        throw new Error('Uploads are already running in another tab.');
+      if (existingLock) {
+        if (isLockStale(existingLock)) {
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(UPLOAD_LOCK_KEY);
+            const refreshedLock = readUploadLock();
+            if (!refreshedLock) {
+              claimLock();
+            }
+          }
+        } else if (existingLock.active && existingLock.id !== sessionIdRef.current) {
+          throw new Error('Uploads are already running in another tab.');
+        }
+      }
+      if (!existingLock && typeof window !== 'undefined') {
+        claimLock();
       }
       if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
