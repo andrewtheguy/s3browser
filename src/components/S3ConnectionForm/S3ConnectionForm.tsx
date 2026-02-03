@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { Trash2, LogOut, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,14 @@ export function S3ConnectionForm({
     bucket: '',
     endpoint: 'https://s3.amazonaws.com',
   });
+
+  useEffect(() => {
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.removeAttribute('data-select-open');
+      }
+    };
+  }, []);
 
   const endpointValid = isValidUrl(formData.endpoint);
   const showEndpointError = endpointTouched && !endpointValid;
@@ -179,6 +187,17 @@ export function S3ConnectionForm({
     }
   };
 
+  const handleSelectOpenChange = (open: boolean) => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (open) {
+      document.body.setAttribute('data-select-open', 'true');
+    } else {
+      document.body.removeAttribute('data-select-open');
+    }
+  };
+
   // Secret key is optional when using an existing saved connection (unless user wants to change it)
   const isExistingConnection = selectedConnectionId !== null;
   const secretKeyRequired = !isExistingConnection || wantsToChangeSecretKey;
@@ -253,6 +272,7 @@ export function S3ConnectionForm({
         <Select
           value={selectedConnectionId !== null ? String(selectedConnectionId) : 'new'}
           onValueChange={handleConnectionChange}
+          onOpenChange={handleSelectOpenChange}
           disabled={connectionsLoading}
         >
           <SelectTrigger id="connection-select">
