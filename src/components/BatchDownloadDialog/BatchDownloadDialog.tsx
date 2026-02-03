@@ -50,8 +50,11 @@ function getMessage({
   if (isResolving) {
     return 'Gathering objects to download...';
   }
-  if (isDownloading && progress) {
-    return `Downloading ${progress.completed} of ${progress.total} objects...`;
+  if (isDownloading) {
+    if (progress) {
+      return `Downloading ${progress.completed} of ${progress.total} objects...`;
+    }
+    return 'Downloading...';
   }
   if (resolvedTotalKeys === 0 && folderCount > 0) {
     return 'No objects found under the selected folders.';

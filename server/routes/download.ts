@@ -296,6 +296,12 @@ router.get('/:connectionId/:bucket/object', s3Middleware, requireBucket, async (
 
   try {
     const response = await client.send(command);
+    const body = response.Body;
+    if (!body) {
+      res.status(500).json({ error: 'Missing response body' });
+      return;
+    }
+
     const rawFilename = keyValidation.validatedKey.split('/').pop() || 'download';
     const filename = sanitizeFilename(rawFilename);
 
@@ -307,12 +313,6 @@ router.get('/:connectionId/:bucket/object', s3Middleware, requireBucket, async (
     }
     if (typeof response.ContentLength === 'number') {
       res.setHeader('Content-Length', response.ContentLength.toString());
-    }
-
-    const body = response.Body;
-    if (!body) {
-      res.status(500).json({ error: 'Missing response body' });
-      return;
     }
 
     if (isNodeReadableStream(body)) {
@@ -340,6 +340,11 @@ router.get('/:connectionId/:bucket/object', s3Middleware, requireBucket, async (
 
     res.status(500).json({ error: 'Unsupported response body type' });
   } catch (error) {
+    if (res.headersSent) {
+      console.error('pipeWebStreamToResponse: failed to stream response', error);
+      res.end();
+      return;
+    }
     if (isAccessDenied(error)) {
       res.status(403).json({ error: 'Access denied' });
       return;
