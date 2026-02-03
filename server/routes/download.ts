@@ -45,7 +45,36 @@ async function pipeWebStreamToResponse(stream: WebReadableStreamLike, res: Respo
         break;
       }
       if (value && !res.writableEnded) {
-        res.write(Buffer.from(value));
+        const canContinue = res.write(Buffer.from(value));
+        if (!canContinue) {
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const onDrain = () => {
+                cleanup();
+                resolve();
+              };
+              const onClose = () => {
+                cleanup();
+                reject(new Error('Response closed'));
+              };
+              const onFinish = () => {
+                cleanup();
+                reject(new Error('Response finished'));
+              };
+              const cleanup = () => {
+                res.off('drain', onDrain);
+                res.off('close', onClose);
+                res.off('finish', onFinish);
+              };
+              res.once('drain', onDrain);
+              res.once('close', onClose);
+              res.once('finish', onFinish);
+            });
+          } catch {
+            await reader.cancel?.();
+            break;
+          }
+        }
       }
       if (res.writableEnded) {
         await reader.cancel?.();
