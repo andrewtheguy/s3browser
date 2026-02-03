@@ -113,8 +113,10 @@ function performXhrUpload({
 }: XhrUploadOptions): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    let aborted = false;
 
     const abortHandler = () => {
+      aborted = true;
       xhr.abort();
     };
 
@@ -128,6 +130,7 @@ function performXhrUpload({
     if (abortSignal) {
       abortSignal.addEventListener('abort', abortHandler);
       if (abortSignal.aborted) {
+        aborted = true;
         cleanup();
         reject(new DOMException('Upload aborted', 'AbortError'));
         return;
@@ -136,7 +139,7 @@ function performXhrUpload({
 
     // Progress tracking
     xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable && onProgress) {
+      if (!aborted && event.lengthComputable && onProgress) {
         onProgress(event.loaded, event.total);
       }
     });
