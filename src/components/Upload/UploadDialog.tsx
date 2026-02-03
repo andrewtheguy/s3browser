@@ -133,17 +133,17 @@ export function UploadDialog({
               <Accordion type="single" collapsible>
                 <AccordionItem value="pending-uploads">
                   <AccordionTrigger className="text-sm font-medium text-yellow-700">
-                    Pending Resumes ({pendingResumable.length})
+                    Resumable Uploads ({pendingResumable.length})
                   </AccordionTrigger>
                   <AccordionContent>
                     {pendingResumable.length === 0 ? (
                       <p className="text-xs text-muted-foreground">
-                        No pending uploads to resume.
+                        No resumable uploads in this session.
                       </p>
                     ) : (
                       <>
                         <p className="text-xs text-muted-foreground mb-2">
-                          These uploads resume automatically when possible. If they stay pending after a reload, re-add the same file.
+                          These uploads resume automatically while this tab stays open.
                         </p>
                         <ScrollArea className="max-h-[200px] rounded-md border border-yellow-200 bg-yellow-50/50">
                           <ul className="p-2 space-y-2">

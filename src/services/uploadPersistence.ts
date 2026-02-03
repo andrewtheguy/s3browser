@@ -1,9 +1,5 @@
 import type { CompletedPart } from './api/multipartUpload';
 
-const DB_NAME = 's3browser-uploads';
-const DB_VERSION = 1;
-const STORE_NAME = 'pending-uploads';
-
 export interface PersistedUpload {
   id: string;
   uploadId: string;
@@ -19,261 +15,148 @@ export interface PersistedUpload {
   updatedAt: number;
 }
 
-let dbPromise: Promise<IDBDatabase> | null = null;
+const uploadsById = new Map<string, PersistedUpload>();
+const uploadsByFingerprint = new Map<string, Set<string>>();
 
-function openDatabase(): Promise<IDBDatabase> {
-  if (dbPromise) {
-    return dbPromise;
-  }
-
-  dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => {
-      // Reset so subsequent calls can retry
-      dbPromise = null;
-      reject(new Error('Failed to open IndexedDB'));
-    };
-
-    request.onsuccess = () => {
-      const db = request.result;
-
-      // Handle database version change (e.g., another tab upgraded the schema)
-      db.onversionchange = () => {
-        db.close();
-        dbPromise = null;
-      };
-
-      // Handle unexpected database close
-      db.onclose = () => {
-        dbPromise = null;
-      };
-
-      resolve(db);
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        // Index for finding uploads by file fingerprint
-        store.createIndex('fileFingerprint', ['fileName', 'fileSize', 'fileLastModified'], {
-          unique: false,
-        });
-        // Index for listing by creation time
-        store.createIndex('createdAt', 'createdAt', { unique: false });
-      }
-    };
-  });
-
-  return dbPromise;
-}
-
-/**
- * Generate a unique ID for a new upload
- */
 function generateUploadId(): string {
   return crypto.randomUUID();
 }
 
+function fingerprintKey(fileName: string, fileSize: number, fileLastModified: number): string {
+  return `${fileName}::${fileSize}::${fileLastModified}`;
+}
+
+function indexUpload(upload: PersistedUpload) {
+  const key = fingerprintKey(upload.fileName, upload.fileSize, upload.fileLastModified);
+  const ids = uploadsByFingerprint.get(key) ?? new Set<string>();
+  ids.add(upload.id);
+  uploadsByFingerprint.set(key, ids);
+}
+
+function unindexUpload(upload: PersistedUpload) {
+  const key = fingerprintKey(upload.fileName, upload.fileSize, upload.fileLastModified);
+  const ids = uploadsByFingerprint.get(key);
+  if (!ids) return;
+  ids.delete(upload.id);
+  if (ids.size === 0) {
+    uploadsByFingerprint.delete(key);
+  }
+}
+
 /**
- * Save or update an upload state
+ * Save or update an upload state (in-memory only).
  */
-export async function saveUploadState(upload: Omit<PersistedUpload, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): Promise<PersistedUpload> {
-  const db = await openDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const now = Date.now();
-
-    if (upload.id) {
-      // Updating existing upload - fetch to preserve createdAt
-      const existingId = upload.id;
-      const getRequest = store.get(existingId);
-      getRequest.onsuccess = () => {
-        const existing = getRequest.result as PersistedUpload | undefined;
-        const createdAt = existing?.createdAt ?? now;
-
-        const persistedUpload: PersistedUpload = {
-          ...upload,
-          id: existingId,
-          createdAt,
-          updatedAt: now,
-        };
-
-        const putRequest = store.put(persistedUpload);
-        putRequest.onsuccess = () => resolve(persistedUpload);
-        putRequest.onerror = () => reject(new Error('Failed to save upload state'));
-      };
-      getRequest.onerror = () => reject(new Error('Failed to get existing upload'));
-    } else {
-      // New upload
-      const persistedUpload: PersistedUpload = {
-        ...upload,
-        id: generateUploadId(),
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const putRequest = store.put(persistedUpload);
-      putRequest.onsuccess = () => resolve(persistedUpload);
-      putRequest.onerror = () => reject(new Error('Failed to save upload state'));
+export function saveUploadState(
+  upload: Omit<PersistedUpload, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
+): Promise<PersistedUpload> {
+  const now = Date.now();
+  if (upload.id) {
+    const existing = uploadsById.get(upload.id);
+    if (existing) {
+      unindexUpload(existing);
     }
-  });
+    const persistedUpload: PersistedUpload = {
+      ...upload,
+      id: upload.id,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    uploadsById.set(persistedUpload.id, persistedUpload);
+    indexUpload(persistedUpload);
+    return Promise.resolve(persistedUpload);
+  }
+
+  const persistedUpload: PersistedUpload = {
+    ...upload,
+    id: generateUploadId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  uploadsById.set(persistedUpload.id, persistedUpload);
+  indexUpload(persistedUpload);
+  return Promise.resolve(persistedUpload);
 }
 
 /**
- * Get an upload by its ID
+ * Get an upload by its ID.
+ * Note: returns a direct reference to the stored object; callers must not mutate it.
  */
-export async function getUploadById(id: string): Promise<PersistedUpload | null> {
-  const db = await openDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.get(id);
-
-    request.onsuccess = () => {
-      resolve((request.result as PersistedUpload | undefined) || null);
-    };
-
-    request.onerror = () => {
-      reject(new Error('Failed to get upload'));
-    };
-  });
+export function getUploadById(id: string): Promise<PersistedUpload | null> {
+  return Promise.resolve(uploadsById.get(id) ?? null);
 }
 
 /**
- * Find a resumable upload by file fingerprint
+ * Find a resumable upload by file fingerprint.
+ * Note: returns a direct reference to the stored object; callers must not mutate it.
  */
-export async function getUploadByFile(
+export function getUploadByFile(
   fileName: string,
   fileSize: number,
   fileLastModified: number
 ): Promise<PersistedUpload | null> {
-  const db = await openDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const index = store.index('fileFingerprint');
-    const request = index.get([fileName, fileSize, fileLastModified]);
-
-    request.onsuccess = () => {
-      resolve((request.result as PersistedUpload | undefined) || null);
-    };
-
-    request.onerror = () => {
-      reject(new Error('Failed to find upload by file'));
-    };
-  });
+  const key = fingerprintKey(fileName, fileSize, fileLastModified);
+  const ids = uploadsByFingerprint.get(key);
+  if (!ids || ids.size === 0) {
+    return Promise.resolve(null);
+  }
+  let newest: PersistedUpload | null = null;
+  for (const id of ids.values()) {
+    const upload = uploadsById.get(id);
+    if (!upload) {
+      ids.delete(id);
+      continue;
+    }
+    if (!newest || upload.updatedAt > newest.updatedAt) {
+      newest = upload;
+    }
+  }
+  return Promise.resolve(newest);
 }
 
 /**
- * Delete an upload state
+ * Delete an upload state.
  */
-export async function deleteUploadState(id: string): Promise<void> {
-  const db = await openDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.delete(id);
-
-    request.onsuccess = () => {
-      resolve();
-    };
-
-    request.onerror = () => {
-      reject(new Error('Failed to delete upload state'));
-    };
-  });
+export function deleteUploadState(id: string): Promise<void> {
+  const existing = uploadsById.get(id);
+  if (!existing) return Promise.resolve();
+  uploadsById.delete(id);
+  unindexUpload(existing);
+  return Promise.resolve();
 }
 
 /**
- * List all pending uploads, sorted by creation time (newest first)
+ * List all pending uploads, sorted by creation time (newest first).
+ * Note: returns direct references to stored objects; callers must not mutate them.
  */
-export async function listPendingUploads(): Promise<PersistedUpload[]> {
-  const db = await openDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const index = store.index('createdAt');
-    const request = index.openCursor(null, 'prev'); // Descending order
-
-    const uploads: PersistedUpload[] = [];
-
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (cursor) {
-        uploads.push(cursor.value as PersistedUpload);
-        cursor.continue();
-      } else {
-        resolve(uploads);
-      }
-    };
-
-    request.onerror = () => {
-      reject(new Error('Failed to list pending uploads'));
-    };
-  });
+export function listPendingUploads(): Promise<PersistedUpload[]> {
+  return Promise.resolve(Array.from(uploadsById.values()).sort((a, b) => b.createdAt - a.createdAt));
 }
 
 /**
- * Clear all pending uploads (useful for cleanup)
+ * Clear all pending uploads (useful for cleanup).
  */
-export async function clearAllPendingUploads(): Promise<void> {
-  const db = await openDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.clear();
-
-    request.onsuccess = () => {
-      resolve();
-    };
-
-    request.onerror = () => {
-      reject(new Error('Failed to clear pending uploads'));
-    };
-  });
+export function clearAllPendingUploads(): Promise<void> {
+  uploadsById.clear();
+  uploadsByFingerprint.clear();
+  return Promise.resolve();
 }
 
 /**
- * Update completed parts for an upload
+ * Update completed parts for an upload.
  */
-export async function updateCompletedParts(
+export function updateCompletedParts(
   id: string,
   completedParts: CompletedPart[]
 ): Promise<void> {
-  const db = await openDatabase();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const getRequest = store.get(id);
-
-    getRequest.onsuccess = () => {
-      const upload = getRequest.result as PersistedUpload | undefined;
-      if (!upload) {
-        reject(new Error('Upload not found'));
-        return;
-      }
-
-      upload.completedParts = completedParts;
-      upload.updatedAt = Date.now();
-
-      const putRequest = store.put(upload);
-      putRequest.onsuccess = () => resolve();
-      putRequest.onerror = () => reject(new Error('Failed to update completed parts'));
-    };
-
-    getRequest.onerror = () => {
-      reject(new Error('Failed to get upload for update'));
-    };
-  });
+  const existing = uploadsById.get(id);
+  if (!existing) {
+    return Promise.reject(new Error('Upload not found'));
+  }
+  const updated: PersistedUpload = {
+    ...existing,
+    completedParts,
+    updatedAt: Date.now(),
+  };
+  uploadsById.set(id, updated);
+  return Promise.resolve();
 }
