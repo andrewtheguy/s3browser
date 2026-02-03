@@ -103,6 +103,7 @@ export function useResolveObjectPlan() {
             options.signal
           );
           for (const obj of result.objects) {
+            throwIfAborted(options.signal);
             if (obj.isFolder) {
               if (!folderKeys.has(obj.key)) {
                 folderKeys.add(obj.key);
