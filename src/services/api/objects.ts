@@ -212,6 +212,10 @@ export interface ObjectMetadata {
   sseCustomerAlgorithm?: string;
   storageClass?: string;
   vendor?: 'aws' | 'b2' | 'other';
+  cacheControl?: string;
+  contentDisposition?: string;
+  contentEncoding?: string;
+  userMetadata?: Record<string, string>;
 }
 
 export async function getObjectMetadata(

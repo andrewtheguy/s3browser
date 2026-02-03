@@ -162,6 +162,36 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                         </TableCell>
                       </TableRow>
                     )}
+                    {metadata.cacheControl && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Cache-Control
+                        </TableCell>
+                        <TableCell>
+                          {metadata.cacheControl}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.contentDisposition && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Content-Disposition
+                        </TableCell>
+                        <TableCell className="break-all">
+                          {metadata.contentDisposition}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.contentEncoding && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Content-Encoding
+                        </TableCell>
+                        <TableCell>
+                          {metadata.contentEncoding}
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {metadata.storageClass && (
                       <TableRow>
                         <TableCell className="font-medium">
@@ -201,6 +231,25 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                           {item.etag}
                         </TableCell>
                       </TableRow>
+                    )}
+                    {metadata.userMetadata && Object.keys(metadata.userMetadata).length > 0 && (
+                      <>
+                        <TableRow>
+                          <TableCell colSpan={2} className="font-semibold text-muted-foreground pt-4">
+                            Custom Metadata
+                          </TableCell>
+                        </TableRow>
+                        {Object.entries(metadata.userMetadata).map(([key, value]) => (
+                          <TableRow key={key}>
+                            <TableCell className="font-medium break-all">
+                              {key}
+                            </TableCell>
+                            <TableCell className="break-all">
+                              {value}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </>
                     )}
                   </>
                 )}
