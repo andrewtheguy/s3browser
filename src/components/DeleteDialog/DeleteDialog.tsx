@@ -112,9 +112,11 @@ export function DeleteDialog({
 
   const resolvedTotalKeys = totalKeys ?? items.length;
   const remainingPreviewCount = Math.max(resolvedTotalKeys - previewKeys.length, 0);
-  const batchTitle = resolvedTotalKeys === 0 && folderCount > 0
+  const batchTitle = isResolving && folderCount > 0
     ? `Delete ${folderCount} Folder${folderCount === 1 ? '' : 's'}`
-    : `Delete ${resolvedTotalKeys} Object${resolvedTotalKeys === 1 ? '' : 's'}`;
+    : resolvedTotalKeys === 0 && folderCount > 0
+      ? `Delete ${folderCount} Folder${folderCount === 1 ? '' : 's'}`
+      : `Delete ${resolvedTotalKeys} Object${resolvedTotalKeys === 1 ? '' : 's'}`;
 
   const title = isBatch
     ? batchTitle
