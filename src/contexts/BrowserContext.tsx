@@ -229,12 +229,15 @@ export function BrowserProvider({
           return;
         }
         // Handle versioning not supported (501 NotImplemented)
+        // Guard against stale connections to prevent a prior false value persisting
         if (err instanceof ApiHttpError && err.status === 501 && err.code === 'NotImplemented') {
-          setVersioningSupported(false);
-          setShowVersions(false);
-          // Set lastFetchedVersionsRef to true so the useEffect sees a change
-          // (true !== false) and triggers a refetch without versions
-          lastFetchedVersionsRef.current = true;
+          if (requestId === requestIdRef.current) {
+            setVersioningSupported(false);
+            setShowVersions(false);
+            // Set lastFetchedVersionsRef to true so the useEffect sees a change
+            // (true !== false) and triggers a refetch without versions
+            lastFetchedVersionsRef.current = true;
+          }
           return;
         }
         if (requestId === requestIdRef.current) {
@@ -291,6 +294,8 @@ export function BrowserProvider({
       dispatch({ type: 'RESET' });
       lastFetchedPathRef.current = null;
       lastFetchedVersionsRef.current = null;
+      setShowVersions(false);
+      setVersioningSupported(true);
     }
   }, [isConnected]);
 
