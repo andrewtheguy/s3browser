@@ -6,6 +6,7 @@ import type { S3Object } from '../types';
 
 export interface ResolveObjectPlanOptions {
   includeFolderContents?: boolean;
+  includeVersions?: boolean;
   signal?: AbortSignal;
   onContinuationPrompt?: (currentCount: number) => boolean | Promise<boolean>;
   continuationPromptEvery?: number;
@@ -18,6 +19,12 @@ export interface ObjectPlan {
 }
 
 const CONTINUATION_PROMPT_EVERY = 10_000;
+const buildCompositeKey = (key: string, versionId?: string, includeVersions?: boolean): string => {
+  if (!includeVersions) {
+    return `${key}::`;
+  }
+  return `${key}::${versionId ?? ''}`;
+};
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
@@ -37,6 +44,7 @@ export function useResolveObjectPlan() {
       }
 
       const includeFolderContents = options.includeFolderContents ?? false;
+      const includeVersions = options.includeVersions ?? false;
       const fileKeys = new Map<string, { key: string; versionId?: string }>();
       const folderKeys = new Set<string>();
       const queue: string[] = [];
@@ -59,9 +67,9 @@ export function useResolveObjectPlan() {
             }
           }
         } else {
-          fileKeys.set(`${item.key}::${item.versionId ?? ''}`, {
+          fileKeys.set(buildCompositeKey(item.key, item.versionId, includeVersions), {
             key: item.key,
-            versionId: item.versionId,
+            versionId: includeVersions ? item.versionId : undefined,
           });
         }
       }
@@ -83,7 +91,7 @@ export function useResolveObjectPlan() {
             activeConnectionId,
             bucket,
             prefix,
-            false,
+            includeVersions,
             continuationToken,
             options.signal
           );
@@ -94,7 +102,10 @@ export function useResolveObjectPlan() {
                 queue.push(obj.key);
               }
             } else {
-              fileKeys.set(`${obj.key}::`, { key: obj.key });
+              fileKeys.set(buildCompositeKey(obj.key, obj.versionId, includeVersions), {
+                key: obj.key,
+                versionId: includeVersions ? obj.versionId : undefined,
+              });
             }
           }
           continuationToken = result.isTruncated ? result.continuationToken : undefined;

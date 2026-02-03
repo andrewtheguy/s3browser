@@ -55,7 +55,7 @@ const DOWNLOAD_CONTINUATION_EVERY = 10_000;
 
 export function S3Browser() {
   const { refresh, currentPath, objects, showVersions, toggleShowVersions, versioningSupported } = useBrowserContext();
-  const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
+  const { remove, removeMany, resolveObjectPlan: resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
   const { download, getProxyDownloadUrl } = useDownload();

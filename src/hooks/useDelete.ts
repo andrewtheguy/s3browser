@@ -2,8 +2,7 @@ import { useCallback, useState } from 'react';
 import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { deleteObject, deleteObjects } from '../services/api';
-import type { S3Object } from '../types';
-import { useResolveObjectPlan, type ResolveObjectPlanOptions, type ObjectPlan } from './useResolveObjectPlan';
+import { useResolveObjectPlan } from './useResolveObjectPlan';
 
 const MAX_BATCH_DELETE = 1000;
 const MAX_BATCH_DELETE_BYTES = 90_000;
@@ -127,17 +126,10 @@ export function useDelete() {
     [isConnected, activeConnectionId, bucket]
   );
 
-  const resolveDeletePlan = useCallback(
-    async (items: S3Object[], options: ResolveObjectPlanOptions = {}): Promise<ObjectPlan> => {
-      return resolveObjectPlan(items, options);
-    },
-    [resolveObjectPlan]
-  );
-
   return {
     remove,
     removeMany,
-    resolveDeletePlan,
+    resolveObjectPlan,
     isDeleting,
     error,
   };
