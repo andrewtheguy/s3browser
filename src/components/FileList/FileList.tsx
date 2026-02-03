@@ -55,8 +55,12 @@ export function FileList({
   selectionMode = false,
 }: FileListProps) {
   const { objects, isLoading, error, navigateTo, isLimited, limitMessage } = useBrowserContext();
-  const [currentPage, setCurrentPage] = useState(1);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [currentPage, setCurrentPage] = useState(() => {
+    const pageParam = searchParams.get(PAGE_QUERY_PARAM);
+    const parsedPage = pageParam ? Number(pageParam) : NaN;
+    return Number.isFinite(parsedPage) && parsedPage >= 1 ? Math.floor(parsedPage) : 1;
+  });
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
     key: 'name',
     direction: DEFAULT_SORT_DIRECTION.name,

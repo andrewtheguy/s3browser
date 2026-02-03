@@ -62,7 +62,7 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
 
 const initialState: BrowserState = {
   objects: [],
-  isLoading: false,
+  isLoading: true,
   error: null,
   isLimited: false,
   limitMessage: null,
