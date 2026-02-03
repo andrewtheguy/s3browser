@@ -391,7 +391,9 @@ router.post('/:connectionId/:bucket/seed-test-items', s3Middleware, requireBucke
 // DELETE /api/objects/:connectionId/:bucket?key=...
 router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const key = req.query.key as string | undefined;
-  const versionId = req.query.versionId as string | undefined;
+  const versionId = typeof req.query.versionId === 'string'
+    ? req.query.versionId.trim() || undefined
+    : undefined;
 
   if (!key) {
     res.status(400).json({ error: 'Object key is required' });
@@ -403,10 +405,6 @@ router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req:
     res.status(400).json({ error: keyValidation.error });
     return;
   }
-
-  const versionId = typeof req.query.versionId === 'string'
-    ? req.query.versionId.trim()
-    : '';
 
   const bucket = req.s3Credentials?.bucket;
   const client = req.s3Client;
@@ -929,6 +927,12 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     return;
   }
 
+  const versionIdQuery: unknown = req.query.versionId;
+  const versionId: string | undefined =
+    typeof versionIdQuery === 'string' && versionIdQuery.trim()
+      ? versionIdQuery.trim()
+      : undefined;
+
   const bucket = req.s3Credentials?.bucket;
   const client = req.s3Client;
 
@@ -940,10 +944,8 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
   const commandInput: HeadObjectCommandInput = {
     Bucket: bucket,
     Key: key,
+    VersionId: versionId,
   };
-  if (versionId) {
-    commandInput.VersionId = versionId;
-  }
   const command = new HeadObjectCommand(commandInput);
 
   let response;
