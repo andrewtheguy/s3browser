@@ -37,7 +37,7 @@ import { FEATURES } from '../../config';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
 
-const DELETE_PREVIEW_LIMIT = 50;
+const DELETE_PREVIEW_LIMIT = 100;
 
 export function S3Browser() {
   const { refresh, currentPath, objects } = useBrowserContext();
