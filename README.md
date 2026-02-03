@@ -178,11 +178,27 @@ All data is stored in `~/.s3browser/`:
 
 | Action | Limit / behavior |
 | --- | --- |
-| Browse (list objects) | UI caps results to the first 10,000 items per folder view; items beyond the cap are not displayed (truncated) and can only be reached by deleting some files to drop under the limit. |
+| Browse (list objects) | S3 lists keys with files and folders interleaved in lexicographic order. The UI then shows folders first and files second (each group alphabetized), but sorting is applied only within the current 5,000-item window (see examples below). |
 | Upload | No item-count cap; constrained by per-file size limits and concurrency. Max file size 5GB; files >= 10MB use multipart with 10MB parts (single uploads are for files < 10MB). |
 | Delete | No hard item cap overall; requests are batched in 1,000 objects (S3 DeleteObjects API limit). |
 | Copy / Move | No hard item cap overall; requests are batched in 1,000 operations per request. |
 | Download | Presigned URL TTL must be between 60 seconds (application-level validation) and 7 days (AWS S3 presigned URL limit) (default 1 hour if not provided). |
+
+### Browse window caveats (examples)
+
+- Sorting happens within the current window only. A folder that falls into a later window won’t appear at the top until you switch to the window that includes it.
+- Use the in-app “Load previous/next 5,000” controls to switch windows for larger folders.
+
+**Example 1: Folder name pushes it to a later window**
+- Suppose a prefix contains 6,000 items.
+- The first 5,000 lexicographic keys are mostly files like `a-0001.txt` … `m-4999.txt`.
+- A folder named `z-logs/` appears after those keys lexicographically, so it lands in the 5,001–6,000 window.
+- In the first window, you won’t see `z-logs/` at the top, even though the UI sorts folders first—because it isn’t in that window yet.
+- When you load the next 5,000 window, `z-logs/` will appear at the top of that window.
+
+**Example 2: Mixed folders and files**
+- If the first window includes folders `b-1/`, `b-2/` and files `a-1.txt`, `a-2.txt`, the UI will show `b-1/`, `b-2/` first, then `a-1.txt`, `a-2.txt` (folders are grouped before files within the window).
+- If folders like `reports/` or `yearly/` fall into the next 5,000-item window, they won’t appear at all on the first window until you load that next window.
 
 ## Security
 
