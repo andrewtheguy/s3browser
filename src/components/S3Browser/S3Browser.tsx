@@ -123,6 +123,13 @@ export function S3Browser() {
       .join('|');
   }, [itemsToDelete]);
 
+  const deleteSelectionAllFiles = useMemo(() => {
+    if (itemsToDelete.length === 0) {
+      return false;
+    }
+    return itemsToDelete.every((item) => !item.isFolder);
+  }, [itemsToDelete]);
+
   const itemsToDeleteRef = useRef<S3Object[]>([]);
 
   useEffect(() => {
@@ -231,6 +238,21 @@ export function S3Browser() {
       return;
     }
 
+    if (deleteSelectionAllFiles) {
+      if (deleteResolveAbortRef.current) {
+        deleteResolveAbortRef.current.abort();
+        deleteResolveAbortRef.current = null;
+      }
+      setDeletePlan({
+        fileKeys: itemsToDeleteRef.current.map((item) => item.key),
+        folderKeys: [],
+      });
+      setIsResolvingDelete(false);
+      setDeleteResolveError(null);
+      setDeleteContinuationCount(null);
+      return;
+    }
+
     const abortController = new AbortController();
     deleteResolveAbortRef.current = abortController;
     setIsResolvingDelete(true);
@@ -271,7 +293,7 @@ export function S3Browser() {
       }
       setDeleteContinuationCount(null);
     };
-  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, resolveDeletePlan]);
+  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, deleteSelectionAllFiles, resolveDeletePlan]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
