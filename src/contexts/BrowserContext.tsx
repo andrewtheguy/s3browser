@@ -232,7 +232,9 @@ export function BrowserProvider({
         if (err instanceof ApiHttpError && err.status === 501 && err.code === 'NotImplemented') {
           setVersioningSupported(false);
           setShowVersions(false);
-          // The useEffect watching showVersions will trigger a refetch without versions
+          // Set lastFetchedVersionsRef to true so the useEffect sees a change
+          // (true !== false) and triggers a refetch without versions
+          lastFetchedVersionsRef.current = true;
           return;
         }
         if (requestId === requestIdRef.current) {
