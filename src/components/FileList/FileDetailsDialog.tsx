@@ -53,6 +53,7 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
           activeConnectionId,
           bucket,
           item.key,
+          item.versionId,
           abortController.signal
         );
         if (!abortController.signal.aborted) {
@@ -104,6 +105,16 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
             </TableRow>
             {!item.isFolder && (
               <>
+                {(metadata?.versionId || item.versionId) && (
+                  <TableRow>
+                    <TableCell className="font-medium">
+                      Version ID
+                    </TableCell>
+                    <TableCell className="break-all font-mono text-xs">
+                      {metadata?.versionId ?? item.versionId}
+                    </TableCell>
+                  </TableRow>
+                )}
                 <TableRow>
                   <TableCell className="font-medium">
                     Size

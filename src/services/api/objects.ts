@@ -206,6 +206,7 @@ export interface ObjectMetadata {
   lastModified?: string;
   contentType?: string;
   etag?: string;
+  versionId?: string;
   serverSideEncryption?: string;
   sseKmsKeyId?: string;
   sseCustomerAlgorithm?: string;
@@ -217,10 +218,16 @@ export async function getObjectMetadata(
   connectionId: number,
   bucket: string,
   key: string,
+  versionId?: string,
   signal?: AbortSignal
 ): Promise<ObjectMetadata> {
+  const params = new URLSearchParams();
+  params.append('key', key);
+  if (versionId) {
+    params.append('versionId', versionId);
+  }
   const response = await apiGet<ObjectMetadata>(
-    `/objects/${connectionId}/${encodeURIComponent(bucket)}/metadata?key=${encodeURIComponent(key)}`,
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/metadata?${params.toString()}`,
     signal
   );
 

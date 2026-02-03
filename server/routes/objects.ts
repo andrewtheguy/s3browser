@@ -966,6 +966,7 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     lastModified: response.LastModified?.toISOString(),
     contentType: response.ContentType,
     etag: response.ETag,
+    versionId: response.VersionId,
     serverSideEncryption: response.ServerSideEncryption,
     sseKmsKeyId: response.SSEKMSKeyId,
     sseCustomerAlgorithm: response.SSECustomerAlgorithm,
