@@ -187,7 +187,6 @@ export function FileListItem({
                   item.isFolder && isInteractive ? "font-medium hover:underline" : ""
                 )}
               >
-                {isPreviousVersion ? '|_ ' : ''}
                 {item.name}
                 {item.isFolder && '/'}
                 {isPreviousVersion && (
