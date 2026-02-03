@@ -34,6 +34,7 @@ interface UploadLockRecord {
 const UPLOAD_LOCK_KEY = 's3browser-upload-lock';
 const UPLOAD_LOCK_STALE_MS = 2 * 60 * 1000;
 const UPLOAD_LOCK_HEARTBEAT_MS = 30 * 1000;
+const UPLOAD_LOCK_CHANNEL = 's3browser-upload-lock-channel';
 
 export function useUpload() {
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
@@ -50,6 +51,10 @@ export function useUpload() {
   const cancelledIdsRef = useRef<Set<string>>(new Set());
   const mountGenerationRef = useRef(0);
   const sessionIdRef = useRef(crypto.randomUUID());
+  const lockChannelRef = useRef<BroadcastChannel | null>(null);
+  const lockProbeRef = useRef<{ id: string; resolve: (active: boolean) => void } | null>(null);
+  const hasActiveUploadsRef = useRef(false);
+  const syncRequestIdRef = useRef(0);
   const pendingUpdatesRef = useRef<Map<string, Partial<UploadProgress>>>(new Map());
   const updateFlushScheduledRef = useRef(false);
   const progressTimersRef = useRef<Map<string, number>>(new Map());
@@ -154,8 +159,41 @@ export function useUpload() {
     return Date.now() - lock.updatedAt > UPLOAD_LOCK_STALE_MS;
   }, []);
 
-  const syncUploadBlockState = useCallback(() => {
+  const probeUploadLock = useCallback(async (): Promise<boolean> => {
+    if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') {
+      return false;
+    }
+    let channel = lockChannelRef.current;
+    if (!channel) {
+      channel = new BroadcastChannel(UPLOAD_LOCK_CHANNEL);
+      lockChannelRef.current = channel;
+    }
+
+    return new Promise((resolve) => {
+      const probeId = crypto.randomUUID();
+      const timeoutId = window.setTimeout(() => {
+        if (lockProbeRef.current?.id === probeId) {
+          lockProbeRef.current = null;
+        }
+        resolve(false);
+      }, 500);
+
+      lockProbeRef.current = {
+        id: probeId,
+        resolve: (active) => {
+          window.clearTimeout(timeoutId);
+          lockProbeRef.current = null;
+          resolve(active);
+        },
+      };
+
+      channel.postMessage({ type: 'ping', from: sessionIdRef.current, probeId });
+    });
+  }, []);
+
+  const syncUploadBlockState = useCallback(async () => {
     if (typeof window === 'undefined') return;
+    const requestId = ++syncRequestIdRef.current;
     const lock = readUploadLock();
     if (!lock) {
       setIsUploadBlocked(false);
@@ -165,8 +203,21 @@ export function useUpload() {
       setIsUploadBlocked(false);
       return;
     }
-    setIsUploadBlocked(lock.active && lock.id !== sessionIdRef.current);
-  }, [isLockStale, readUploadLock]);
+    if (lock.active && lock.id !== sessionIdRef.current) {
+      const confirmedActive = await probeUploadLock();
+      if (requestId !== syncRequestIdRef.current) {
+        return;
+      }
+      if (confirmedActive) {
+        setIsUploadBlocked(true);
+        return;
+      }
+      window.localStorage.removeItem(UPLOAD_LOCK_KEY);
+      setIsUploadBlocked(false);
+      return;
+    }
+    setIsUploadBlocked(false);
+  }, [isLockStale, probeUploadLock, readUploadLock]);
 
   const refreshPendingUploads = useCallback(async () => {
     const currentGeneration = mountGenerationRef.current;
@@ -238,11 +289,11 @@ export function useUpload() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    syncUploadBlockState();
+    void syncUploadBlockState();
 
     const handleStorage = (event: StorageEvent) => {
       if (event.key === UPLOAD_LOCK_KEY) {
-        syncUploadBlockState();
+        void syncUploadBlockState();
       }
     };
 
@@ -251,6 +302,50 @@ export function useUpload() {
       window.removeEventListener('storage', handleStorage);
     };
   }, [syncUploadBlockState]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') {
+      return;
+    }
+
+    let channel = lockChannelRef.current;
+    if (!channel) {
+      channel = new BroadcastChannel(UPLOAD_LOCK_CHANNEL);
+      lockChannelRef.current = channel;
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data as {
+        type?: string;
+        from?: string;
+        to?: string;
+        probeId?: string;
+      };
+      if (data.type === 'ping' && data.from && data.probeId) {
+        if (data.from === sessionIdRef.current) {
+          return;
+        }
+        if (hasActiveUploadsRef.current) {
+          channel?.postMessage({
+            type: 'pong',
+            to: data.from,
+            probeId: data.probeId,
+          });
+        }
+        return;
+      }
+      if (data.type === 'pong' && data.to === sessionIdRef.current && data.probeId) {
+        if (lockProbeRef.current?.id === data.probeId) {
+          lockProbeRef.current.resolve(true);
+        }
+      }
+    };
+
+    channel.addEventListener('message', handleMessage);
+    return () => {
+      channel.removeEventListener('message', handleMessage);
+    };
+  }, []);
 
   const updateUpload = useCallback(
     (id: string, updates: Partial<UploadProgress>) => {
@@ -828,11 +923,15 @@ export function useUpload() {
   const hasActiveUploads = uploads.some((u) => u.status === 'uploading' || u.status === 'pending');
 
   useEffect(() => {
+    hasActiveUploadsRef.current = hasActiveUploads;
+  }, [hasActiveUploads]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
 
     if (hasActiveUploads) {
       writeUploadLock();
-      syncUploadBlockState();
+      void syncUploadBlockState();
       return;
     }
 
@@ -840,7 +939,7 @@ export function useUpload() {
     if (lock?.id === sessionIdRef.current) {
       window.localStorage.removeItem(UPLOAD_LOCK_KEY);
     }
-    syncUploadBlockState();
+    void syncUploadBlockState();
 
     if (uploads.length === 0) {
       void clearAllPendingUploads()
