@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw, LogOut } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -96,13 +96,26 @@ export function LoginForm() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="max-w-[450px] w-full">
+      <Card className="max-w-[450px] w-full relative overflow-hidden">
         <CardContent className="p-8">
-          <div className="flex items-center justify-center mb-6">
-            <BucketIcon className="h-10 w-10 mr-2 text-primary" />
-            <h1 className="text-2xl font-bold">
-              S3 Browser
-            </h1>
+          <div className="flex items-center justify-center mb-6 relative">
+            <div className="flex items-center">
+              <BucketIcon className="h-10 w-10 mr-2 text-primary" />
+              <h1 className="text-2xl font-bold">
+                S3 Browser
+              </h1>
+            </div>
+            {isLoggedIn && !serverError && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="absolute -right-4 top-1/2 -translate-y-1/2 h-8 px-2 hover:text-foreground"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            )}
           </div>
 
           {isCheckingSession && !serverError ? (
@@ -151,7 +164,6 @@ export function LoginForm() {
                 error={error}
                 isLoading={isLoading}
                 setIsLoading={setIsLoading}
-                onLogout={handleLogout}
               />
 
               <p className="text-xs text-muted-foreground text-center mt-6">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { Trash2, LogOut, ArrowRight } from 'lucide-react';
+import { Trash2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,14 +41,12 @@ interface S3ConnectionFormProps {
   error: string | null;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
-  onLogout: () => void;
 }
 
 export function S3ConnectionForm({
   error,
   isLoading,
   setIsLoading,
-  onLogout,
 }: S3ConnectionFormProps) {
   const navigate = useNavigate();
   const { connect, isLoggedIn, activeConnectionId, credentials: activeCredentials, isConnected } = useS3Client();
@@ -211,19 +209,6 @@ export function S3ConnectionForm({
 
   return (
     <>
-      <div className="flex items-center justify-end mb-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onLogout}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Sign Out
-        </Button>
-      </div>
-
-      <Separator className="mb-4" />
-
       {deletionError && (
         <Alert variant="destructive" className="mb-4">
           <AlertDescription className="flex items-center justify-between">
