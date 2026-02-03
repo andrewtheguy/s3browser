@@ -186,7 +186,14 @@ export function useDelete() {
         let continuationToken: string | undefined = undefined;
         do {
           throwIfAborted(options.signal);
-          const result = await listObjects(activeConnectionId, bucket, prefix, continuationToken, options.signal);
+          const result = await listObjects(
+            activeConnectionId,
+            bucket,
+            prefix,
+            false,
+            continuationToken,
+            options.signal
+          );
           for (const obj of result.objects) {
             if (obj.isFolder) {
               if (!folderKeys.has(obj.key)) {

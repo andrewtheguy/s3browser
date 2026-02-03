@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useMemo,
+  useState,
   type ReactNode,
 } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -112,12 +113,14 @@ export function BrowserProvider({
   buildUrl,
 }: BrowserProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [showVersions, setShowVersions] = useState(false);
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const navigate = useNavigate();
   const { '*': splatPath, bucket: urlBucket } = useParams<{ '*': string; bucket: string }>();
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFetchedPathRef = useRef<string | null>(null);
+  const lastFetchedVersionsRef = useRef<boolean | null>(null);
 
   // Get bucket from URL params or credentials
   const bucket = urlBucket || credentials?.bucket;
@@ -166,6 +169,7 @@ export function BrowserProvider({
             activeConnectionId,
             bucket,
             path,
+            showVersions,
             continuationToken,
             abortController.signal
           );
@@ -184,6 +188,7 @@ export function BrowserProvider({
                 continuationToken: continuationToken ?? null,
               });
               lastFetchedPathRef.current = path;
+              lastFetchedVersionsRef.current = showVersions;
             }
             return;
           }
@@ -200,6 +205,7 @@ export function BrowserProvider({
                 continuationToken: result.continuationToken ?? null,
               });
               lastFetchedPathRef.current = path;
+              lastFetchedVersionsRef.current = showVersions;
             }
             return;
           }
@@ -214,6 +220,7 @@ export function BrowserProvider({
             objects: sortObjects(aggregated),
           });
           lastFetchedPathRef.current = path;
+          lastFetchedVersionsRef.current = showVersions;
         }
       } catch (err) {
         // Skip dispatch for aborted requests
@@ -226,7 +233,7 @@ export function BrowserProvider({
         }
       }
     },
-    [activeConnectionId, bucket, buildLimitMessage, isConnected]
+    [activeConnectionId, bucket, buildLimitMessage, isConnected, showVersions]
   );
 
   const navigateTo = useCallback(
@@ -273,6 +280,7 @@ export function BrowserProvider({
     if (!isConnected) {
       dispatch({ type: 'RESET' });
       lastFetchedPathRef.current = null;
+      lastFetchedVersionsRef.current = null;
     }
   }, [isConnected]);
 
@@ -287,6 +295,7 @@ export function BrowserProvider({
       // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally modify refs at cleanup time
       requestIdRef.current++;
       lastFetchedPathRef.current = null;
+      lastFetchedVersionsRef.current = null;
     };
   }, []);
 
@@ -296,6 +305,19 @@ export function BrowserProvider({
       void fetchObjectsWindow(currentPath, undefined, 0, [null]);
     }
   }, [isConnected, currentPath, fetchObjectsWindow]);
+
+  useEffect(() => {
+    if (!isConnected) {
+      return;
+    }
+    if (lastFetchedVersionsRef.current !== showVersions) {
+      void fetchObjectsWindow(currentPath, undefined, 0, [null]);
+    }
+  }, [currentPath, fetchObjectsWindow, isConnected, showVersions]);
+
+  const toggleShowVersions = useCallback(() => {
+    setShowVersions((prev) => !prev);
+  }, []);
 
   const value: BrowserContextValue = useMemo(
     () => ({
@@ -314,6 +336,8 @@ export function BrowserProvider({
       navigateUp,
       refresh,
       pathSegments: getPathSegments(currentPath),
+      showVersions,
+      toggleShowVersions,
     }),
     [
       currentPath,
@@ -330,6 +354,8 @@ export function BrowserProvider({
       navigateTo,
       navigateUp,
       refresh,
+      showVersions,
+      toggleShowVersions,
     ]
   );
 

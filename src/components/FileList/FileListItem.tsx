@@ -48,8 +48,10 @@ interface FileListItemProps {
   onCopy: (item: S3Object) => void;
   onMove: (item: S3Object) => void;
   onPreview: (item: S3Object) => void;
+  selectionId: string;
+  showVersions: boolean;
   isSelected?: boolean;
-  onSelect?: (key: string, checked: boolean) => void;
+  onSelect?: (id: string, checked: boolean) => void;
   selectionMode?: boolean;
 }
 
@@ -91,6 +93,8 @@ export function FileListItem({
   onCopy,
   onMove,
   onPreview,
+  selectionId,
+  showVersions,
   isSelected = false,
   onSelect,
   selectionMode = false,
@@ -98,10 +102,16 @@ export function FileListItem({
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
   const iconColor = iconColors[iconType];
+  const isPreviousVersion = showVersions && item.isLatest === false;
+  const isInteractive = !isPreviousVersion;
+  const isSelectable = !showVersions || item.isLatest !== false;
 
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const handleClick = () => {
+    if (!isInteractive) {
+      return;
+    }
     if (item.isFolder) {
       onNavigate(item.key);
     } else {
@@ -115,7 +125,7 @@ export function FileListItem({
   };
 
   const handleCheckboxToggle = (checked: boolean) => {
-    onSelect?.(item.key, checked);
+    onSelect?.(selectionId, checked);
   };
 
   return (
@@ -124,8 +134,10 @@ export function FileListItem({
         onClick={handleClick}
         data-state={isSelected ? 'selected' : undefined}
         className={cn(
-          "cursor-pointer hover:bg-muted/50 group",
-          isSelected && "bg-muted"
+          "group",
+          isInteractive ? "cursor-pointer hover:bg-muted/50" : "cursor-default",
+          isSelected && "bg-muted",
+          isPreviousVersion && "text-muted-foreground"
         )}
       >
         {selectionMode && (
@@ -133,13 +145,13 @@ export function FileListItem({
             className="w-14 px-2"
             onClick={(e) => {
               e.stopPropagation();
-              if (onSelect) {
+              if (isSelectable && onSelect) {
                 handleCheckboxToggle(!isSelected);
               }
             }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            {onSelect && (
+            {isSelectable && onSelect && (
               <button
                 type="button"
                 role="checkbox"
@@ -171,11 +183,15 @@ export function FileListItem({
               <span
                 className={cn(
                   "block truncate max-w-[clamp(140px,35vw,320px)]",
-                  item.isFolder ? "font-medium hover:underline" : ""
+                  item.isFolder && isInteractive ? "font-medium hover:underline" : ""
                 )}
               >
+                {isPreviousVersion ? '|_ ' : ''}
                 {item.name}
                 {item.isFolder && '/'}
+                {isPreviousVersion && (
+                  <span className="ml-2 text-xs text-muted-foreground">previous version</span>
+                )}
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start">
@@ -193,6 +209,13 @@ export function FileListItem({
             {formatDate(item.lastModified)}
           </span>
         </TableCell>
+        {showVersions && (
+          <TableCell className="min-w-[160px]">
+            <span className="block text-sm text-muted-foreground truncate">
+              {item.versionId ?? '-'}
+            </span>
+          </TableCell>
+        )}
         <TableCell className="w-[120px] text-right">
           <div className="flex justify-end">
             {!item.isFolder && (
@@ -200,12 +223,13 @@ export function FileListItem({
                 <DropdownMenu>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <DropdownMenuTrigger asChild>
+                      <DropdownMenuTrigger asChild disabled={!isInteractive}>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
                           onClick={(e) => e.stopPropagation()}
+                          disabled={!isInteractive}
                         >
                           <Link className="h-4 w-4" />
                         </Button>
@@ -233,6 +257,7 @@ export function FileListItem({
                       size="icon"
                       className="h-8 w-8"
                       onClick={handleDownload}
+                      disabled={!isInteractive}
                     >
                       <Download className="h-4 w-4" />
                     </Button>
@@ -245,12 +270,13 @@ export function FileListItem({
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
+                  <DropdownMenuTrigger asChild disabled={!isInteractive}>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8"
                       onClick={(e) => e.stopPropagation()}
+                      disabled={!isInteractive}
                     >
                       <MoreVertical className="h-4 w-4" />
                     </Button>

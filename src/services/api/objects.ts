@@ -9,6 +9,8 @@ export interface ListObjectsResponse {
     lastModified?: string;
     isFolder: boolean;
     etag?: string;
+    versionId?: string;
+    isLatest?: boolean;
   }>;
   continuationToken?: string;
   isTruncated: boolean;
@@ -24,12 +26,16 @@ export async function listObjects(
   connectionId: number,
   bucket: string,
   prefix: string = '',
+  includeVersions: boolean,
   continuationToken?: string,
   signal?: AbortSignal
 ): Promise<S3ListResult> {
   let url = `/objects/${connectionId}/${encodeURIComponent(bucket)}?prefix=${encodeURIComponent(prefix)}`;
   if (continuationToken) {
     url += `&continuationToken=${encodeURIComponent(continuationToken)}`;
+  }
+  if (includeVersions) {
+    url += '&versions=1';
   }
   const response = await apiGet<ListObjectsResponse>(url, signal);
 

@@ -223,6 +223,7 @@ export function useCopyMove() {
               activeConnectionId,
               bucket,
               current.prefix,
+              false,
               continuationToken,
               options.signal
             );

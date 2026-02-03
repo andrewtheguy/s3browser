@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import {
   ListObjectsV2Command,
+  ListObjectVersionsCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
   PutObjectCommand,
@@ -79,6 +80,8 @@ interface S3Object {
   lastModified?: string;
   isFolder: boolean;
   etag?: string;
+  versionId?: string;
+  isLatest?: boolean;
 }
 
 function extractFileName(key: string): string {
@@ -129,6 +132,30 @@ function sanitizeFolderPath(path: string): { valid: true; path: string } | { val
   return { valid: true, path: folderPath };
 }
 
+function decodeVersionToken(token?: string): { keyMarker?: string; versionIdMarker?: string } {
+  if (!token) {
+    return {};
+  }
+  try {
+    const decoded = Buffer.from(token, 'base64').toString('utf8');
+    const parsed = JSON.parse(decoded) as { keyMarker?: string; versionIdMarker?: string };
+    return {
+      keyMarker: parsed.keyMarker,
+      versionIdMarker: parsed.versionIdMarker,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function encodeVersionToken(keyMarker?: string, versionIdMarker?: string): string | null {
+  if (!keyMarker) {
+    return null;
+  }
+  const payload = JSON.stringify({ keyMarker, versionIdMarker });
+  return Buffer.from(payload, 'utf8').toString('base64');
+}
+
 async function seedTestItems(
   client: AuthenticatedRequest['s3Client'],
   bucket: string,
@@ -168,6 +195,7 @@ async function seedTestItems(
 router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const prefix = (req.query.prefix as string) || '';
   const continuationToken = (req.query.continuationToken as string) || undefined;
+  const includeVersions = req.query.versions === '1';
 
   const bucket = req.s3Credentials?.bucket;
   const client = req.s3Client;
@@ -178,55 +206,121 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
     return;
   }
 
-  const command = new ListObjectsV2Command({
-    Bucket: bucket,
-    Prefix: prefix,
-    Delimiter: '/',
-    MaxKeys: 1000,
-    ContinuationToken: continuationToken,
-  });
-
-  let response;
-  try {
-    response = await client.send(command);
-  } catch (err: unknown) {
-    if (isAccessDenied(err)) {
-      res.status(403).json({ error: 'Access denied' });
-      return;
-    }
-    console.error('Failed to list objects:', err);
-    res.status(500).json({ error: 'Internal server error' });
-    return;
-  }
+  let nextContinuationToken: string | null | undefined = null;
+  let isTruncated = false;
   const objects: S3Object[] = [];
 
-  // Add folders (CommonPrefixes)
-  if (response.CommonPrefixes) {
-    for (const prefixObj of response.CommonPrefixes) {
-      if (prefixObj.Prefix) {
-        objects.push({
-          key: prefixObj.Prefix,
-          name: extractFileName(prefixObj.Prefix),
-          isFolder: true,
-        });
-      }
-    }
-  }
+  if (includeVersions) {
+    const { keyMarker, versionIdMarker } = decodeVersionToken(continuationToken);
+    const command = new ListObjectVersionsCommand({
+      Bucket: bucket,
+      Prefix: prefix,
+      Delimiter: '/',
+      MaxKeys: 1000,
+      KeyMarker: keyMarker,
+      VersionIdMarker: versionIdMarker,
+    });
 
-  // Add files (Contents)
-  if (response.Contents) {
-    for (const item of response.Contents) {
-      if (item.Key && item.Key !== prefix) {
-        objects.push({
-          key: item.Key,
-          name: extractFileName(item.Key),
-          size: item.Size,
-          lastModified: item.LastModified?.toISOString(),
-          isFolder: false,
-          etag: item.ETag,
-        });
+    let versionResponse;
+    try {
+      versionResponse = await client.send(command);
+    } catch (err: unknown) {
+      if (isAccessDenied(err)) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+      console.error('Failed to list object versions:', err);
+      res.status(500).json({ error: 'Internal server error' });
+      return;
+    }
+
+    if (versionResponse.CommonPrefixes) {
+      for (const prefixObj of versionResponse.CommonPrefixes) {
+        if (prefixObj.Prefix) {
+          objects.push({
+            key: prefixObj.Prefix,
+            name: extractFileName(prefixObj.Prefix),
+            isFolder: true,
+          });
+        }
       }
     }
+
+    if (versionResponse.Versions) {
+      for (const item of versionResponse.Versions) {
+        if (item.Key && item.Key !== prefix) {
+          objects.push({
+            key: item.Key,
+            name: extractFileName(item.Key),
+            size: item.Size,
+            lastModified: item.LastModified?.toISOString(),
+            isFolder: false,
+            etag: item.ETag,
+            versionId: item.VersionId,
+            isLatest: item.IsLatest,
+          });
+        }
+      }
+    }
+
+    nextContinuationToken = encodeVersionToken(
+      versionResponse.NextKeyMarker,
+      versionResponse.NextVersionIdMarker
+    );
+    isTruncated = versionResponse.IsTruncated ?? false;
+  } else {
+    const command = new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      Delimiter: '/',
+      MaxKeys: 1000,
+      ContinuationToken: continuationToken,
+    });
+
+    let listResponse;
+    try {
+      listResponse = await client.send(command);
+    } catch (err: unknown) {
+      if (isAccessDenied(err)) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+      console.error('Failed to list objects:', err);
+      res.status(500).json({ error: 'Internal server error' });
+      return;
+    }
+
+    // Add folders (CommonPrefixes)
+    if (listResponse.CommonPrefixes) {
+      for (const prefixObj of listResponse.CommonPrefixes) {
+        if (prefixObj.Prefix) {
+          objects.push({
+            key: prefixObj.Prefix,
+            name: extractFileName(prefixObj.Prefix),
+            isFolder: true,
+          });
+        }
+      }
+    }
+
+    // Add files (Contents)
+    if (listResponse.Contents) {
+      for (const item of listResponse.Contents) {
+        if (item.Key && item.Key !== prefix) {
+          objects.push({
+            key: item.Key,
+            name: extractFileName(item.Key),
+            size: item.Size,
+            lastModified: item.LastModified?.toISOString(),
+            isFolder: false,
+            etag: item.ETag,
+          });
+        }
+      }
+    }
+
+    nextContinuationToken = listResponse.NextContinuationToken;
+    isTruncated = listResponse.IsTruncated ?? false;
   }
 
   // Note: Objects are returned in S3's native order (typically lexicographic by key).
@@ -236,8 +330,8 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
 
   res.json({
     objects,
-    continuationToken: response.NextContinuationToken,
-    isTruncated: response.IsTruncated ?? false,
+    continuationToken: nextContinuationToken,
+    isTruncated,
   });
 });
 

@@ -36,13 +36,14 @@ import { useDelete, useUpload, usePresignedUrl, useDownload, usePreview, useCopy
 import { FEATURES } from '../../config';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
+import { getObjectSelectionId } from '../../utils/formatters';
 
 const DELETE_PREVIEW_LIMIT = 100;
 const DELETE_CONTINUATION_START_AT = 500;
 const DELETE_CONTINUATION_EVERY = 10_000;
 
 export function S3Browser() {
-  const { refresh, currentPath, objects } = useBrowserContext();
+  const { refresh, currentPath, objects, showVersions, toggleShowVersions } = useBrowserContext();
   const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
@@ -71,7 +72,7 @@ export function S3Browser() {
   const deleteContinuationResolveRef = useRef<((value: boolean) => void) | null>(null);
   const deleteResolveAbortRef = useRef<AbortController | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -179,16 +180,16 @@ export function S3Browser() {
 
   // Clear selection when path changes
   useEffect(() => {
-    setSelectedKeys(new Set());
-  }, [currentPath]);
+    setSelectedIds(new Set());
+  }, [currentPath, showVersions]);
 
-  const handleSelectItem = useCallback((key: string, checked: boolean) => {
-    setSelectedKeys((prev) => {
+  const handleSelectItem = useCallback((id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
       if (checked) {
-        next.add(key);
+        next.add(id);
       } else {
-        next.delete(key);
+        next.delete(id);
       }
       return next;
     });
@@ -196,10 +197,12 @@ export function S3Browser() {
 
   const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
-      const keys = objects.map((item) => item.key);
-      setSelectedKeys(new Set(keys));
+      const ids = objects
+        .filter((item) => item.isLatest !== false)
+        .map((item) => getObjectSelectionId(item));
+      setSelectedIds(new Set(ids));
     } else {
-      setSelectedKeys(new Set());
+      setSelectedIds(new Set());
     }
   }, [objects]);
 
@@ -207,7 +210,7 @@ export function S3Browser() {
     setSelectionMode((prev) => {
       const next = !prev;
       if (!next) {
-        setSelectedKeys(new Set());
+        setSelectedIds(new Set());
       }
       return next;
     });
@@ -222,7 +225,7 @@ export function S3Browser() {
   }, []);
 
   const handleBatchDeleteRequest = useCallback(() => {
-    const items = objects.filter((item) => selectedKeys.has(item.key));
+    const items = objects.filter((item) => selectedIds.has(getObjectSelectionId(item)));
     if (items.length > 0) {
       setDeleteMode('batch');
       setItemsToDelete(items);
@@ -230,7 +233,7 @@ export function S3Browser() {
       setDeleteResolveError(null);
       setDeleteDialogOpen(true);
     }
-  }, [objects, selectedKeys]);
+  }, [objects, selectedIds]);
 
   useEffect(() => {
     if (!deleteDialogOpen || deleteMode !== 'batch') {
@@ -353,7 +356,7 @@ export function S3Browser() {
           toast.success(parts.length > 0 ? parts.join('. ') : 'Nothing to delete');
         }
       }
-      setSelectedKeys(new Set());
+      setSelectedIds(new Set());
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Delete failed';
@@ -648,11 +651,13 @@ export function S3Browser() {
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}
           onBucketInfoClick={handleBucketInfoClick}
-          selectedCount={selectedKeys.size}
+          selectedCount={selectedIds.size}
           onBatchDelete={handleBatchDeleteRequest}
           isDeleting={isDeleting}
           selectionMode={selectionMode}
           onToggleSelection={handleToggleSelection}
+          showVersions={showVersions}
+          onToggleVersions={toggleShowVersions}
           onSeedTestItems={seedTestItemsEnabled ? handleSeedTestItems : undefined}
           isSeedingTestItems={seedTestItemsEnabled ? isSeedingTestItems : undefined}
         />
@@ -665,7 +670,7 @@ export function S3Browser() {
               onCopyUrl={handleCopyUrl}
               onCopyS3Uri={handleCopyS3Uri}
               onPreview={handlePreview}
-              selectedKeys={selectedKeys}
+              selectedIds={selectedIds}
               onSelectItem={handleSelectItem}
               onSelectAll={handleSelectAll}
               selectionMode={selectionMode}
@@ -687,7 +692,7 @@ export function S3Browser() {
                   {selectionMode ? 'Cancel selection' : 'Select items'}
                 </TooltipContent>
               </Tooltip>
-              {selectionMode && selectedKeys.size > 0 && (
+              {selectionMode && selectedIds.size > 0 && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -701,7 +706,7 @@ export function S3Browser() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {isDeleting ? 'Deleting...' : `Delete (${selectedKeys.size})`}
+                    {isDeleting ? 'Deleting...' : `Delete (${selectedIds.size})`}
                   </TooltipContent>
                 </Tooltip>
               )}

@@ -18,6 +18,8 @@ export interface S3Object {
   lastModified?: Date;
   isFolder: boolean;
   etag?: string;
+  versionId?: string;
+  isLatest?: boolean;
 }
 
 export interface S3ListResult {
@@ -98,6 +100,8 @@ export interface BrowserContextValue {
   navigateUp: () => void;
   refresh: () => Promise<void>;
   pathSegments: string[];
+  showVersions: boolean;
+  toggleShowVersions: () => void;
 }
 
 export interface SavedConnection {

@@ -10,6 +10,7 @@ import {
   ArrowLeftRight,
   Info,
   FlaskConical,
+  History,
 } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,8 @@ interface ToolbarProps {
   isDeleting?: boolean;
   selectionMode?: boolean;
   onToggleSelection?: () => void;
+  showVersions?: boolean;
+  onToggleVersions?: () => void;
   onSeedTestItems?: () => void;
   isSeedingTestItems?: boolean;
 }
@@ -58,6 +61,8 @@ export function Toolbar({
   isDeleting = false,
   selectionMode = false,
   onToggleSelection,
+  showVersions = false,
+  onToggleVersions,
   onSeedTestItems,
   isSeedingTestItems = false,
 }: ToolbarProps) {
@@ -140,6 +145,20 @@ export function Toolbar({
               </TooltipTrigger>
               <TooltipContent>Refresh</TooltipContent>
             </Tooltip>
+            {onToggleVersions && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showVersions ? 'default' : 'outline'}
+                    size="icon"
+                    onClick={onToggleVersions}
+                  >
+                    <History className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{showVersions ? 'Hide versions' : 'Show versions'}</TooltipContent>
+              </Tooltip>
+            )}
             {seedButtonEnabled && onSeedTestItems && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -195,6 +214,20 @@ export function Toolbar({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{selectionMode ? 'Cancel selection' : 'Select items'}</TooltipContent>
+              </Tooltip>
+            )}
+
+            {onToggleVersions && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showVersions ? 'default' : 'outline'}
+                    onClick={onToggleVersions}
+                  >
+                    {showVersions ? 'Versions On' : 'Show Versions'}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{showVersions ? 'Hide versions' : 'Show versions'}</TooltipContent>
               </Tooltip>
             )}
 

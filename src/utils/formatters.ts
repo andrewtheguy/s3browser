@@ -90,3 +90,7 @@ export function sortObjects<T extends { isFolder: boolean; name: string }>(objec
     return a.name.localeCompare(b.name);
   });
 }
+
+export function getObjectSelectionId(item: { key: string; versionId?: string }): string {
+  return item.versionId ? `${item.key}::${item.versionId}` : item.key;
+}
