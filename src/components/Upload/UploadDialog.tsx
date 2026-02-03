@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -47,6 +48,7 @@ export function UploadDialog({
     clearAll,
     removePendingResumable,
     isUploading,
+    isUploadBlocked,
   } = useUpload();
 
   const handleFilesSelected = useCallback(
@@ -158,7 +160,15 @@ export function UploadDialog({
             </TooltipProvider>
           )}
 
-          <DropZone onFilesSelected={handleFilesSelected} disabled={isUploading} />
+          {isUploadBlocked && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Uploads are active in another tab. Close that tab or wait for it to finish before starting a new upload.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <DropZone onFilesSelected={handleFilesSelected} disabled={isUploading || isUploadBlocked} />
 
           <UploadProgress
             uploads={uploads}

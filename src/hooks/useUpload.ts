@@ -14,6 +14,7 @@ import {
   getUploadById,
   deleteUploadState,
   listPendingUploads,
+  clearAllPendingUploads,
   type PersistedUpload,
 } from '../services/uploadPersistence';
 import { UPLOAD_CONFIG } from '../config/upload';
@@ -24,6 +25,16 @@ export interface CompletedStats {
   size: number;
 }
 
+interface UploadLockRecord {
+  id: string;
+  updatedAt: number;
+  active: boolean;
+}
+
+const UPLOAD_LOCK_KEY = 's3browser-upload-lock';
+const UPLOAD_LOCK_STALE_MS = 2 * 60 * 1000;
+const UPLOAD_LOCK_HEARTBEAT_MS = 30 * 1000;
+
 export function useUpload() {
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const { bucket: urlBucket } = useParams<{ bucket: string }>();
@@ -31,12 +42,14 @@ export function useUpload() {
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [pendingResumable, setPendingResumable] = useState<PersistedUpload[]>([]);
   const [completedStats, setCompletedStats] = useState<CompletedStats>({ count: 0, size: 0 });
+  const [isUploadBlocked, setIsUploadBlocked] = useState(false);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const pendingQueueRef = useRef<string[]>([]);
   const queuedIdsRef = useRef<Set<string>>(new Set());
   const inFlightIdsRef = useRef<Set<string>>(new Set());
   const cancelledIdsRef = useRef<Set<string>>(new Set());
   const mountGenerationRef = useRef(0);
+  const sessionIdRef = useRef(crypto.randomUUID());
 
   // Refs to avoid stale closures in callbacks
   const uploadsRef = useRef<UploadProgress[]>(uploads);
@@ -83,6 +96,36 @@ export function useUpload() {
     []
   );
 
+  const readUploadLock = useCallback((): UploadLockRecord | null => {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(UPLOAD_LOCK_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as UploadLockRecord;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const isLockStale = useCallback((lock: UploadLockRecord) => {
+    return Date.now() - lock.updatedAt > UPLOAD_LOCK_STALE_MS;
+  }, []);
+
+  const syncUploadBlockState = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const lock = readUploadLock();
+    if (!lock) {
+      setIsUploadBlocked(false);
+      return;
+    }
+    if (isLockStale(lock)) {
+      window.localStorage.removeItem(UPLOAD_LOCK_KEY);
+      setIsUploadBlocked(false);
+      return;
+    }
+    setIsUploadBlocked(lock.active && lock.id !== sessionIdRef.current);
+  }, [isLockStale, readUploadLock]);
+
   const refreshPendingUploads = useCallback(async () => {
     const currentGeneration = mountGenerationRef.current;
     try {
@@ -102,6 +145,14 @@ export function useUpload() {
 
     void (async () => {
       try {
+        const existingLock = readUploadLock();
+        const lockIsStale = !existingLock || isLockStale(existingLock);
+        if (lockIsStale) {
+          await clearAllPendingUploads();
+          if (currentGeneration === generationRef.current) {
+            setPendingResumable([]);
+          }
+        }
         const pending = await listPendingUploads();
         if (currentGeneration === generationRef.current) {
           setPendingResumable(pending);
@@ -114,7 +165,7 @@ export function useUpload() {
     return () => {
       generationRef.current++;
     };
-  }, []);
+  }, [isLockStale, readUploadLock]);
 
   // Cleanup on unmount: abort all in-progress uploads
   useEffect(() => {
@@ -132,6 +183,22 @@ export function useUpload() {
       resetQueueState();
     }
   }, [uploads.length, resetQueueState]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    syncUploadBlockState();
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === UPLOAD_LOCK_KEY) {
+        syncUploadBlockState();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [syncUploadBlockState]);
 
   const updateUpload = useCallback(
     (id: string, updates: Partial<UploadProgress>) => {
@@ -437,6 +504,10 @@ export function useUpload() {
 
   const upload = useCallback(
     async (files: UploadCandidate[], prefix: string = ''): Promise<void> => {
+      const existingLock = readUploadLock();
+      if (existingLock && !isLockStale(existingLock) && existingLock.active && existingLock.id !== sessionIdRef.current) {
+        throw new Error('Uploads are already running in another tab.');
+      }
       if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
@@ -503,8 +574,10 @@ export function useUpload() {
       bucket,
       enqueueUploadIds,
       isConnected,
+      isLockStale,
       normalizePrefix,
       normalizeRelativePath,
+      readUploadLock,
       refreshPendingUploads,
       setUploadsAndSync,
       stripPrefix,
@@ -645,6 +718,53 @@ export function useUpload() {
     [isConnected, activeConnectionId, bucket]
   );
 
+  const hasActiveUploads = uploads.some((u) => u.status === 'uploading' || u.status === 'pending');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (hasActiveUploads) {
+      const lock: UploadLockRecord = {
+        id: sessionIdRef.current,
+        updatedAt: Date.now(),
+        active: true,
+      };
+      window.localStorage.setItem(UPLOAD_LOCK_KEY, JSON.stringify(lock));
+      syncUploadBlockState();
+      return;
+    }
+
+    const lock = readUploadLock();
+    if (lock?.id === sessionIdRef.current) {
+      window.localStorage.removeItem(UPLOAD_LOCK_KEY);
+    }
+    syncUploadBlockState();
+
+    if (uploads.length === 0) {
+      void clearAllPendingUploads()
+        .then(() => setPendingResumable([]))
+        .catch((error) => console.error('Failed to clear pending uploads:', error));
+    }
+  }, [hasActiveUploads, readUploadLock, syncUploadBlockState, uploads.length]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (!hasActiveUploads) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      const lock: UploadLockRecord = {
+        id: sessionIdRef.current,
+        updatedAt: Date.now(),
+        active: true,
+      };
+      window.localStorage.setItem(UPLOAD_LOCK_KEY, JSON.stringify(lock));
+    }, UPLOAD_LOCK_HEARTBEAT_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [hasActiveUploads]);
+
   return {
     uploads,
     pendingResumable,
@@ -657,5 +777,6 @@ export function useUpload() {
     removePendingResumable,
     createNewFolder,
     isUploading: uploads.some((u) => u.status === 'uploading'),
+    isUploadBlocked,
   };
 }
