@@ -425,6 +425,13 @@ export async function uploadFileMultipart({
   let progressTimeout: ReturnType<typeof setTimeout> | null = null;
   let pendingProgress: { loaded: number; total: number; partProgress?: UploadPartProgress } | null =
     null;
+  const clearPendingProgress = () => {
+    if (progressTimeout) {
+      clearTimeout(progressTimeout);
+      progressTimeout = null;
+    }
+    pendingProgress = null;
+  };
 
   const emitProgressNow = (
     loaded: number,
@@ -432,11 +439,7 @@ export async function uploadFileMultipart({
     partProgress?: UploadPartProgress
   ) => {
     if (!onProgress) return;
-    if (progressTimeout) {
-      clearTimeout(progressTimeout);
-      progressTimeout = null;
-    }
-    pendingProgress = null;
+    clearPendingProgress();
     lastProgressEmit = Date.now();
     onProgress(loaded, total, partProgress);
   };
@@ -514,6 +517,7 @@ export async function uploadFileMultipart({
     while (index < pendingParts.length) {
       // Check for abort
       if (abortSignal?.aborted) {
+        clearPendingProgress();
         return;
       }
 
@@ -564,6 +568,7 @@ export async function uploadFileMultipart({
         scheduleProgress(calculateTotalProgress(), fileSize);
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
+          clearPendingProgress();
           return;
         }
         errors.push({
@@ -583,6 +588,7 @@ export async function uploadFileMultipart({
 
   // Check if aborted
   if (abortSignal?.aborted) {
+    clearPendingProgress();
     throw new DOMException('Upload aborted', 'AbortError');
   }
 
