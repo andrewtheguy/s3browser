@@ -314,7 +314,15 @@ export function S3Browser() {
       }
       setDeleteContinuationCount(null);
     };
-  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, deleteSelectionAllFiles, resolveDeletePlan, showVersions]);
+  }, [
+    deleteDialogOpen,
+    deleteMode,
+    itemsToDeleteKey,
+    deleteSelectionAllFiles,
+    resolveDeletePlan,
+    resolveDeleteVersionId,
+    showVersions,
+  ]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
@@ -381,7 +389,7 @@ export function S3Browser() {
       setDeletePlan(null);
       setDeleteResolveError(null);
     }
-  }, [itemsToDelete, deleteMode, deletePlan, remove, removeMany, refresh, showVersions]);
+  }, [itemsToDelete, deleteMode, deletePlan, remove, removeMany, refresh, resolveDeleteVersionId]);
 
   const handleDeleteCancel = useCallback(() => {
     setDeleteDialogOpen(false);
