@@ -96,7 +96,10 @@ export function useDelete() {
   const removeMany = useCallback(
     async (
       keys: Array<{ key: string; versionId?: string }>
-    ): Promise<{ deleted: string[]; errors: Array<{ key: string; message: string }> }> => {
+    ): Promise<{
+      deleted: Array<{ key: string; versionId?: string }>;
+      errors: Array<{ key: string; message: string }>;
+    }> => {
       if (keys.length === 0) {
         return { deleted: [], errors: [] };
       }
@@ -108,7 +111,7 @@ export function useDelete() {
       setIsDeleting(true);
       setError(null);
 
-      const deleted: string[] = [];
+      const deleted: Array<{ key: string; versionId?: string }> = [];
       const errors: Array<{ key: string; message: string }> = [];
       let currentBatch: Array<{ key: string; versionId?: string }> = [];
 

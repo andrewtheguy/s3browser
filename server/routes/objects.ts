@@ -51,7 +51,7 @@ interface BatchDeleteRequestBody {
 }
 
 interface BatchDeleteResponse {
-  deleted: string[];
+  deleted: Array<{ key: string; versionId?: string }>;
   errors: Array<{ key: string; message: string }>;
 }
 
@@ -472,8 +472,13 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
 
   const result: BatchDeleteResponse = {
     deleted: response.Deleted
-      ?.filter((d): d is { Key: string } => typeof d.Key === 'string')
-      .map((d) => d.Key) ?? [],
+      ?.filter((d): d is { Key: string; VersionId?: string; DeleteMarkerVersionId?: string } => typeof d.Key === 'string')
+      .map((d) => ({
+        key: d.Key,
+        ...(d.VersionId || d.DeleteMarkerVersionId
+          ? { versionId: d.VersionId ?? d.DeleteMarkerVersionId }
+          : {}),
+      })) ?? [],
     errors: response.Errors
       ?.filter((e): e is { Key: string; Message?: string } => typeof e.Key === 'string')
       .map((e) => ({

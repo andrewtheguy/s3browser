@@ -94,7 +94,7 @@ export async function deleteObject(
 }
 
 export interface BatchDeleteResponse {
-  deleted: string[];
+  deleted: Array<{ key: string; versionId?: string }>;
   errors: Array<{ key: string; message: string }>;
 }
 
