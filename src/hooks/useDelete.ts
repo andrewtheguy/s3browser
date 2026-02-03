@@ -7,6 +7,7 @@ import type { S3Object } from '../types';
 interface ResolveDeletePlanOptions {
   includeFolderContents?: boolean;
   signal?: AbortSignal;
+  onContinuationPrompt?: (currentCount: number) => boolean | Promise<boolean>;
 }
 
 interface DeletePlan {
@@ -15,6 +16,45 @@ interface DeletePlan {
 }
 
 const MAX_BATCH_DELETE = 1000;
+const MAX_BATCH_DELETE_BYTES = 90_000;
+const DELETE_CONTINUATION_PROMPT_EVERY = 10_000;
+
+function buildDeleteBatches(keys: string[]): string[][] {
+  const encoder = new TextEncoder();
+  const baseBytes = encoder.encode('{"keys":[]}').length;
+  const batches: string[][] = [];
+  let current: string[] = [];
+  let currentBytes = baseBytes;
+
+  for (const key of keys) {
+    const keyBytes = encoder.encode(JSON.stringify(key)).length;
+    const separatorBytes = current.length > 0 ? 1 : 0;
+    const nextBytes = currentBytes + keyBytes + separatorBytes;
+    const willExceed =
+      current.length + 1 > MAX_BATCH_DELETE || nextBytes > MAX_BATCH_DELETE_BYTES;
+
+    if (willExceed) {
+      if (current.length > 0) {
+        batches.push(current);
+        current = [key];
+        currentBytes = baseBytes + keyBytes;
+      } else {
+        batches.push([key]);
+        current = [];
+        currentBytes = baseBytes;
+      }
+    } else {
+      current.push(key);
+      currentBytes = nextBytes;
+    }
+  }
+
+  if (current.length > 0) {
+    batches.push(current);
+  }
+
+  return batches;
+}
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
@@ -69,8 +109,8 @@ export function useDelete() {
       let currentBatch: string[] = [];
 
       try {
-        for (let i = 0; i < keys.length; i += MAX_BATCH_DELETE) {
-          const batch = keys.slice(i, i + MAX_BATCH_DELETE);
+        const batches = buildDeleteBatches(keys);
+        for (const batch of batches) {
           currentBatch = batch;
           const result = await deleteObjects(activeConnectionId, bucket, batch);
           deleted.push(...result.deleted);
@@ -108,6 +148,7 @@ export function useDelete() {
       const fileKeys = new Set<string>();
       const folderKeys = new Set<string>();
       const queue: string[] = [];
+      let nextContinuationPromptAt = DELETE_CONTINUATION_PROMPT_EVERY;
 
       for (const item of items) {
         if (item.isFolder) {
@@ -147,6 +188,19 @@ export function useDelete() {
             }
           }
           continuationToken = result.isTruncated ? result.continuationToken : undefined;
+
+          if (
+            fileKeys.size >= nextContinuationPromptAt &&
+            (continuationToken || queue.length > 0)
+          ) {
+            const shouldContinue = await Promise.resolve(
+              options.onContinuationPrompt?.(fileKeys.size) ?? true
+            );
+            if (!shouldContinue) {
+              return { fileKeys: Array.from(fileKeys), folderKeys: Array.from(folderKeys) };
+            }
+            nextContinuationPromptAt += DELETE_CONTINUATION_PROMPT_EVERY;
+          }
         } while (continuationToken);
       }
 

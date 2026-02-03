@@ -111,7 +111,6 @@ const embeddedAssets: Record<string, { content: string; mime: string }> = {
 };
 
 const app = express();
-
 // Middleware
 app.use(express.json({
   type: (req) => {

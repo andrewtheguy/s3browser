@@ -98,6 +98,7 @@ interface XhrUploadOptions {
 }
 
 const DEFAULT_UPLOAD_TIMEOUT = 300000; // 5 minutes
+const PROGRESS_EMIT_INTERVAL_MS = 100;
 
 /**
  * Shared XHR upload helper with abort, progress, and timeout handling
@@ -112,8 +113,10 @@ function performXhrUpload({
 }: XhrUploadOptions): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    let aborted = false;
 
     const abortHandler = () => {
+      aborted = true;
       xhr.abort();
     };
 
@@ -127,6 +130,7 @@ function performXhrUpload({
     if (abortSignal) {
       abortSignal.addEventListener('abort', abortHandler);
       if (abortSignal.aborted) {
+        aborted = true;
         cleanup();
         reject(new DOMException('Upload aborted', 'AbortError'));
         return;
@@ -135,7 +139,7 @@ function performXhrUpload({
 
     // Progress tracking
     xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable && onProgress) {
+      if (!aborted && event.lengthComputable && onProgress) {
         onProgress(event.loaded, event.total);
       }
     });
@@ -420,6 +424,58 @@ export async function uploadFileMultipart({
   // Track persistence errors (from onPartComplete callback failures)
   const persistenceErrors: PersistenceError[] = [];
 
+  let lastProgressEmit = 0;
+  let progressTimeout: ReturnType<typeof setTimeout> | null = null;
+  let pendingProgress: { loaded: number; total: number; partProgress?: UploadPartProgress } | null =
+    null;
+  const clearPendingProgress = () => {
+    if (progressTimeout) {
+      clearTimeout(progressTimeout);
+      progressTimeout = null;
+    }
+    pendingProgress = null;
+  };
+
+  const emitProgressNow = (
+    loaded: number,
+    total: number,
+    partProgress?: UploadPartProgress
+  ) => {
+    if (!onProgress) return;
+    clearPendingProgress();
+    lastProgressEmit = Date.now();
+    onProgress(loaded, total, partProgress);
+  };
+
+  const scheduleProgress = (
+    loaded: number,
+    total: number,
+    partProgress?: UploadPartProgress
+  ) => {
+    if (!onProgress) return;
+    const now = Date.now();
+    const elapsed = now - lastProgressEmit;
+
+    if (elapsed >= PROGRESS_EMIT_INTERVAL_MS && !progressTimeout) {
+      lastProgressEmit = now;
+      onProgress(loaded, total, partProgress);
+      return;
+    }
+
+    pendingProgress = { loaded, total, partProgress };
+    if (!progressTimeout) {
+      const delay = Math.max(PROGRESS_EMIT_INTERVAL_MS - elapsed, 0);
+      progressTimeout = setTimeout(() => {
+        progressTimeout = null;
+        if (!pendingProgress) return;
+        const payload = pendingProgress;
+        pendingProgress = null;
+        lastProgressEmit = Date.now();
+        onProgress(payload.loaded, payload.total, payload.partProgress);
+      }, delay);
+    }
+  };
+
   // Track progress per part
   const partProgress = new Map<number, number>();
   for (let i = 1; i <= totalParts; i++) {
@@ -452,7 +508,7 @@ export async function uploadFileMultipart({
 
   // Report initial progress
   if (onProgress) {
-    onProgress(calculateTotalProgress(), fileSize);
+    scheduleProgress(calculateTotalProgress(), fileSize);
   }
 
   // Concurrent upload with pool
@@ -464,6 +520,7 @@ export async function uploadFileMultipart({
     while (index < pendingParts.length) {
       // Check for abort
       if (abortSignal?.aborted) {
+        clearPendingProgress();
         return;
       }
 
@@ -483,13 +540,11 @@ export async function uploadFileMultipart({
           chunk,
           (loaded) => {
             partProgress.set(partNumber, loaded);
-            if (onProgress) {
-              onProgress(calculateTotalProgress(), fileSize, {
-                partNumber,
-                loaded,
-                total: end - start,
-              });
-            }
+            scheduleProgress(calculateTotalProgress(), fileSize, {
+              partNumber,
+              loaded,
+              total: end - start,
+            });
           },
           abortSignal
         );
@@ -513,11 +568,10 @@ export async function uploadFileMultipart({
           }
         }
 
-        if (onProgress) {
-          onProgress(calculateTotalProgress(), fileSize);
-        }
+        scheduleProgress(calculateTotalProgress(), fileSize);
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
+          clearPendingProgress();
           return;
         }
         errors.push({
@@ -537,6 +591,7 @@ export async function uploadFileMultipart({
 
   // Check if aborted
   if (abortSignal?.aborted) {
+    clearPendingProgress();
     throw new DOMException('Upload aborted', 'AbortError');
   }
 
@@ -550,6 +605,8 @@ export async function uploadFileMultipart({
 
   // Complete the upload
   await completeUpload(connectionId, sanitizedBucket, uploadId, sanitizedKey, completedParts);
+
+  emitProgressNow(fileSize, fileSize);
 
   return {
     uploadId,

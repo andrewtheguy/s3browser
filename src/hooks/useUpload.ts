@@ -14,6 +14,7 @@ import {
   getUploadById,
   deleteUploadState,
   listPendingUploads,
+  clearAllPendingUploads,
   type PersistedUpload,
 } from '../services/uploadPersistence';
 import { UPLOAD_CONFIG } from '../config/upload';
@@ -24,6 +25,16 @@ export interface CompletedStats {
   size: number;
 }
 
+interface UploadLockRecord {
+  id: string;
+  updatedAt: number;
+  active: boolean;
+}
+
+const UPLOAD_LOCK_KEY = 's3browser-upload-lock';
+const UPLOAD_LOCK_STALE_MS = 2 * 60 * 1000;
+const UPLOAD_LOCK_HEARTBEAT_MS = 30 * 1000;
+
 export function useUpload() {
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const { bucket: urlBucket } = useParams<{ bucket: string }>();
@@ -31,12 +42,21 @@ export function useUpload() {
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [pendingResumable, setPendingResumable] = useState<PersistedUpload[]>([]);
   const [completedStats, setCompletedStats] = useState<CompletedStats>({ count: 0, size: 0 });
+  const [isUploadBlocked, setIsUploadBlocked] = useState(false);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const pendingQueueRef = useRef<string[]>([]);
   const queuedIdsRef = useRef<Set<string>>(new Set());
   const inFlightIdsRef = useRef<Set<string>>(new Set());
   const cancelledIdsRef = useRef<Set<string>>(new Set());
   const mountGenerationRef = useRef(0);
+  const sessionIdRef = useRef(crypto.randomUUID());
+  const pendingUpdatesRef = useRef<Map<string, Partial<UploadProgress>>>(new Map());
+  const updateFlushScheduledRef = useRef(false);
+  const progressTimersRef = useRef<Map<string, number>>(new Map());
+  const progressPendingRef = useRef<Map<string, { loaded: number; total: number }>>(new Map());
+  const progressLastRef = useRef<Map<string, number>>(new Map());
+
+  const PROGRESS_UPDATE_INTERVAL_MS = 150;
 
   // Refs to avoid stale closures in callbacks
   const uploadsRef = useRef<UploadProgress[]>(uploads);
@@ -83,6 +103,71 @@ export function useUpload() {
     []
   );
 
+  const flushBatchedUpdates = useCallback(() => {
+    updateFlushScheduledRef.current = false;
+    const pendingUpdates = pendingUpdatesRef.current;
+    if (pendingUpdates.size === 0) return;
+    pendingUpdatesRef.current = new Map();
+
+    setUploadsAndSync((prev) =>
+      prev.map((upload) => {
+        const updates = pendingUpdates.get(upload.id);
+        if (!updates) return upload;
+        return { ...upload, ...updates };
+      })
+    );
+  }, [setUploadsAndSync]);
+
+  const scheduleBatchedUpdatesFlush = useCallback(() => {
+    if (updateFlushScheduledRef.current) return;
+    updateFlushScheduledRef.current = true;
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(flushBatchedUpdates);
+      return;
+    }
+    void Promise.resolve().then(flushBatchedUpdates);
+  }, [flushBatchedUpdates]);
+
+  const clearProgressState = useCallback((id: string) => {
+    const timerId = progressTimersRef.current.get(id);
+    if (timerId) {
+      window.clearTimeout(timerId);
+    }
+    progressTimersRef.current.delete(id);
+    progressPendingRef.current.delete(id);
+    progressLastRef.current.delete(id);
+  }, []);
+
+
+  const readUploadLock = useCallback((): UploadLockRecord | null => {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(UPLOAD_LOCK_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as UploadLockRecord;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const isLockStale = useCallback((lock: UploadLockRecord) => {
+    return Date.now() - lock.updatedAt > UPLOAD_LOCK_STALE_MS;
+  }, []);
+
+  const syncUploadBlockState = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const lock = readUploadLock();
+    if (!lock) {
+      setIsUploadBlocked(false);
+      return;
+    }
+    if (isLockStale(lock)) {
+      setIsUploadBlocked(false);
+      return;
+    }
+    setIsUploadBlocked(lock.active && lock.id !== sessionIdRef.current);
+  }, [isLockStale, readUploadLock]);
+
   const refreshPendingUploads = useCallback(async () => {
     const currentGeneration = mountGenerationRef.current;
     try {
@@ -102,6 +187,15 @@ export function useUpload() {
 
     void (async () => {
       try {
+        const existingLock = readUploadLock();
+        const lockIsStale = !existingLock || isLockStale(existingLock);
+        if (lockIsStale) {
+          await clearAllPendingUploads();
+          if (currentGeneration === generationRef.current) {
+            setPendingResumable([]);
+          }
+          return;
+        }
         const pending = await listPendingUploads();
         if (currentGeneration === generationRef.current) {
           setPendingResumable(pending);
@@ -114,16 +208,25 @@ export function useUpload() {
     return () => {
       generationRef.current++;
     };
-  }, []);
+  }, [isLockStale, readUploadLock]);
 
   // Cleanup on unmount: abort all in-progress uploads
   useEffect(() => {
     const controllers = abortControllersRef.current;
+    const progressTimers = progressTimersRef.current;
+    const progressPending = progressPendingRef.current;
+    const progressLast = progressLastRef.current;
     return () => {
       for (const controller of controllers.values()) {
         controller.abort();
       }
       controllers.clear();
+      for (const timerId of progressTimers.values()) {
+        window.clearTimeout(timerId);
+      }
+      progressTimers.clear();
+      progressPending.clear();
+      progressLast.clear();
     };
   }, []);
 
@@ -133,18 +236,71 @@ export function useUpload() {
     }
   }, [uploads.length, resetQueueState]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    syncUploadBlockState();
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === UPLOAD_LOCK_KEY) {
+        syncUploadBlockState();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [syncUploadBlockState]);
+
   const updateUpload = useCallback(
     (id: string, updates: Partial<UploadProgress>) => {
-      setUploadsAndSync((prev) =>
-        prev.map((u) => (u.id === id ? { ...u, ...updates } : u))
-      );
+      const existingUpdates = pendingUpdatesRef.current.get(id);
+      pendingUpdatesRef.current.set(id, existingUpdates ? { ...existingUpdates, ...updates } : updates);
+      scheduleBatchedUpdatesFlush();
     },
-    [setUploadsAndSync]
+    [scheduleBatchedUpdatesFlush]
+  );
+
+  const scheduleProgressUpdate = useCallback(
+    (id: string, loaded: number, total: number) => {
+      const now = Date.now();
+      const lastUpdate = progressLastRef.current.get(id) ?? 0;
+      const elapsed = now - lastUpdate;
+      const percentage = total > 0 ? Math.round((loaded / total) * 100) : 0;
+
+      if (elapsed >= PROGRESS_UPDATE_INTERVAL_MS && !progressTimersRef.current.has(id)) {
+        progressLastRef.current.set(id, now);
+        updateUpload(id, { loaded, total, percentage });
+        return;
+      }
+
+      progressPendingRef.current.set(id, { loaded, total });
+      if (!progressTimersRef.current.has(id)) {
+        const delay = Math.max(PROGRESS_UPDATE_INTERVAL_MS - elapsed, 0);
+        const timerId = window.setTimeout(() => {
+          progressTimersRef.current.delete(id);
+          const pending = progressPendingRef.current.get(id);
+          if (!pending) return;
+          progressPendingRef.current.delete(id);
+          progressLastRef.current.set(id, Date.now());
+          const nextPercentage =
+            pending.total > 0 ? Math.round((pending.loaded / pending.total) * 100) : 0;
+          updateUpload(id, {
+            loaded: pending.loaded,
+            total: pending.total,
+            percentage: nextPercentage,
+          });
+        }, delay);
+        progressTimersRef.current.set(id, timerId);
+      }
+    },
+    [updateUpload]
   );
 
   // Mark upload as completed: update stats and clear file reference
   const markCompleted = useCallback(
     (id: string, fileSize: number) => {
+      clearProgressState(id);
       setCompletedStats((prev) => ({
         count: prev.count + 1,
         size: prev.size + fileSize,
@@ -154,7 +310,7 @@ export function useUpload() {
         return prev.filter((u) => u.id !== id);
       });
     },
-    [releaseUploadFileReference, setUploadsAndSync]
+    [clearProgressState, releaseUploadFileReference, setUploadsAndSync]
   );
 
   const uploadSingleFileWithProxy = useCallback(
@@ -174,16 +330,12 @@ export function useUpload() {
         key,
         file,
         (loaded, total) => {
-          updateUpload(uploadItem.id, {
-            loaded,
-            total,
-            percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
-          });
+          scheduleProgressUpdate(uploadItem.id, loaded, total);
         },
         abortController.signal
       );
     },
-    [updateUpload, activeConnectionId, bucket]
+    [scheduleProgressUpdate, activeConnectionId, bucket]
   );
 
   const uploadMultipartFile = useCallback(
@@ -244,11 +396,7 @@ export function useUpload() {
         existingParts,
         abortSignal: abortController.signal,
         onProgress: (loaded, total) => {
-          updateUpload(uploadItem.id, {
-            loaded,
-            total,
-            percentage: total > 0 ? Math.round((loaded / total) * 100) : 0,
-          });
+          scheduleProgressUpdate(uploadItem.id, loaded, total);
         },
         onInitiated: (initiatedUploadId, initiatedSanitizedKey) => {
           uploadId = initiatedUploadId;
@@ -300,7 +448,7 @@ export function useUpload() {
 
       return result;
     },
-    [updateUpload, activeConnectionId, bucket]
+    [scheduleProgressUpdate, updateUpload, activeConnectionId, bucket]
   );
 
   const normalizePrefix = useCallback((prefix: string) => {
@@ -435,8 +583,35 @@ export function useUpload() {
     [processQueue]
   );
 
+  const writeUploadLock = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const lock: UploadLockRecord = {
+      id: sessionIdRef.current,
+      updatedAt: Date.now(),
+      active: true,
+    };
+    window.localStorage.setItem(UPLOAD_LOCK_KEY, JSON.stringify(lock));
+  }, []);
+
   const upload = useCallback(
     async (files: UploadCandidate[], prefix: string = ''): Promise<void> => {
+      const existingLock = readUploadLock();
+      if (existingLock) {
+        if (isLockStale(existingLock)) {
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(UPLOAD_LOCK_KEY);
+            const refreshedLock = readUploadLock();
+            if (!refreshedLock) {
+              writeUploadLock();
+            }
+          }
+        } else if (existingLock.active && existingLock.id !== sessionIdRef.current) {
+          throw new Error('Uploads are already running in another tab.');
+        }
+      }
+      if (!existingLock && typeof window !== 'undefined') {
+        writeUploadLock();
+      }
       if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
@@ -503,11 +678,14 @@ export function useUpload() {
       bucket,
       enqueueUploadIds,
       isConnected,
+      isLockStale,
       normalizePrefix,
       normalizeRelativePath,
+      readUploadLock,
       refreshPendingUploads,
       setUploadsAndSync,
       stripPrefix,
+      writeUploadLock,
     ]
   );
 
@@ -549,6 +727,7 @@ export function useUpload() {
         }
       }
 
+      clearProgressState(id);
       releaseUploadFileReference(id);
       setUploadsAndSync((prev) => prev.filter((u) => u.id !== id));
 
@@ -559,6 +738,7 @@ export function useUpload() {
     [
       activeConnectionId,
       bucket,
+      clearProgressState,
       refreshPendingUploads,
       releaseUploadFileReference,
       removeFromQueue,
@@ -571,36 +751,6 @@ export function useUpload() {
       await cancelUploadInternal(id, true);
     },
     [cancelUploadInternal]
-  );
-
-  const pauseUpload = useCallback((id: string) => {
-    const controller = abortControllersRef.current.get(id);
-    if (controller) {
-      controller.abort();
-      abortControllersRef.current.delete(id);
-    }
-
-    // inFlight cleanup happens in runUpload/processQueue finally after AbortError.
-    updateUpload(id, {
-      status: 'paused',
-    });
-  }, [updateUpload]);
-
-  const resumeUpload = useCallback(
-    (id: string) => {
-      const uploadItem = uploadsRef.current.find((u) => u.id === id);
-      if (!uploadItem || !uploadItem.persistenceId) {
-        throw new Error('Cannot resume upload - no persistence data');
-      }
-
-      updateUpload(id, {
-        status: 'pending',
-        error: undefined,
-      });
-
-      enqueueUploadIds([id]);
-    },
-    [enqueueUploadIds, updateUpload]
   );
 
   const retryUpload = useCallback(
@@ -675,6 +825,43 @@ export function useUpload() {
     [isConnected, activeConnectionId, bucket]
   );
 
+  const hasActiveUploads = uploads.some((u) => u.status === 'uploading' || u.status === 'pending');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (hasActiveUploads) {
+      writeUploadLock();
+      syncUploadBlockState();
+      return;
+    }
+
+    const lock = readUploadLock();
+    if (lock?.id === sessionIdRef.current) {
+      window.localStorage.removeItem(UPLOAD_LOCK_KEY);
+    }
+    syncUploadBlockState();
+
+    if (uploads.length === 0) {
+      void clearAllPendingUploads()
+        .then(() => setPendingResumable([]))
+        .catch((error) => console.error('Failed to clear pending uploads:', error));
+    }
+  }, [hasActiveUploads, readUploadLock, syncUploadBlockState, uploads.length, writeUploadLock]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (!hasActiveUploads) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      writeUploadLock();
+    }, UPLOAD_LOCK_HEARTBEAT_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [hasActiveUploads, writeUploadLock]);
+
   return {
     uploads,
     pendingResumable,
@@ -682,12 +869,11 @@ export function useUpload() {
     upload,
     cancelUpload,
     cancelAll,
-    pauseUpload,
-    resumeUpload,
     retryUpload,
     clearAll,
     removePendingResumable,
     createNewFolder,
     isUploading: uploads.some((u) => u.status === 'uploading'),
+    isUploadBlocked,
   };
 }
