@@ -38,8 +38,9 @@ export async function getDownloadUrl(
   if (versionId) {
     params.append('versionId', versionId);
   }
+  params.append('disposition', 'attachment');
   const response = await apiGet<DownloadUrlResponse>(
-    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?${params.toString()}&disposition=attachment`
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?${params.toString()}`
   );
 
   return validateDownloadUrlResponse(response, 'Failed to get download URL');
@@ -50,10 +51,12 @@ export async function getPresignedUrl(
   bucket: string,
   key: string,
   ttl: number = 86400,
-  disposition?: 'inline' | 'attachment',
-  contentType?: string,
-  signal?: AbortSignal,
-  versionId?: string
+  options?: {
+    disposition?: 'inline' | 'attachment';
+    contentType?: string;
+    signal?: AbortSignal;
+    versionId?: string;
+  }
 ): Promise<string> {
   if (!Number.isInteger(connectionId) || connectionId < 1) {
     throw new Error('Invalid connection ID');
@@ -66,6 +69,7 @@ export async function getPresignedUrl(
   const sanitizedTtl = Math.floor(ttl);
 
   const basePath = `/download/${connectionId}/${encodeURIComponent(bucket)}/url`;
+  const { disposition, contentType, signal, versionId } = options ?? {};
   const params = new URLSearchParams();
   params.append('key', key);
   params.append('ttl', String(sanitizedTtl));

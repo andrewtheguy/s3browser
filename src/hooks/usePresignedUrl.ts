@@ -28,10 +28,9 @@ export function usePresignedUrl() {
         bucket,
         key,
         ttl,
-        undefined,
-        undefined,
-        undefined,
-        versionId
+        {
+          versionId,
+        }
       );
 
       // Check if clipboard API is available (not available in SSR or insecure contexts)
