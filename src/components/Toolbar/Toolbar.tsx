@@ -76,7 +76,7 @@ export function Toolbar({
     }
   }, [disconnect, navigate]);
 
-  const handleManageConnections = useCallback(() => {
+  const handleChooseConnection = useCallback(() => {
     void navigate('/');
   }, [navigate]);
 
@@ -157,7 +157,7 @@ export function Toolbar({
             )}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="icon" onClick={handleManageConnections}>
+                <Button variant="outline" size="icon" onClick={handleChooseConnection}>
                   <ArrowLeftRight className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -253,7 +253,7 @@ export function Toolbar({
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" onClick={handleManageConnections}>
+                <Button variant="outline" onClick={handleChooseConnection}>
                   <ArrowLeftRight className="h-4 w-4 mr-2 sm:mr-1" />
                   <span className="hidden sm:inline">Choose Connection</span>
                 </Button>

@@ -80,10 +80,15 @@ export function LoginForm() {
   const { isLoggedIn, error: contextError, serverError, disconnect, retryConnection, isCheckingSession } = useS3Client();
   const [isLoading, setIsLoading] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const error = logoutError || contextError;
 
   const handleLogout = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+    setIsLoggingOut(true);
     setLogoutError(null);
     try {
       await disconnect();
@@ -91,6 +96,8 @@ export function LoginForm() {
       console.error('Logout failed:', err);
       const message = err instanceof Error ? err.message : 'Logout failed';
       setLogoutError(message);
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
@@ -110,6 +117,7 @@ export function LoginForm() {
                 variant="ghost"
                 size="sm"
                 onClick={handleLogout}
+                disabled={isLoggingOut}
                 className="absolute -right-4 top-1/2 -translate-y-1/2 h-8 px-2 hover:text-foreground"
               >
                 <LogOut className="h-4 w-4 mr-2" />
