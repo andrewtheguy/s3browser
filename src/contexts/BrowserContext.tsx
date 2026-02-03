@@ -11,7 +11,7 @@ import {
 import { useNavigate, useParams } from 'react-router';
 import type { S3Object, BrowserContextValue } from '../types';
 import { useS3ClientContext } from './useS3ClientContext';
-import { listObjects } from '../services/api';
+import { listObjects, ApiHttpError } from '../services/api';
 import { getPathSegments, sortObjects } from '../utils/formatters';
 import { decodeUrlToS3Path } from '../utils/urlEncoding';
 import { BROWSE_WINDOW_LIMIT } from '../config/browse';
@@ -114,6 +114,7 @@ export function BrowserProvider({
 }: BrowserProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [showVersions, setShowVersions] = useState(false);
+  const [versioningSupported, setVersioningSupported] = useState(true);
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const navigate = useNavigate();
   const { '*': splatPath, bucket: urlBucket } = useParams<{ '*': string; bucket: string }>();
@@ -225,6 +226,13 @@ export function BrowserProvider({
       } catch (err) {
         // Skip dispatch for aborted requests
         if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+        // Handle versioning not supported (501 NotImplemented)
+        if (err instanceof ApiHttpError && err.status === 501 && err.code === 'NotImplemented') {
+          setVersioningSupported(false);
+          setShowVersions(false);
+          // The useEffect watching showVersions will trigger a refetch without versions
           return;
         }
         if (requestId === requestIdRef.current) {
@@ -341,6 +349,7 @@ export function BrowserProvider({
       pathSegments: getPathSegments(currentPath),
       showVersions,
       toggleShowVersions,
+      versioningSupported,
     }),
     [
       currentPath,
@@ -359,6 +368,7 @@ export function BrowserProvider({
       refresh,
       showVersions,
       toggleShowVersions,
+      versioningSupported,
     ]
   );
 

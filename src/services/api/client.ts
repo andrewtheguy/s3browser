@@ -4,6 +4,18 @@ export interface ApiError {
   error: string;
 }
 
+export class ApiHttpError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiHttpError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 interface ApiRequestOptions extends RequestInit {
   responseType?: 'json' | 'text';
 }
@@ -26,6 +38,7 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     let errorMessage = `Request failed with status ${response.status}`;
+    let errorCode: string | undefined;
     try {
       const text = await response.text();
       if (text) {
@@ -36,11 +49,17 @@ export async function apiRequest<T>(
             errorMessage = errorValue;
           }
         }
+        if (typeof parsed === 'object' && parsed !== null && 'code' in parsed) {
+          const codeValue = (parsed as { code: unknown }).code;
+          if (typeof codeValue === 'string') {
+            errorCode = codeValue;
+          }
+        }
       }
     } catch {
       // Failed to parse error response, use default message
     }
-    throw new Error(errorMessage);
+    throw new ApiHttpError(errorMessage, response.status, errorCode);
   }
 
   // Handle empty responses (204 No Content or empty body)

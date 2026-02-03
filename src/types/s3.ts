@@ -103,6 +103,7 @@ export interface BrowserContextValue {
   pathSegments: string[];
   showVersions: boolean;
   toggleShowVersions: () => void;
+  versioningSupported: boolean;
 }
 
 export interface SavedConnection {

@@ -232,6 +232,12 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
         res.status(403).json({ error: 'Access denied' });
         return;
       }
+      // Check for NotImplemented error (501)
+      const s3Error = err as { Code?: string; $metadata?: { httpStatusCode?: number } };
+      if (s3Error.Code === 'NotImplemented' || s3Error.$metadata?.httpStatusCode === 501) {
+        res.status(501).json({ error: 'Versioning not supported', code: 'NotImplemented' });
+        return;
+      }
       console.error('Failed to list object versions:', err);
       res.status(500).json({ error: 'Internal server error' });
       return;
