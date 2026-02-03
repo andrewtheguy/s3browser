@@ -310,7 +310,10 @@ export function BrowserProvider({
     if (!isConnected) {
       return;
     }
-    if (lastFetchedVersionsRef.current !== showVersions) {
+    if (
+      lastFetchedVersionsRef.current !== null &&
+      lastFetchedVersionsRef.current !== showVersions
+    ) {
       void fetchObjectsWindow(currentPath, undefined, 0, [null]);
     }
   }, [currentPath, fetchObjectsWindow, isConnected, showVersions]);
