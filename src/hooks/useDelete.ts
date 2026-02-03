@@ -21,25 +21,31 @@ const DELETE_CONTINUATION_PROMPT_EVERY = 10_000;
 
 function buildDeleteBatches(keys: string[]): string[][] {
   const encoder = new TextEncoder();
+  const baseBytes = encoder.encode('{"keys":[]}').length;
   const batches: string[][] = [];
   let current: string[] = [];
-
-  const willExceedLimit = (batch: string[]) =>
-    batch.length > MAX_BATCH_DELETE ||
-    encoder.encode(JSON.stringify({ keys: batch })).length > MAX_BATCH_DELETE_BYTES;
+  let currentBytes = baseBytes;
 
   for (const key of keys) {
-    const next = [...current, key];
-    if (willExceedLimit(next)) {
+    const keyBytes = encoder.encode(JSON.stringify(key)).length;
+    const separatorBytes = current.length > 0 ? 1 : 0;
+    const nextBytes = currentBytes + keyBytes + separatorBytes;
+    const willExceed =
+      current.length + 1 > MAX_BATCH_DELETE || nextBytes > MAX_BATCH_DELETE_BYTES;
+
+    if (willExceed) {
       if (current.length > 0) {
         batches.push(current);
         current = [key];
+        currentBytes = baseBytes + keyBytes;
       } else {
         batches.push([key]);
         current = [];
+        currentBytes = baseBytes;
       }
     } else {
-      current = next;
+      current.push(key);
+      currentBytes = nextBytes;
     }
   }
 

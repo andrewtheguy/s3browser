@@ -275,7 +275,11 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
         input.multiple = true;
         input.onchange = async (e) => {
           const files = Array.from((e.target as HTMLInputElement).files || []);
-          await handleSelectedFiles(files.map((file) => mapFileToCandidate(file)));
+          try {
+            await handleSelectedFiles(files.map((file) => mapFileToCandidate(file)));
+          } catch (error) {
+            console.error('Failed to process selected files:', error);
+          }
         };
         input.click();
       } catch (error) {
@@ -315,7 +319,11 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
             const files = Array.from((e.target as HTMLInputElement).files || []).map((file) =>
               mapFileToCandidate(file)
             );
-            await handleSelectedFiles(files);
+            try {
+              await handleSelectedFiles(files);
+            } catch (error) {
+              console.error('Failed to process selected folder files:', error);
+            }
           };
           input.click();
         } catch (error) {

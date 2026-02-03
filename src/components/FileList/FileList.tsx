@@ -264,7 +264,7 @@ export function FileList({
         <Table>
           <TableHeader>
             <TableRow>
-              {selectionMode && <TableHead className="w-12 px-2" />}
+              {selectionMode && <TableHead className="w-14 px-2" />}
               <TableHead className="w-12" />
               <TableHead className="min-w-[120px]">Name</TableHead>
               <TableHead className="w-[72px] sm:w-[100px]">Size</TableHead>
@@ -366,6 +366,7 @@ export function FileList({
                       type="button"
                       role="checkbox"
                       aria-checked={isAllSelected ? 'true' : isIndeterminate ? 'mixed' : 'false'}
+                      aria-label="Select all files"
                       className="flex h-8 w-full items-center justify-center rounded-md hover:bg-muted/70 transition-colors"
                       onClick={(e) => {
                         e.stopPropagation();

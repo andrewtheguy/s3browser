@@ -152,11 +152,13 @@ export function DeleteDialog({
           <DialogDescription>{message}</DialogDescription>
           {isBatch && !isResolving && !resolutionError && (
             <div className="space-y-1 text-sm text-muted-foreground">
-              <p>
-                {resolvedTotalKeys === 0
-                  ? 'No objects found to delete.'
-                  : `${resolvedTotalKeys} object${resolvedTotalKeys === 1 ? '' : 's'} will be deleted.`}
-              </p>
+              {!(resolvedTotalKeys === 0 && folderCount > 0) && (
+                <p>
+                  {resolvedTotalKeys === 0
+                    ? 'No objects found to delete.'
+                    : `${resolvedTotalKeys} object${resolvedTotalKeys === 1 ? '' : 's'} will be deleted.`}
+                </p>
+              )}
               {folderCount > 0 && (
                 <p>
                   {resolvedTotalKeys === 0

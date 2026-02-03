@@ -144,6 +144,7 @@ export function FileListItem({
                 type="button"
                 role="checkbox"
                 aria-checked={isSelected}
+                aria-label={`Select ${item.name}${item.isFolder ? '/' : ''}`}
                 className="flex h-8 w-full items-center justify-center rounded-md hover:bg-muted/70 transition-colors group-hover:bg-muted/50"
                 onClick={(e) => {
                   e.stopPropagation();

@@ -583,18 +583,18 @@ export function useUpload() {
     [processQueue]
   );
 
+  const writeUploadLock = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const lock: UploadLockRecord = {
+      id: sessionIdRef.current,
+      updatedAt: Date.now(),
+      active: true,
+    };
+    window.localStorage.setItem(UPLOAD_LOCK_KEY, JSON.stringify(lock));
+  }, []);
+
   const upload = useCallback(
     async (files: UploadCandidate[], prefix: string = ''): Promise<void> => {
-      const claimLock = () => {
-        if (typeof window === 'undefined') return;
-        const lock: UploadLockRecord = {
-          id: sessionIdRef.current,
-          updatedAt: Date.now(),
-          active: true,
-        };
-        window.localStorage.setItem(UPLOAD_LOCK_KEY, JSON.stringify(lock));
-      };
-
       const existingLock = readUploadLock();
       if (existingLock) {
         if (isLockStale(existingLock)) {
@@ -602,7 +602,7 @@ export function useUpload() {
             window.localStorage.removeItem(UPLOAD_LOCK_KEY);
             const refreshedLock = readUploadLock();
             if (!refreshedLock) {
-              claimLock();
+              writeUploadLock();
             }
           }
         } else if (existingLock.active && existingLock.id !== sessionIdRef.current) {
@@ -610,7 +610,7 @@ export function useUpload() {
         }
       }
       if (!existingLock && typeof window !== 'undefined') {
-        claimLock();
+        writeUploadLock();
       }
       if (!isConnected || !activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
@@ -685,6 +685,7 @@ export function useUpload() {
       refreshPendingUploads,
       setUploadsAndSync,
       stripPrefix,
+      writeUploadLock,
     ]
   );
 
@@ -830,12 +831,7 @@ export function useUpload() {
     if (typeof window === 'undefined') return;
 
     if (hasActiveUploads) {
-      const lock: UploadLockRecord = {
-        id: sessionIdRef.current,
-        updatedAt: Date.now(),
-        active: true,
-      };
-      window.localStorage.setItem(UPLOAD_LOCK_KEY, JSON.stringify(lock));
+      writeUploadLock();
       syncUploadBlockState();
       return;
     }
@@ -851,25 +847,20 @@ export function useUpload() {
         .then(() => setPendingResumable([]))
         .catch((error) => console.error('Failed to clear pending uploads:', error));
     }
-  }, [hasActiveUploads, readUploadLock, syncUploadBlockState, uploads.length]);
+  }, [hasActiveUploads, readUploadLock, syncUploadBlockState, uploads.length, writeUploadLock]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     if (!hasActiveUploads) return undefined;
 
     const intervalId = window.setInterval(() => {
-      const lock: UploadLockRecord = {
-        id: sessionIdRef.current,
-        updatedAt: Date.now(),
-        active: true,
-      };
-      window.localStorage.setItem(UPLOAD_LOCK_KEY, JSON.stringify(lock));
+      writeUploadLock();
     }, UPLOAD_LOCK_HEARTBEAT_MS);
 
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [hasActiveUploads]);
+  }, [hasActiveUploads, writeUploadLock]);
 
   return {
     uploads,
