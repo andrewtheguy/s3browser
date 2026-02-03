@@ -161,7 +161,7 @@ export function Toolbar({
                   <ArrowLeftRight className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Choose Connection</TooltipContent>
+              <TooltipContent>Change Connection</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -255,10 +255,10 @@ export function Toolbar({
               <TooltipTrigger asChild>
                 <Button variant="outline" onClick={handleChooseConnection}>
                   <ArrowLeftRight className="h-4 w-4 mr-2 sm:mr-1" />
-                  <span className="hidden sm:inline">Choose Connection</span>
+                  <span className="hidden sm:inline">Change Connection</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Choose Connection</TooltipContent>
+              <TooltipContent>Change Connection</TooltipContent>
             </Tooltip>
 
             <Tooltip>
