@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useCallback, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, FolderX } from 'lucide-react';
 import {
   Table,
@@ -15,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useBrowserContext } from '../../contexts';
-import { useDownload } from '../../hooks';
+import { useDownload, usePaginationParams } from '../../hooks';
 import { FileListItem } from './FileListItem';
 import type { S3Object } from '../../types';
 
@@ -55,8 +54,6 @@ export function FileList({
   selectionMode = false,
 }: FileListProps) {
   const { objects, isLoading, error, navigateTo, isLimited, limitMessage } = useBrowserContext();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchParams, setSearchParams] = useSearchParams();
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
     key: 'name',
     direction: DEFAULT_SORT_DIRECTION.name,
@@ -114,53 +111,13 @@ export function FileList({
 
   const totalItems = sortedObjects.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const clampedPage = Math.min(currentPage, totalPages);
-  const pageStartIndex = (clampedPage - 1) * pageSize;
+  const [page, setPage] = usePaginationParams({ PAGE_QUERY_PARAM, totalPages, isLoading });
+  const pageStartIndex = (page - 1) * pageSize;
   const pageEndIndex = Math.min(pageStartIndex + pageSize, totalItems);
   const pageItems = useMemo(
     () => sortedObjects.slice(pageStartIndex, pageEndIndex),
     [sortedObjects, pageStartIndex, pageEndIndex]
   );
-
-  useEffect(() => {
-    if (isLoading) {
-      return;
-    }
-
-    const pageParam = searchParams.get(PAGE_QUERY_PARAM);
-    const parsedPage = pageParam ? Number(pageParam) : NaN;
-    const hasValidPageParam = Number.isFinite(parsedPage) && parsedPage >= 1;
-
-    let nextPage = 1;
-    if (totalPages > 1 && hasValidPageParam) {
-      nextPage = Math.min(totalPages, Math.floor(parsedPage));
-    }
-
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync pagination with query params
-    setCurrentPage((prev) => (prev === nextPage ? prev : nextPage));
-  }, [isLoading, searchParams, totalPages]);
-
-  useEffect(() => {
-    if (isLoading) {
-      return;
-    }
-
-    if (totalPages <= 1) {
-      if (searchParams.has(PAGE_QUERY_PARAM)) {
-        const nextParams = new URLSearchParams(searchParams);
-        nextParams.delete(PAGE_QUERY_PARAM);
-        setSearchParams(nextParams, { replace: true });
-      }
-      return;
-    }
-
-    const pageValue = String(clampedPage);
-    if (searchParams.get(PAGE_QUERY_PARAM) !== pageValue) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set(PAGE_QUERY_PARAM, pageValue);
-      setSearchParams(nextParams, { replace: true });
-    }
-  }, [clampedPage, isLoading, searchParams, setSearchParams, totalPages]);
   const paginationItems = useMemo(() => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -168,8 +125,8 @@ export function FileList({
 
     const items: Array<number | 'ellipsis'> = [];
     const windowSize = 2;
-    const leftBoundary = Math.max(2, clampedPage - windowSize);
-    const rightBoundary = Math.min(totalPages - 1, clampedPage + windowSize);
+    const leftBoundary = Math.max(2, page - windowSize);
+    const rightBoundary = Math.min(totalPages - 1, page + windowSize);
 
     items.push(1);
 
@@ -187,7 +144,7 @@ export function FileList({
 
     items.push(totalPages);
     return items;
-  }, [totalPages, clampedPage]);
+  }, [totalPages, page]);
 
   const selectableItems = sortedObjects;
   const selectableCount = selectableItems.length;
@@ -204,7 +161,7 @@ export function FileList({
   );
 
   const handleSort = useCallback((key: SortKey) => {
-    setCurrentPage(1);
+    setPage(1);
     setSortConfig((prev) => {
       if (prev.key === key) {
         return {
@@ -217,7 +174,7 @@ export function FileList({
         direction: DEFAULT_SORT_DIRECTION[key],
       };
     });
-  }, []);
+  }, [setPage]);
 
   const renderSortIcon = useCallback(
     (key: SortKey) => {
@@ -393,16 +350,16 @@ export function FileList({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(1)}
-              disabled={clampedPage === 1}
+              onClick={() => setPage(1)}
+              disabled={page === 1}
             >
               First
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(Math.max(1, clampedPage - 1))}
-              disabled={clampedPage === 1}
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1}
             >
               Previous
             </Button>
@@ -418,9 +375,9 @@ export function FileList({
               return (
                 <Button
                   key={item}
-                  variant={item === clampedPage ? 'default' : 'outline'}
+                  variant={item === page ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setCurrentPage(item)}
+                  onClick={() => setPage(item)}
                 >
                   {item}
                 </Button>
@@ -429,16 +386,16 @@ export function FileList({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(Math.min(totalPages, clampedPage + 1))}
-              disabled={clampedPage === totalPages}
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              disabled={page === totalPages}
             >
               Next
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={clampedPage === totalPages}
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
             >
               Last
             </Button>

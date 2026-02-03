@@ -8,3 +8,4 @@ export { useConnectionHistory } from './useConnectionHistory';
 export { usePresignedUrl } from './usePresignedUrl';
 export { usePreview } from './usePreview';
 export { useSeedTestItems } from './useSeedTestItems';
+export { usePaginationParams } from './usePaginationParams';
