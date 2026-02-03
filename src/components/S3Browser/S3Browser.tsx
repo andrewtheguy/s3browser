@@ -46,7 +46,7 @@ const DOWNLOAD_CONTINUATION_EVERY = 10_000;
 
 export function S3Browser() {
   const { refresh, currentPath, objects, showVersions, toggleShowVersions, versioningSupported } = useBrowserContext();
-  const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
+  const { remove, removeMany, resolveDeletePlan, resolveDownloadPlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
   const { download, getProxyDownloadUrl } = useDownload();
@@ -438,7 +438,7 @@ export function S3Browser() {
     void (async () => {
       try {
         const folderSelection = itemsToDownloadRef.current.some((item) => item.isFolder);
-        const plan = await resolveDeletePlan(itemsToDownloadRef.current, {
+        const plan = await resolveDownloadPlan(itemsToDownloadRef.current, {
           includeFolderContents: true,
           signal: abortController.signal,
           continuationPromptStartAt: folderSelection ? DOWNLOAD_CONTINUATION_START_AT : undefined,
@@ -473,7 +473,7 @@ export function S3Browser() {
       }
       setDownloadContinuationCount(null);
     };
-  }, [downloadDialogOpen, downloadSelectionAllFiles, itemsToDownloadKey, resolveDeletePlan]);
+  }, [downloadDialogOpen, downloadSelectionAllFiles, itemsToDownloadKey, resolveDownloadPlan]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;

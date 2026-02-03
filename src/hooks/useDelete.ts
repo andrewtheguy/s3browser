@@ -234,10 +234,18 @@ export function useDelete() {
     [isConnected, activeConnectionId, bucket]
   );
 
+  const resolveDownloadPlan = useCallback(
+    async (items: S3Object[], options: ResolveDeletePlanOptions = {}): Promise<DeletePlan> => {
+      return resolveDeletePlan(items, options);
+    },
+    [resolveDeletePlan]
+  );
+
   return {
     remove,
     removeMany,
     resolveDeletePlan,
+    resolveDownloadPlan,
     isDeleting,
     error,
   };
