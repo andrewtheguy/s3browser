@@ -25,7 +25,7 @@ interface FileListProps {
   onDeleteRequest: (item: S3Object) => void;
   onCopyRequest: (item: S3Object) => void;
   onMoveRequest: (item: S3Object) => void;
-  onCopyUrl: (key: string, ttl: number) => void;
+  onCopyUrl: (key: string, ttl: number, versionId?: string) => void;
   onCopyS3Uri: (key: string) => void;
   onPreview: (item: S3Object) => void;
   selectedIds: Set<string>;
@@ -220,9 +220,7 @@ export function FileList({
     return items;
   }, [totalPages, clampedPage]);
 
-  const selectableItems = showVersions
-    ? sortedObjects.filter((item) => item.isLatest !== false && !item.isDeleteMarker)
-    : sortedObjects;
+  const selectableItems = sortedObjects;
   const selectableCount = selectableItems.length;
   const selectedCount = selectableItems.filter((item) => selectedIds.has(getObjectSelectionId(item))).length;
   const isAllSelected = selectableCount > 0 && selectedCount === selectableCount;
@@ -230,8 +228,8 @@ export function FileList({
   const { download } = useDownload();
 
   const handleDownload = useCallback(
-    (key: string) => {
-      void download(key);
+    (key: string, versionId?: string) => {
+      void download(key, versionId);
     },
     [download]
   );

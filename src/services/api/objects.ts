@@ -79,8 +79,18 @@ export async function seedTestItems(
   return response;
 }
 
-export async function deleteObject(connectionId: number, bucket: string, key: string): Promise<void> {
-  await apiDelete(`/objects/${connectionId}/${encodeURIComponent(bucket)}?key=${encodeURIComponent(key)}`);
+export async function deleteObject(
+  connectionId: number,
+  bucket: string,
+  key: string,
+  versionId?: string
+): Promise<void> {
+  const params = new URLSearchParams();
+  params.append('key', key);
+  if (versionId) {
+    params.append('versionId', versionId);
+  }
+  await apiDelete(`/objects/${connectionId}/${encodeURIComponent(bucket)}?${params.toString()}`);
 }
 
 export interface BatchDeleteResponse {
@@ -91,7 +101,7 @@ export interface BatchDeleteResponse {
 export async function deleteObjects(
   connectionId: number,
   bucket: string,
-  keys: string[],
+  keys: Array<{ key: string; versionId?: string }>,
   signal?: AbortSignal
 ): Promise<BatchDeleteResponse> {
   const response = await apiPost<BatchDeleteResponse>(
@@ -114,6 +124,7 @@ export async function createFolder(connectionId: number, bucket: string, path: s
 export interface CopyMoveOperation {
   sourceKey: string;
   destinationKey: string;
+  versionId?: string;
 }
 
 export interface BatchCopyMoveResponse {
@@ -126,11 +137,12 @@ export async function copyObject(
   bucket: string,
   sourceKey: string,
   destinationKey: string,
+  versionId?: string,
   signal?: AbortSignal
 ): Promise<void> {
   await apiPost(
     `/objects/${connectionId}/${encodeURIComponent(bucket)}/copy`,
-    { sourceKey, destinationKey },
+    { sourceKey, destinationKey, versionId },
     signal
   );
 }
@@ -159,11 +171,12 @@ export async function moveObject(
   bucket: string,
   sourceKey: string,
   destinationKey: string,
+  versionId?: string,
   signal?: AbortSignal
 ): Promise<void> {
   await apiPost(
     `/objects/${connectionId}/${encodeURIComponent(bucket)}/move`,
-    { sourceKey, destinationKey },
+    { sourceKey, destinationKey, versionId },
     signal
   );
 }

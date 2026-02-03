@@ -123,6 +123,9 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
     res.status(400).json({ error: keyValidation.error });
     return;
   }
+  const versionId = typeof req.query.versionId === 'string' && req.query.versionId.trim()
+    ? req.query.versionId
+    : undefined;
 
   // Parse TTL from query parameter, default to 1 hour (3600 seconds)
   const DEFAULT_TTL = 3600;
@@ -150,6 +153,7 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: keyValidation.validatedKey,
+    ...(versionId && { VersionId: versionId }),
     ...(disposition === 'inline' && { ResponseContentDisposition: 'inline' }),
     ...(disposition === 'attachment' && {
       ResponseContentDisposition: `attachment; filename="${filename}"`,

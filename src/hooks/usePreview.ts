@@ -96,7 +96,8 @@ export function usePreview() {
           PREVIEW_TTL_SECONDS,
           'inline',
           mimeType,
-          abortController.signal
+          abortController.signal,
+          item.versionId
         );
 
         // Verify this request is still the active one before updating state

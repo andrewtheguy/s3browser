@@ -15,14 +15,24 @@ export function usePresignedUrl() {
   const bucket = urlBucket || credentials?.bucket;
   const [isLoading, setIsLoading] = useState(false);
 
-  const copyPresignedUrl = useCallback(async (key: string, ttl: number = 86400): Promise<CopyPresignedUrlResult> => {
+  const copyPresignedUrl = useCallback(
+    async (key: string, ttl: number = 86400, versionId?: string): Promise<CopyPresignedUrlResult> => {
     if (!activeConnectionId || !bucket) {
       return { success: false };
     }
 
     setIsLoading(true);
     try {
-      const url = await getPresignedUrl(activeConnectionId, bucket, key, ttl);
+      const url = await getPresignedUrl(
+        activeConnectionId,
+        bucket,
+        key,
+        ttl,
+        undefined,
+        undefined,
+        undefined,
+        versionId
+      );
 
       // Check if clipboard API is available (not available in SSR or insecure contexts)
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {

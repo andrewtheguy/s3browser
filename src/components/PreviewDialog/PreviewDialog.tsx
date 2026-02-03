@@ -61,7 +61,7 @@ interface PreviewDialogProps {
   item: S3Object | null;
   cannotPreviewReason: string | null;
   onClose: () => void;
-  onDownload: (key: string) => void;
+  onDownload: (key: string, versionId?: string) => void;
 }
 
 export function PreviewDialog({
@@ -131,7 +131,7 @@ export function PreviewDialog({
 
   const handleDownload = () => {
     if (item) {
-      onDownload(item.key);
+      onDownload(item.key, item.versionId);
     }
   };
 

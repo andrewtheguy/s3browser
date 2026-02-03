@@ -41,8 +41,8 @@ import { FileDetailsDialog } from './FileDetailsDialog';
 interface FileListItemProps {
   item: S3Object;
   onNavigate: (path: string) => void;
-  onDownload: (key: string) => void;
-  onCopyUrl: (key: string, ttl: number) => void;
+  onDownload: (key: string, versionId?: string) => void;
+  onCopyUrl: (key: string, ttl: number, versionId?: string) => void;
   onCopyS3Uri: (key: string) => void;
   onDelete: (item: S3Object) => void;
   onCopy: (item: S3Object) => void;
@@ -104,8 +104,10 @@ export function FileListItem({
   const iconColor = iconColors[iconType];
   const isPreviousVersion = showVersions && item.isLatest === false;
   const isDeleteMarker = showVersions && item.isDeleteMarker === true;
-  const isInteractive = !isPreviousVersion && !isDeleteMarker;
-  const isSelectable = !showVersions || (item.isLatest !== false && !item.isDeleteMarker);
+  const canPreview = !isDeleteMarker;
+  const canCopyMove = !isDeleteMarker && !isPreviousVersion;
+  const isInteractive = canPreview;
+  const isSelectable = true;
 
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -122,7 +124,7 @@ export function FileListItem({
 
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onDownload(item.key);
+    onDownload(item.key, item.versionId);
   };
 
   const handleCheckboxToggle = (checked: boolean) => {
@@ -226,13 +228,13 @@ export function FileListItem({
                 <DropdownMenu>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <DropdownMenuTrigger asChild disabled={!isInteractive}>
+                      <DropdownMenuTrigger asChild disabled={!canPreview}>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
                           onClick={(e) => e.stopPropagation()}
-                          disabled={!isInteractive}
+                          disabled={!canPreview}
                         >
                           <Link className="h-4 w-4" />
                         </Button>
@@ -241,13 +243,13 @@ export function FileListItem({
                     <TooltipContent>Copy URL</TooltipContent>
                   </Tooltip>
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuItem onClick={() => onCopyUrl(item.key, 3600)}>
+                    <DropdownMenuItem onClick={() => onCopyUrl(item.key, 3600, item.versionId)} disabled={!canPreview}>
                       Presigned URL (1 hour)
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onCopyUrl(item.key, 86400)}>
+                    <DropdownMenuItem onClick={() => onCopyUrl(item.key, 86400, item.versionId)} disabled={!canPreview}>
                       Presigned URL (1 day)
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onCopyS3Uri(item.key)}>
+                    <DropdownMenuItem onClick={() => onCopyS3Uri(item.key)} disabled={!canPreview}>
                       S3 URI (s3://...)
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -260,7 +262,7 @@ export function FileListItem({
                       size="icon"
                       className="h-8 w-8"
                       onClick={handleDownload}
-                      disabled={!isInteractive}
+                      disabled={!canPreview}
                     >
                       <Download className="h-4 w-4" />
                     </Button>
@@ -273,17 +275,17 @@ export function FileListItem({
             <DropdownMenu>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild disabled={!isInteractive}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={(e) => e.stopPropagation()}
-                      disabled={!isInteractive}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => e.stopPropagation()}
+                        disabled={false}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
                 </TooltipTrigger>
                 <TooltipContent>More actions</TooltipContent>
               </Tooltip>
@@ -292,11 +294,11 @@ export function FileListItem({
                   <Info className="h-4 w-4 mr-2" />
                   Details
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onCopy(item)}>
+                <DropdownMenuItem onClick={() => onCopy(item)} disabled={!canCopyMove}>
                   <Copy className="h-4 w-4 mr-2" />
                   Copy to...
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onMove(item)}>
+                <DropdownMenuItem onClick={() => onMove(item)} disabled={!canCopyMove}>
                   <FolderInput className="h-4 w-4 mr-2" />
                   Move to...
                 </DropdownMenuItem>

@@ -23,13 +23,23 @@ function validateDownloadUrlResponse(response: DownloadUrlResponse | null, error
   return url;
 }
 
-export async function getDownloadUrl(connectionId: number, bucket: string, key: string): Promise<string> {
+export async function getDownloadUrl(
+  connectionId: number,
+  bucket: string,
+  key: string,
+  versionId?: string
+): Promise<string> {
   if (!Number.isInteger(connectionId) || connectionId < 1) {
     throw new Error('Invalid connection ID');
   }
 
+  const params = new URLSearchParams();
+  params.append('key', key);
+  if (versionId) {
+    params.append('versionId', versionId);
+  }
   const response = await apiGet<DownloadUrlResponse>(
-    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?key=${encodeURIComponent(key)}&disposition=attachment`
+    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?${params.toString()}&disposition=attachment`
   );
 
   return validateDownloadUrlResponse(response, 'Failed to get download URL');
@@ -42,7 +52,8 @@ export async function getPresignedUrl(
   ttl: number = 86400,
   disposition?: 'inline' | 'attachment',
   contentType?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  versionId?: string
 ): Promise<string> {
   if (!Number.isInteger(connectionId) || connectionId < 1) {
     throw new Error('Invalid connection ID');
@@ -58,6 +69,9 @@ export async function getPresignedUrl(
   const params = new URLSearchParams();
   params.append('key', key);
   params.append('ttl', String(sanitizedTtl));
+  if (versionId) {
+    params.append('versionId', versionId);
+  }
   if (disposition) {
     params.append('disposition', disposition);
   }
@@ -71,8 +85,13 @@ export async function getPresignedUrl(
   return validateDownloadUrlResponse(response, 'Failed to get presigned URL');
 }
 
-export async function downloadFile(connectionId: number, bucket: string, key: string): Promise<void> {
-  const url = await getDownloadUrl(connectionId, bucket, key);
+export async function downloadFile(
+  connectionId: number,
+  bucket: string,
+  key: string,
+  versionId?: string
+): Promise<void> {
+  const url = await getDownloadUrl(connectionId, bucket, key, versionId);
 
   // Extract filename from key
   const filename = key.split('/').pop() || 'download';

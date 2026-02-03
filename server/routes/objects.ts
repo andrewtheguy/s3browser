@@ -47,7 +47,7 @@ interface FolderRequestBody {
 }
 
 interface BatchDeleteRequestBody {
-  keys?: string[];
+  keys?: Array<{ key?: string; versionId?: string }>;
 }
 
 interface BatchDeleteResponse {
@@ -58,10 +58,11 @@ interface BatchDeleteResponse {
 interface CopyRequestBody {
   sourceKey?: string;
   destinationKey?: string;
+  versionId?: string;
 }
 
 interface BatchCopyRequestBody {
-  operations?: Array<{ sourceKey: string; destinationKey: string }>;
+  operations?: Array<{ sourceKey: string; destinationKey: string; versionId?: string }>;
 }
 
 interface BatchCopyMoveResponse {
@@ -389,6 +390,7 @@ router.post('/:connectionId/:bucket/seed-test-items', s3Middleware, requireBucke
 // DELETE /api/objects/:connectionId/:bucket?key=...
 router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const key = req.query.key as string | undefined;
+  const versionId = req.query.versionId as string | undefined;
 
   if (!key) {
     res.status(400).json({ error: 'Object key is required' });
@@ -413,6 +415,7 @@ router.delete('/:connectionId/:bucket', s3Middleware, requireBucket, async (req:
   const command = new DeleteObjectCommand({
     Bucket: bucket,
     Key: key,
+    ...(versionId ? { VersionId: versionId } : {}),
   });
 
   await client.send(command);
@@ -429,8 +432,10 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
     return;
   }
 
-  // Filter out folder keys (ending with /) and empty/whitespace-only strings
-  const fileKeys = keys.filter((key) => typeof key === 'string' && key.trim().length > 0 && !key.endsWith('/'));
+  const fileKeys = keys
+    .filter((entry) => entry && typeof entry.key === 'string')
+    .map((entry) => ({ key: entry.key!.trim(), versionId: entry.versionId }))
+    .filter((entry) => entry.key.length > 0 && !entry.key.endsWith('/'));
 
   if (fileKeys.length === 0) {
     res.status(400).json({ error: 'No valid file keys provided' });
@@ -455,7 +460,10 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
   const command = new DeleteObjectsCommand({
     Bucket: bucket,
     Delete: {
-      Objects: fileKeys.map((key) => ({ Key: key })),
+      Objects: fileKeys.map((entry) => ({
+        Key: entry.key,
+        ...(entry.versionId ? { VersionId: entry.versionId } : {}),
+      })),
       Quiet: false,
     },
   });
@@ -537,7 +545,8 @@ async function copyObjectWithMultipart(
   bucket: string,
   sourceKey: string,
   destinationKey: string,
-  objectSize: number
+  objectSize: number,
+  versionId?: string
 ): Promise<void> {
   const uploadId = await (async () => {
     const createCommand = new CreateMultipartUploadCommand({
@@ -562,7 +571,7 @@ async function copyObjectWithMultipart(
       const copyPartCommand = new UploadPartCopyCommand({
         Bucket: bucket,
         Key: destinationKey,
-        CopySource: encodeURIComponent(`${bucket}/${sourceKey}`),
+        CopySource: encodeURIComponent(`${bucket}/${sourceKey}${versionId ? `?versionId=${versionId}` : ''}`),
         UploadId: uploadId,
         PartNumber: partNumber,
         CopySourceRange: `bytes=${start}-${end}`,
@@ -604,23 +613,25 @@ async function copyObject(
   client: NonNullable<AuthenticatedRequest['s3Client']>,
   bucket: string,
   sourceKey: string,
-  destinationKey: string
+  destinationKey: string,
+  versionId?: string
 ): Promise<void> {
   // Get object size to determine copy method
   const headCommand = new HeadObjectCommand({
     Bucket: bucket,
     Key: sourceKey,
+    ...(versionId ? { VersionId: versionId } : {}),
   });
   const headResponse = await client.send(headCommand);
   const objectSize = headResponse.ContentLength ?? 0;
 
   if (objectSize > MULTIPART_THRESHOLD) {
-    await copyObjectWithMultipart(client, bucket, sourceKey, destinationKey, objectSize);
+    await copyObjectWithMultipart(client, bucket, sourceKey, destinationKey, objectSize, versionId);
   } else {
     const copyCommand = new CopyObjectCommand({
       Bucket: bucket,
       Key: destinationKey,
-      CopySource: encodeURIComponent(`${bucket}/${sourceKey}`),
+      CopySource: encodeURIComponent(`${bucket}/${sourceKey}${versionId ? `?versionId=${versionId}` : ''}`),
     });
     await client.send(copyCommand);
   }
@@ -629,7 +640,7 @@ async function copyObject(
 // POST /api/objects/:connectionId/:bucket/copy
 router.post('/:connectionId/:bucket/copy', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as CopyRequestBody;
-  const { sourceKey, destinationKey } = body;
+  const { sourceKey, destinationKey, versionId } = body;
 
   if (!sourceKey || !destinationKey) {
     res.status(400).json({ error: 'sourceKey and destinationKey are required' });
@@ -661,7 +672,7 @@ router.post('/:connectionId/:bucket/copy', s3Middleware, requireBucket, async (r
     return;
   }
 
-  await copyObject(client, bucket, sourceKey, destinationKey);
+  await copyObject(client, bucket, sourceKey, destinationKey, versionId);
   res.json({ success: true });
 });
 
@@ -714,7 +725,7 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
 
   for (const op of operations) {
     try {
-      await copyObject(client, bucket, op.sourceKey, op.destinationKey);
+      await copyObject(client, bucket, op.sourceKey, op.destinationKey, op.versionId);
       result.successful.push(op.sourceKey);
     } catch (err) {
       result.errors.push({
@@ -730,7 +741,7 @@ router.post('/:connectionId/:bucket/batch-copy', s3Middleware, requireBucket, as
 // POST /api/objects/:connectionId/:bucket/move
 router.post('/:connectionId/:bucket/move', s3Middleware, requireBucket, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as CopyRequestBody;
-  const { sourceKey, destinationKey } = body;
+  const { sourceKey, destinationKey, versionId } = body;
 
   if (!sourceKey || !destinationKey) {
     res.status(400).json({ error: 'sourceKey and destinationKey are required' });
@@ -763,13 +774,14 @@ router.post('/:connectionId/:bucket/move', s3Middleware, requireBucket, async (r
   }
 
   // Copy first, then delete
-  await copyObject(client, bucket, sourceKey, destinationKey);
+  await copyObject(client, bucket, sourceKey, destinationKey, versionId);
 
   // Attempt to delete the source
   try {
     const deleteCommand = new DeleteObjectCommand({
       Bucket: bucket,
       Key: sourceKey,
+      ...(versionId ? { VersionId: versionId } : {}),
     });
     await client.send(deleteCommand);
   } catch (deleteErr) {
@@ -860,13 +872,14 @@ router.post('/:connectionId/:bucket/batch-move', s3Middleware, requireBucket, as
   for (const op of operations) {
     try {
       // Copy first
-      await copyObject(client, bucket, op.sourceKey, op.destinationKey);
+      await copyObject(client, bucket, op.sourceKey, op.destinationKey, op.versionId);
 
       // Attempt to delete source - separate try/catch for better error reporting
       try {
         const deleteCommand = new DeleteObjectCommand({
           Bucket: bucket,
           Key: op.sourceKey,
+          ...(op.versionId ? { VersionId: op.versionId } : {}),
         });
         await client.send(deleteCommand);
         // Only mark as successful when both copy and delete succeed

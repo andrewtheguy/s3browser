@@ -48,7 +48,7 @@ export function useCopyMove() {
       setError(null);
 
       try {
-        await copyObject(activeConnectionId, bucket, sourceKey, destinationKey, signal);
+        await copyObject(activeConnectionId, bucket, sourceKey, destinationKey, undefined, signal);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Copy failed';
         setError(message);
@@ -70,7 +70,7 @@ export function useCopyMove() {
       setError(null);
 
       try {
-        await moveObject(activeConnectionId, bucket, sourceKey, destinationKey, signal);
+        await moveObject(activeConnectionId, bucket, sourceKey, destinationKey, undefined, signal);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Move failed';
         setError(message);
@@ -254,6 +254,7 @@ export function useCopyMove() {
         operations.push({
           sourceKey: item.key,
           destinationKey: destPrefix + targetName,
+          versionId: item.versionId,
         });
       }
 

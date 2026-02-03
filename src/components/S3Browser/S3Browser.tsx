@@ -65,7 +65,7 @@ export function S3Browser() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemsToDelete, setItemsToDelete] = useState<S3Object[]>([]);
   const [deleteMode, setDeleteMode] = useState<'single' | 'batch'>('single');
-  const [deletePlan, setDeletePlan] = useState<{ fileKeys: string[]; folderKeys: string[] } | null>(null);
+  const [deletePlan, setDeletePlan] = useState<{ fileKeys: Array<{ key: string; versionId?: string }>; folderKeys: string[] } | null>(null);
   const [isResolvingDelete, setIsResolvingDelete] = useState(false);
   const [deleteResolveError, setDeleteResolveError] = useState<string | null>(null);
   const [deleteContinuationCount, setDeleteContinuationCount] = useState<number | null>(null);
@@ -108,7 +108,9 @@ export function S3Browser() {
     if (deleteMode !== 'batch' || !deletePlan) {
       return null;
     }
-    const sortedKeys = [...deletePlan.fileKeys].sort((a, b) => a.localeCompare(b));
+    const sortedKeys = [...deletePlan.fileKeys]
+      .map((entry) => entry.key)
+      .sort((a, b) => a.localeCompare(b));
     return {
       previewKeys: sortedKeys.slice(0, DELETE_PREVIEW_LIMIT),
       totalKeys: sortedKeys.length,
@@ -197,9 +199,7 @@ export function S3Browser() {
 
   const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
-      const ids = objects
-        .filter((item) => item.isLatest !== false && !item.isDeleteMarker)
-        .map((item) => getObjectSelectionId(item));
+      const ids = objects.map((item) => getObjectSelectionId(item));
       setSelectedIds(new Set(ids));
     } else {
       setSelectedIds(new Set());
@@ -249,7 +249,10 @@ export function S3Browser() {
         deleteResolveAbortRef.current = null;
       }
       setDeletePlan({
-        fileKeys: itemsToDeleteRef.current.map((item) => item.key),
+        fileKeys: itemsToDeleteRef.current.map((item) => ({
+          key: item.key,
+          versionId: item.versionId,
+        })),
         folderKeys: [],
       });
       setIsResolvingDelete(false);
@@ -314,7 +317,7 @@ export function S3Browser() {
     try {
       if (deleteMode === 'single') {
         const item = itemsToDelete[0];
-        await remove(item.key);
+        await remove(item.key, item.versionId);
         toast.success(item.isFolder ? 'Folder deleted successfully' : 'File deleted successfully');
       } else {
         const plan = deletePlan ?? { fileKeys: [], folderKeys: [] };
@@ -444,8 +447,8 @@ export function S3Browser() {
     return `${ttl} seconds`;
   };
 
-  const handleCopyUrl = useCallback(async (key: string, ttl: number) => {
-    const result = await copyPresignedUrl(key, ttl);
+  const handleCopyUrl = useCallback(async (key: string, ttl: number, versionId?: string) => {
+    const result = await copyPresignedUrl(key, ttl, versionId);
     if (result.success) {
       const duration = formatTtlDuration(ttl);
       toast.success(`Presigned URL (${duration}) copied to clipboard`);
@@ -465,12 +468,15 @@ export function S3Browser() {
 
   const { openPreview } = preview;
   const handlePreview = useCallback((item: S3Object) => {
+    if (item.isDeleteMarker) {
+      return;
+    }
     void openPreview(item);
   }, [openPreview]);
 
-  const handlePreviewDownload = useCallback(async (key: string) => {
+  const handlePreviewDownload = useCallback(async (key: string, versionId?: string) => {
     try {
-      await download(key);
+      await download(key, versionId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(message || 'Download failed');
@@ -479,12 +485,18 @@ export function S3Browser() {
 
   // Copy/Move handlers
   const handleCopyRequest = useCallback((item: S3Object) => {
+    if (item.isDeleteMarker || item.isLatest === false) {
+      return;
+    }
     setCopyMoveItem(item);
     setCopyMoveMode('copy');
     setFolderPickerOpen(true);
   }, []);
 
   const handleMoveRequest = useCallback((item: S3Object) => {
+    if (item.isDeleteMarker || item.isLatest === false) {
+      return;
+    }
     setCopyMoveItem(item);
     setCopyMoveMode('move');
     setFolderPickerOpen(true);
