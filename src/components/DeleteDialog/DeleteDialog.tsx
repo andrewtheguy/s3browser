@@ -175,7 +175,7 @@ export function DeleteDialog({
                     ))}
                   </ul>
                   {remainingPreviewCount > 0 && (
-                    <div className="text-sm text-muted-foreground border-t pt-2 mt-2">
+                    <div className="text-sm text-muted-foreground pt-2 mt-2">
                       ...and {remainingPreviewCount} more
                     </div>
                   )}
