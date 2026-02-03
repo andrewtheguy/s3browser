@@ -42,6 +42,19 @@ export function formatDate(date?: Date): string {
   }).format(date);
 }
 
+export function formatDateFull(date?: Date): string {
+  if (!date) return '-';
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(date);
+}
+
 export function getFileExtension(filename: string): string {
   const lastDot = filename.lastIndexOf('.');
   if (lastDot === -1) return '';

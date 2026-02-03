@@ -11,7 +11,7 @@ import {
 import { useNavigate, useParams } from 'react-router';
 import type { S3Object, BrowserContextValue } from '../types';
 import { useS3ClientContext } from './useS3ClientContext';
-import { listObjects } from '../services/api';
+import { listObjects, ApiHttpError } from '../services/api';
 import { getPathSegments, sortObjects } from '../utils/formatters';
 import { decodeUrlToS3Path } from '../utils/urlEncoding';
 import { BROWSE_WINDOW_LIMIT } from '../config/browse';
@@ -114,6 +114,8 @@ export function BrowserProvider({
 }: BrowserProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [showVersions, setShowVersions] = useState(false);
+  // null = checking, true = supported, false = not supported
+  const [versioningSupported, setVersioningSupported] = useState<boolean | null>(null);
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const navigate = useNavigate();
   const { '*': splatPath, bucket: urlBucket } = useParams<{ '*': string; bucket: string }>();
@@ -121,6 +123,7 @@ export function BrowserProvider({
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFetchedPathRef = useRef<string | null>(null);
   const lastFetchedVersionsRef = useRef<boolean | null>(null);
+  const versioningCheckRef = useRef<number>(0);
 
   // Get bucket from URL params or credentials
   const bucket = urlBucket || credentials?.bucket;
@@ -227,6 +230,18 @@ export function BrowserProvider({
         if (err instanceof DOMException && err.name === 'AbortError') {
           return;
         }
+        // Handle versioning not supported (501 NotImplemented)
+        // Guard against stale connections to prevent a prior false value persisting
+        if (err instanceof ApiHttpError && err.status === 501 && err.code === 'NotImplemented') {
+          if (requestId === requestIdRef.current) {
+            setVersioningSupported(false);
+            setShowVersions(false);
+            // Set lastFetchedVersionsRef to true so the useEffect sees a change
+            // (true !== false) and triggers a refetch without versions
+            lastFetchedVersionsRef.current = true;
+          }
+          return;
+        }
         if (requestId === requestIdRef.current) {
           const message = err instanceof Error ? err.message : 'Failed to list objects';
           dispatch({ type: 'FETCH_ERROR', error: message });
@@ -281,8 +296,58 @@ export function BrowserProvider({
       dispatch({ type: 'RESET' });
       lastFetchedPathRef.current = null;
       lastFetchedVersionsRef.current = null;
+      setShowVersions(false);
+      setVersioningSupported(null);
+      versioningCheckRef.current++;
     }
   }, [isConnected]);
+
+  // Probe versioning support when connected
+  useEffect(() => {
+    if (!isConnected || !activeConnectionId || !bucket) {
+      return;
+    }
+
+    const checkId = ++versioningCheckRef.current;
+    const abortController = new AbortController();
+
+    // Make a lightweight probe request to check if versioning is supported
+    void (async () => {
+      try {
+        // Request with versions=1 to trigger ListObjectVersions
+        await listObjects(
+          activeConnectionId,
+          bucket,
+          '',
+          true, // includeVersions
+          undefined,
+          abortController.signal
+        );
+        // If we get here, versioning is supported
+        if (checkId === versioningCheckRef.current) {
+          setVersioningSupported(true);
+        }
+      } catch (err) {
+        if (abortController.signal.aborted) {
+          return;
+        }
+        if (err instanceof ApiHttpError && err.status === 501 && err.code === 'NotImplemented') {
+          if (checkId === versioningCheckRef.current) {
+            setVersioningSupported(false);
+          }
+        } else {
+          // Other errors (network, auth, etc.) - assume supported, will fail again if user tries
+          if (checkId === versioningCheckRef.current) {
+            setVersioningSupported(true);
+          }
+        }
+      }
+    })();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [isConnected, activeConnectionId, bucket]);
 
   // Abort pending requests on unmount
   useEffect(() => {
@@ -341,6 +406,7 @@ export function BrowserProvider({
       pathSegments: getPathSegments(currentPath),
       showVersions,
       toggleShowVersions,
+      versioningSupported,
     }),
     [
       currentPath,
@@ -359,6 +425,7 @@ export function BrowserProvider({
       refresh,
       showVersions,
       toggleShowVersions,
+      versioningSupported,
     ]
   );
 

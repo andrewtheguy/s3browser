@@ -11,6 +11,9 @@ import {
   Info,
   FlaskConical,
   History,
+  MoreVertical,
+  CheckSquare,
+  X,
 } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -20,6 +23,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -48,6 +58,8 @@ interface ToolbarProps {
   onToggleSelection?: () => void;
   showVersions?: boolean;
   onToggleVersions?: () => void;
+  /** null = checking, true = supported, false = not supported */
+  versioningSupported?: boolean | null;
   onSeedTestItems?: () => void;
   isSeedingTestItems?: boolean;
 }
@@ -63,6 +75,7 @@ export function Toolbar({
   onToggleSelection,
   showVersions = false,
   onToggleVersions,
+  versioningSupported = null,
   onSeedTestItems,
   isSeedingTestItems = false,
 }: ToolbarProps) {
@@ -145,51 +158,97 @@ export function Toolbar({
               </TooltipTrigger>
               <TooltipContent>Refresh</TooltipContent>
             </Tooltip>
-            {onToggleVersions && (
+
+            {onToggleSelection && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant={showVersions ? 'default' : 'outline'}
+                    variant={selectionMode ? 'default' : 'outline'}
                     size="icon"
-                    onClick={onToggleVersions}
+                    onClick={onToggleSelection}
                   >
-                    <History className="h-4 w-4" />
+                    {selectionMode ? <X className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>{showVersions ? 'Hide versions' : 'Show versions'}</TooltipContent>
+                <TooltipContent>{selectionMode ? 'Cancel selection' : 'Select items'}</TooltipContent>
               </Tooltip>
             )}
-            {seedButtonEnabled && onSeedTestItems && (
+
+            {selectionMode && selectedCount > 0 && onBatchDelete && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
                     size="icon"
+                    className="text-destructive border-destructive hover:bg-destructive/10"
+                    onClick={onBatchDelete}
+                    disabled={isDeleting}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isDeleting ? 'Deleting...' : `Delete ${selectedCount} item(s)`}</TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* More menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onUploadClick}>
+                  <Upload className="h-4 w-4" />
+                  Upload
+                </DropdownMenuItem>
+
+                <DropdownMenuItem onClick={onCreateFolderClick}>
+                  <FolderPlus className="h-4 w-4" />
+                  New Folder
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem
+                  onClick={onToggleVersions}
+                  disabled={versioningSupported !== true}
+                >
+                  <History className="h-4 w-4" />
+                  {versioningSupported === null
+                    ? 'Versions...'
+                    : versioningSupported === false
+                      ? 'Versions (not supported)'
+                      : showVersions ? 'Hide Versions' : 'Show Versions'}
+                </DropdownMenuItem>
+
+                {seedButtonEnabled && onSeedTestItems && (
+                  <DropdownMenuItem
                     onClick={onSeedTestItems}
                     disabled={isSeedingTestItems}
                   >
                     <FlaskConical className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Seed {SEED_TEST_ITEM_COUNT} test items</TooltipContent>
-              </Tooltip>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="icon" onClick={handleChooseConnection}>
+                    {isSeedingTestItems ? 'Seeding...' : `Seed ${SEED_TEST_ITEM_COUNT}`}
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem onClick={handleChooseConnection}>
                   <ArrowLeftRight className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Change Connection</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={handleDisconnect} className="text-destructive hover:text-destructive">
+                  Change Connection
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={handleDisconnect}
+                  className="text-destructive focus:text-destructive"
+                >
                   <LogOut className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Sign Out</TooltipContent>
-            </Tooltip>
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {/* Desktop actions */}
@@ -217,17 +276,32 @@ export function Toolbar({
               </Tooltip>
             )}
 
-            {onToggleVersions && (
+            {/* Show versions button:
+                - versioningSupported === null: checking (disabled, "Versions...")
+                - versioningSupported === true: supported (enabled, clickable)
+                - versioningSupported === false: not supported (disabled, "not supported") */}
+            {(onToggleVersions || versioningSupported !== true) && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant={showVersions ? 'default' : 'outline'}
                     onClick={onToggleVersions}
+                    disabled={versioningSupported !== true}
                   >
-                    {showVersions ? 'Hide Versions' : 'Show Versions'}
+                    {versioningSupported === null
+                      ? 'Versions...'
+                      : versioningSupported === false
+                        ? 'Versions (not supported)'
+                        : showVersions ? 'Hide Versions' : 'Show Versions'}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>{showVersions ? 'Hide versions' : 'Show versions'}</TooltipContent>
+                <TooltipContent>
+                  {versioningSupported === null
+                    ? 'Checking versioning support...'
+                    : versioningSupported === false
+                      ? 'Versioning not supported by this storage'
+                      : showVersions ? 'Hide versions' : 'Show versions'}
+                </TooltipContent>
               </Tooltip>
             )}
 

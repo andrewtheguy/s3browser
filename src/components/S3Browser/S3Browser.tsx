@@ -2,9 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Upload,
   FolderPlus,
-  Trash2,
-  Hand,
-  X,
+  History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -43,7 +41,7 @@ const DELETE_CONTINUATION_START_AT = 500;
 const DELETE_CONTINUATION_EVERY = 10_000;
 
 export function S3Browser() {
-  const { refresh, currentPath, objects, showVersions, toggleShowVersions } = useBrowserContext();
+  const { refresh, currentPath, objects, showVersions, toggleShowVersions, versioningSupported } = useBrowserContext();
   const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
@@ -687,7 +685,8 @@ export function S3Browser() {
           selectionMode={selectionMode}
           onToggleSelection={handleToggleSelection}
           showVersions={showVersions}
-          onToggleVersions={toggleShowVersions}
+          onToggleVersions={versioningSupported ? toggleShowVersions : undefined}
+          versioningSupported={versioningSupported}
           onSeedTestItems={seedTestItemsEnabled ? handleSeedTestItems : undefined}
           isSeedingTestItems={seedTestItemsEnabled ? isSeedingTestItems : undefined}
         />
@@ -707,55 +706,31 @@ export function S3Browser() {
             />
           </div>
           <TooltipProvider>
-            <div className="flex sm:hidden flex-wrap gap-2 justify-start p-2 border-t bg-card">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={selectionMode ? 'default' : 'ghost'}
-                    size="icon"
-                    onClick={handleToggleSelection}
-                  >
-                    {selectionMode ? <X className="h-4 w-4" /> : <Hand className="h-4 w-4" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {selectionMode ? 'Cancel selection' : 'Select items'}
-                </TooltipContent>
-              </Tooltip>
-              {selectionMode && selectedIds.size > 0 && (
+            <div className="flex sm:hidden items-center justify-between p-2 border-t bg-card">
+              <div className="flex flex-wrap gap-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleBatchDeleteRequest}
-                      disabled={isDeleting}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
+                    <Button variant="ghost" size="icon" onClick={handleCreateFolderClick}>
+                      <FolderPlus className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    {isDeleting ? 'Deleting...' : `Delete (${selectedIds.size})`}
-                  </TooltipContent>
+                  <TooltipContent>New Folder</TooltipContent>
                 </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="default" size="icon" onClick={handleUploadClick}>
+                      <Upload className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Upload</TooltipContent>
+                </Tooltip>
+              </div>
+              {showVersions && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                  <History className="h-3.5 w-3.5" />
+                  <span>All versions</span>
+                </div>
               )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={handleCreateFolderClick}>
-                    <FolderPlus className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>New Folder</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="default" size="icon" onClick={handleUploadClick}>
-                    <Upload className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Upload</TooltipContent>
-              </Tooltip>
             </div>
           </TooltipProvider>
         </div>
