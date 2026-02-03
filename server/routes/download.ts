@@ -370,7 +370,11 @@ router.get('/:connectionId/:bucket/object', s3Middleware, requireBucket, async (
     res.status(500).json({ error: 'Unsupported response body type' });
   } catch (error) {
     if (res.headersSent) {
-      console.error('pipeWebStreamToResponse: failed to stream response', error);
+      console.error('Error while streaming response after headers were sent', {
+        error,
+        headersSent: res.headersSent,
+        handler: 'GET /api/download/:connectionId/:bucket/object',
+      });
       res.end();
       return;
     }
