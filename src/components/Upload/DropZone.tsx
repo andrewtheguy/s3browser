@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type DragEvent, type MouseEvent } from 'react';
 import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { UploadCandidate } from '../../types';
 
@@ -44,12 +45,13 @@ const isDirectoryHandle = (handle: FileSystemHandle): handle is FileSystemDirect
   handle.kind === 'directory';
 
 interface DropZoneProps {
-  onFilesSelected: (files: UploadCandidate[]) => void;
+  onFilesSelected: (files: UploadCandidate[]) => void | Promise<void>;
   disabled?: boolean;
 }
 
 export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const supportsFileSystemAccess = useMemo(() => {
     if (typeof window === 'undefined') {
       return { files: false, directory: false };
@@ -182,6 +184,19 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
     [collectFilesFromEntry, collectFilesFromHandle, mapFileToCandidate]
   );
 
+  const handleSelectedFiles = useCallback(
+    async (files: UploadCandidate[]) => {
+      if (files.length === 0) return;
+      setIsProcessing(true);
+      try {
+        await Promise.resolve(onFilesSelected(files));
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [onFilesSelected]
+  );
+
   const handleDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -205,28 +220,30 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
       e.stopPropagation();
       setIsDragging(false);
 
-      if (disabled) return;
+      if (disabled || isProcessing) return;
 
       void (async () => {
         const fallback = Array.from(e.dataTransfer.files).map((file) => mapFileToCandidate(file));
         try {
           const files = await collectFilesFromDataTransfer(e.dataTransfer.items, e.dataTransfer.files);
-          if (files.length > 0) {
-            onFilesSelected(files);
-          }
+          await handleSelectedFiles(files);
         } catch (error) {
           console.error('Failed to process dropped files:', error);
-          if (fallback.length > 0) {
-            onFilesSelected(fallback);
-          }
+          await handleSelectedFiles(fallback);
         }
       })();
     },
-    [collectFilesFromDataTransfer, disabled, mapFileToCandidate, onFilesSelected]
+    [
+      collectFilesFromDataTransfer,
+      disabled,
+      handleSelectedFiles,
+      isProcessing,
+      mapFileToCandidate,
+    ]
   );
 
   const handleClick = useCallback(() => {
-    if (disabled) return;
+    if (disabled || isProcessing) return;
 
     void (async () => {
       try {
@@ -236,20 +253,16 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
           };
           const handles = await win.showOpenFilePicker?.({ multiple: true });
           const files = await Promise.all((handles || []).map((handle) => handle.getFile()));
-          if (files.length > 0) {
-            onFilesSelected(files.map((file) => mapFileToCandidate(file)));
-          }
+          await handleSelectedFiles(files.map((file) => mapFileToCandidate(file)));
           return;
         }
 
         const input = document.createElement('input');
         input.type = 'file';
         input.multiple = true;
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
           const files = Array.from((e.target as HTMLInputElement).files || []);
-          if (files.length > 0) {
-            onFilesSelected(files.map((file) => mapFileToCandidate(file)));
-          }
+          await handleSelectedFiles(files.map((file) => mapFileToCandidate(file)));
         };
         input.click();
       } catch (error) {
@@ -262,12 +275,12 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
         console.error('Failed to select files:', error);
       }
     })();
-  }, [disabled, mapFileToCandidate, onFilesSelected, supportsFileSystemAccess.files]);
+  }, [disabled, handleSelectedFiles, isProcessing, mapFileToCandidate, supportsFileSystemAccess.files]);
 
   const handleSelectFolder = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
-      if (disabled) return;
+      if (disabled || isProcessing) return;
 
       void (async () => {
         try {
@@ -276,9 +289,7 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
             const directoryHandle = await win.showDirectoryPicker?.();
             if (directoryHandle) {
               const files = await collectFilesFromHandle(directoryHandle);
-              if (files.length > 0) {
-                onFilesSelected(files);
-              }
+              await handleSelectedFiles(files);
             }
             return;
           }
@@ -287,13 +298,11 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
           input.type = 'file';
           input.multiple = true;
           input.setAttribute('webkitdirectory', '');
-          input.onchange = (e) => {
+          input.onchange = async (e) => {
             const files = Array.from((e.target as HTMLInputElement).files || []).map((file) =>
               mapFileToCandidate(file)
             );
-            if (files.length > 0) {
-              onFilesSelected(files);
-            }
+            await handleSelectedFiles(files);
           };
           input.click();
         } catch (error) {
@@ -307,7 +316,14 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
         }
       })();
     },
-    [collectFilesFromHandle, disabled, mapFileToCandidate, onFilesSelected, supportsFileSystemAccess.directory]
+    [
+      collectFilesFromHandle,
+      disabled,
+      handleSelectedFiles,
+      isProcessing,
+      mapFileToCandidate,
+      supportsFileSystemAccess.directory,
+    ]
   );
 
   const handleSelectFiles = useCallback(
@@ -331,7 +347,7 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
   return (
     <div
       role="button"
-      tabIndex={disabled ? -1 : 0}
+      tabIndex={disabled || isProcessing ? -1 : 0}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -342,26 +358,38 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
       className={cn(
         "border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200",
         isDragging ? "border-primary bg-accent" : "border-border bg-background",
-        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:border-primary hover:bg-accent"
+        disabled || isProcessing ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-primary hover:bg-accent"
       )}
     >
-      <Upload
-        className={cn(
-          "mx-auto h-12 w-12 mb-2",
-          isDragging ? "text-primary" : "text-muted-foreground"
-        )}
-      />
-      <h3 className="text-lg font-semibold mb-1">
-        Drag and drop files or folders here
-      </h3>
-      <p className="text-sm text-muted-foreground">
-        or click to browse files or folders
-      </p>
+      {isProcessing ? (
+        <div className="flex flex-col items-center gap-3">
+          <Spinner size="md" />
+          <h3 className="text-lg font-semibold">Preparing files...</h3>
+          <p className="text-sm text-muted-foreground">
+            Hang tight while we scan your selection.
+          </p>
+        </div>
+      ) : (
+        <>
+          <Upload
+            className={cn(
+              "mx-auto h-12 w-12 mb-2",
+              isDragging ? "text-primary" : "text-muted-foreground"
+            )}
+          />
+          <h3 className="text-lg font-semibold mb-1">
+            Drag and drop files or folders here
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            or click to browse files or folders
+          </p>
+        </>
+      )}
       <div className="flex justify-center gap-2 mt-4 flex-wrap">
-        <Button variant="outline" size="sm" disabled={disabled} onClick={handleSelectFiles}>
+        <Button variant="outline" size="sm" disabled={disabled || isProcessing} onClick={handleSelectFiles}>
           Choose Files
         </Button>
-        <Button variant="outline" size="sm" disabled={disabled} onClick={handleSelectFolder}>
+        <Button variant="outline" size="sm" disabled={disabled || isProcessing} onClick={handleSelectFolder}>
           Choose Folder
         </Button>
       </div>
