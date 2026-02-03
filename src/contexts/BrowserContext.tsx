@@ -20,19 +20,29 @@ interface BrowserState {
   error: string | null;
   isLimited: boolean;
   limitMessage: string | null;
+  limitContinuationToken: string | null;
+  windowStart: number;
 }
 
 type BrowserAction =
-  | { type: 'FETCH_START' }
+  | { type: 'FETCH_START'; windowStart: number }
   | { type: 'FETCH_SUCCESS'; objects: S3Object[] }
   | { type: 'FETCH_ERROR'; error: string }
-  | { type: 'FETCH_LIMIT_REACHED'; objects: S3Object[]; message: string }
+  | { type: 'FETCH_LIMIT_REACHED'; objects: S3Object[]; message: string; continuationToken: string | null }
   | { type: 'RESET' };
 
 function reducer(state: BrowserState, action: BrowserAction): BrowserState {
   switch (action.type) {
     case 'FETCH_START':
-      return { ...state, isLoading: true, error: null, isLimited: false, limitMessage: null };
+      return {
+        ...state,
+        isLoading: true,
+        error: null,
+        isLimited: false,
+        limitMessage: null,
+        limitContinuationToken: null,
+        windowStart: action.windowStart,
+      };
     case 'FETCH_SUCCESS':
       return {
         ...state,
@@ -41,9 +51,17 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
         error: null,
         isLimited: false,
         limitMessage: null,
+        limitContinuationToken: null,
       };
     case 'FETCH_ERROR':
-      return { ...state, isLoading: false, error: action.error, isLimited: false, limitMessage: null };
+      return {
+        ...state,
+        isLoading: false,
+        error: action.error,
+        isLimited: false,
+        limitMessage: null,
+        limitContinuationToken: null,
+      };
     case 'FETCH_LIMIT_REACHED':
       return {
         ...state,
@@ -52,6 +70,7 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
         error: null,
         isLimited: true,
         limitMessage: action.message,
+        limitContinuationToken: action.continuationToken,
       };
     case 'RESET':
       return initialState;
@@ -66,6 +85,8 @@ const initialState: BrowserState = {
   error: null,
   isLimited: false,
   limitMessage: null,
+  limitContinuationToken: null,
+  windowStart: 0,
 };
 
 const MAX_OBJECTS = 10000;
@@ -100,8 +121,17 @@ export function BrowserProvider({
     ? decodeUrlToS3Path(splatPath, true)
     : initialPath;
 
-  const fetchObjects = useCallback(
-    async (path: string) => {
+  const buildLimitMessage = useCallback((windowStart: number, count: number) => {
+    if (count === 0) {
+      return `Results limited because this folder contains more than ${MAX_OBJECTS} items.`;
+    }
+    const startIndex = windowStart + 1;
+    const endIndex = windowStart + count;
+    return `Results limited to items ${startIndex}-${endIndex} because this folder contains more than ${MAX_OBJECTS} results.`;
+  }, []);
+
+  const fetchObjectsWindow = useCallback(
+    async (path: string, startToken: string | undefined, windowStart: number) => {
       if (!isConnected || !activeConnectionId || !bucket) return;
 
       // Abort any in-flight request
@@ -113,11 +143,11 @@ export function BrowserProvider({
       abortControllerRef.current = abortController;
 
       const requestId = ++requestIdRef.current;
-      dispatch({ type: 'FETCH_START' });
+      dispatch({ type: 'FETCH_START', windowStart });
 
       try {
         const aggregated: S3Object[] = [];
-        let continuationToken: string | undefined = undefined;
+        let continuationToken: string | undefined = startToken;
 
         do {
           const result = await listObjects(
@@ -132,18 +162,30 @@ export function BrowserProvider({
             return;
           }
 
+          if (aggregated.length + result.objects.length > MAX_OBJECTS) {
+            if (requestId === requestIdRef.current) {
+              const limitedObjects = sortObjects(aggregated);
+              dispatch({
+                type: 'FETCH_LIMIT_REACHED',
+                objects: limitedObjects,
+                message: buildLimitMessage(windowStart, limitedObjects.length),
+                continuationToken: continuationToken ?? null,
+              });
+              lastFetchedPathRef.current = path;
+            }
+            return;
+          }
+
           aggregated.push(...result.objects);
 
-          const exceedsLimit = aggregated.length > MAX_OBJECTS
-            || (aggregated.length >= MAX_OBJECTS && result.isTruncated);
-
-          if (exceedsLimit) {
+          if (aggregated.length >= MAX_OBJECTS && result.isTruncated) {
             if (requestId === requestIdRef.current) {
               const limitedObjects = sortObjects(aggregated.slice(0, MAX_OBJECTS));
               dispatch({
                 type: 'FETCH_LIMIT_REACHED',
                 objects: limitedObjects,
-                message: `Results limited to the first ${MAX_OBJECTS} items because this folder contains more than ${MAX_OBJECTS} results.`,
+                message: buildLimitMessage(windowStart, limitedObjects.length),
+                continuationToken: result.continuationToken ?? null,
               });
               lastFetchedPathRef.current = path;
             }
@@ -172,7 +214,7 @@ export function BrowserProvider({
         }
       }
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket, buildLimitMessage, isConnected]
   );
 
   const navigateTo = useCallback(
@@ -192,8 +234,15 @@ export function BrowserProvider({
   }, [currentPath, navigateTo]);
 
   const refresh = useCallback(async () => {
-    await fetchObjects(currentPath);
-  }, [currentPath, fetchObjects]);
+    await fetchObjectsWindow(currentPath, undefined, 0);
+  }, [currentPath, fetchObjectsWindow]);
+
+  const loadNextWindow = useCallback(async () => {
+    if (!state.limitContinuationToken) {
+      return;
+    }
+    await fetchObjectsWindow(currentPath, state.limitContinuationToken, state.windowStart + MAX_OBJECTS);
+  }, [currentPath, fetchObjectsWindow, state.limitContinuationToken, state.windowStart]);
 
   // Reset when disconnected
   useEffect(() => {
@@ -220,9 +269,9 @@ export function BrowserProvider({
   // Fetch objects when path changes (URL-driven)
   useEffect(() => {
     if (isConnected && lastFetchedPathRef.current !== currentPath) {
-      void fetchObjects(currentPath);
+      void fetchObjectsWindow(currentPath, undefined, 0);
     }
-  }, [isConnected, currentPath, fetchObjects]);
+  }, [isConnected, currentPath, fetchObjectsWindow]);
 
   const value: BrowserContextValue = useMemo(
     () => ({
@@ -232,12 +281,26 @@ export function BrowserProvider({
       error: state.error,
       isLimited: state.isLimited,
       limitMessage: state.limitMessage,
+      hasNextWindow: Boolean(state.limitContinuationToken),
+      loadNextWindow,
       navigateTo,
       navigateUp,
       refresh,
       pathSegments: getPathSegments(currentPath),
     }),
-    [currentPath, state.objects, state.isLoading, state.error, state.isLimited, state.limitMessage, navigateTo, navigateUp, refresh]
+    [
+      currentPath,
+      state.objects,
+      state.isLoading,
+      state.error,
+      state.isLimited,
+      state.limitMessage,
+      state.limitContinuationToken,
+      loadNextWindow,
+      navigateTo,
+      navigateUp,
+      refresh,
+    ]
   );
 
   return (

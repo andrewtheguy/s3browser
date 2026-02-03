@@ -89,6 +89,8 @@ export interface BrowserContextValue {
   error: string | null;
   isLimited: boolean;
   limitMessage: string | null;
+  hasNextWindow: boolean;
+  loadNextWindow: () => Promise<void>;
   navigateTo: (path: string) => void;
   navigateUp: () => void;
   refresh: () => Promise<void>;

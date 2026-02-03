@@ -54,7 +54,16 @@ export function FileList({
   onSelectAll,
   selectionMode = false,
 }: FileListProps) {
-  const { objects, isLoading, error, navigateTo, isLimited, limitMessage } = useBrowserContext();
+  const {
+    objects,
+    isLoading,
+    error,
+    navigateTo,
+    isLimited,
+    limitMessage,
+    hasNextWindow,
+    loadNextWindow,
+  } = useBrowserContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [currentPage, setCurrentPage] = useState(() => {
     const pageParam = searchParams.get(PAGE_QUERY_PARAM);
@@ -307,7 +316,19 @@ export function FileList({
       {isLimited && (
         <Alert className="mb-3 border-yellow-300 bg-yellow-50 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-200">
           <AlertTitle>Results limited</AlertTitle>
-          <AlertDescription>{limitMessage || 'Results are limited for this folder.'}</AlertDescription>
+          <AlertDescription>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span>{limitMessage || 'Results are limited for this folder.'}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void loadNextWindow()}
+                disabled={!hasNextWindow || isLoading}
+              >
+                Load next 10,000
+              </Button>
+            </div>
+          </AlertDescription>
         </Alert>
       )}
       <div className={cn("overflow-x-auto", isLimited && "bg-yellow-100/70 dark:bg-yellow-900/20")}>
