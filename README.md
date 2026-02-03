@@ -178,7 +178,7 @@ All data is stored in `~/.s3browser/`:
 
 | Action | Limit / behavior |
 | --- | --- |
-| Browse (list objects) | S3 lists keys in lexicographic order. The UI then sorts entries with folders first, then files, alphabetically. The 5,000-item window applies to the combined list of folders + files returned for that prefix. **Caveat:** sorting happens within the current window only, so a folder that falls into a later window won’t appear at the top until you page to the window that includes it. Use the in-app “Load previous/next 5,000” controls to page through larger folders. |
+| Browse (list objects) | S3 lists keys in lexicographic order. The UI then sorts entries with folders first and files second, with folders alphabetized among themselves and files alphabetized among themselves. The 5,000-item window applies to the combined list of folders + files returned for that prefix. **Caveat:** sorting happens within the current window only, so a folder that falls into a later window won’t appear at the top until you page to the window that includes it. Use the in-app “Load previous/next 5,000” controls to page through larger folders. |
 | Upload | No item-count cap; constrained by per-file size limits and concurrency. Max file size 5GB; files >= 10MB use multipart with 10MB parts (single uploads are for files < 10MB). |
 | Delete | No hard item cap overall; requests are batched in 1,000 objects (S3 DeleteObjects API limit). |
 | Copy / Move | No hard item cap overall; requests are batched in 1,000 operations per request. |
