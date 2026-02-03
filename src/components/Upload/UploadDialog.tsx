@@ -18,6 +18,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { useBrowserContext } from '../../contexts';
 import { useUpload } from '../../hooks';
 import { DropZone } from './DropZone';
@@ -103,63 +109,6 @@ export function UploadDialog({
           <DialogTitle>Upload Files</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          {/* Pending Resumable Uploads Section */}
-          {pendingResumable.length > 0 && (
-            <TooltipProvider>
-              <div>
-                <p className="text-sm font-medium text-yellow-600 mb-1">
-                  Pending Uploads ({pendingResumable.length})
-                </p>
-                <p className="text-xs text-muted-foreground mb-2">
-                  These uploads resume automatically when possible. If they stay pending after a reload, re-add the same file.
-                </p>
-                <ScrollArea className="max-h-[200px] rounded-md border border-yellow-200 bg-yellow-50/50">
-                  <ul className="p-2 space-y-2">
-                    {pendingResumable.map((pending) => (
-                      <li
-                        key={pending.id}
-                        className="flex items-center justify-between gap-2 bg-background rounded p-2"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Upload className="h-4 w-4 text-yellow-600 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-sm truncate max-w-[120px] sm:max-w-[200px] md:max-w-[280px]">
-                              {pending.key || pending.fileName}
-                            </p>
-                            <div className="flex gap-1 mt-1">
-                              <Badge variant="secondary" className="text-xs">
-                                {formatFileSize(pending.fileSize)}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                {pending.completedParts.length}/{pending.totalParts} parts
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => removePendingResumable(pending.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Discard</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </ScrollArea>
-                <Separator className="my-4" />
-              </div>
-            </TooltipProvider>
-          )}
-
           {isUploadBlocked && (
             <Alert variant="destructive">
               <AlertDescription>
@@ -176,6 +125,75 @@ export function UploadDialog({
             onCancel={cancelUpload}
             onRetry={retryUpload}
           />
+
+          {/* Pending Resumable Uploads Section */}
+          <TooltipProvider>
+            <div>
+              <Separator className="my-4" />
+              <Accordion type="single" collapsible>
+                <AccordionItem value="pending-uploads">
+                  <AccordionTrigger className="text-sm font-medium text-yellow-700">
+                    Pending Uploads ({pendingResumable.length})
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    {pendingResumable.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No pending uploads to resume.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          These uploads resume automatically when possible. If they stay pending after a reload, re-add the same file.
+                        </p>
+                        <ScrollArea className="max-h-[200px] rounded-md border border-yellow-200 bg-yellow-50/50">
+                          <ul className="p-2 space-y-2">
+                            {pendingResumable.map((pending) => (
+                              <li
+                                key={pending.id}
+                                className="flex items-center justify-between gap-2 bg-background rounded p-2"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Upload className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+                                  <div className="min-w-0">
+                                    <p className="text-sm truncate max-w-[120px] sm:max-w-[200px] md:max-w-[280px]">
+                                      {pending.key || pending.fileName}
+                                    </p>
+                                    <div className="flex gap-1 mt-1">
+                                      <Badge variant="secondary" className="text-xs">
+                                        {formatFileSize(pending.fileSize)}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-xs">
+                                        {pending.completedParts.length}/{pending.totalParts} parts
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={() => removePendingResumable(pending.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Discard</TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </ScrollArea>
+                      </>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </div>
+          </TooltipProvider>
         </div>
         <DialogFooter className="flex-wrap gap-2">
           {hasCancelableUploads && (
