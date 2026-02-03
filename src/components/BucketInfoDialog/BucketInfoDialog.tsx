@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router';
 import {
   Dialog,
@@ -22,12 +22,28 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Spinner } from '@/components/ui/spinner';
+import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 import { useS3ClientContext } from '../../contexts';
 import { getBucketInfo, type BucketInfo, type LifecycleRule } from '../../services/api/bucket';
+import { exportConnectionProfile } from '../../services/api/auth';
 
 interface BucketInfoDialogProps {
   open: boolean;
   onClose: () => void;
+}
+
+function downloadTextFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 function LifecycleRuleDetails({ rule }: { rule: LifecycleRule }) {
@@ -99,6 +115,15 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const [info, setInfo] = useState<BucketInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<null | 'aws' | 'rclone'>(null);
+  const isMountedRef = useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open || !activeConnectionId || !bucket) {
@@ -138,13 +163,44 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
     };
   }, [open, activeConnectionId, bucket]);
 
+  const handleExportProfile = async (format: 'aws' | 'rclone') => {
+    if (!activeConnectionId) {
+      toast.error('No active connection available');
+      return;
+    }
+
+    setExportingFormat(format);
+    try {
+      const response = await exportConnectionProfile(activeConnectionId, format, bucket || undefined);
+      if (!isMountedRef.current) {
+        return;
+      }
+      downloadTextFile(response.filename, response.content);
+      toast.success(`${format === 'aws' ? 'AWS' : 'rclone'} profile exported`);
+    } catch (err) {
+      if (!isMountedRef.current) {
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Failed to export profile';
+      toast.error(message);
+    } finally {
+      if (isMountedRef.current) {
+        setExportingFormat(null);
+      }
+    }
+  };
+
+  const showExportSection = Boolean(activeConnectionId);
+  const showSeparator = showExportSection && (isLoading || !!error || !!info);
+  const exportBusy = exportingFormat !== null;
+
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Bucket Settings</DialogTitle>
         </DialogHeader>
-        <div>
+        <div className="space-y-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Spinner size="lg" />
@@ -152,7 +208,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
           ) : error ? (
             <p className="text-destructive">{error}</p>
           ) : info ? (
-            <div className="space-y-4">
+            <>
               <Table>
                 <TableBody>
                   <TableRow>
@@ -252,8 +308,44 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                   </Accordion>
                 )}
               </div>
-            </div>
+            </>
           ) : null}
+
+          {showExportSection && (
+            <>
+              {showSeparator && <Separator />}
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Export Profiles</h3>
+                <p className="text-sm text-muted-foreground">
+                  Export decrypted credentials as config profiles.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExportProfile('aws')}
+                    disabled={exportBusy}
+                  >
+                    {exportingFormat === 'aws' && (
+                      <Spinner size="sm" className="mr-2 text-current" />
+                    )}
+                    Export AWS Profile
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleExportProfile('rclone')}
+                    disabled={exportBusy}
+                  >
+                    {exportingFormat === 'rclone' && (
+                      <Spinner size="sm" className="mr-2 text-current" />
+                    )}
+                    Export rclone Profile
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button onClick={onClose}>Close</Button>

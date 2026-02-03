@@ -115,7 +115,7 @@ export async function getBucketRegion(
 export async function validateCredentials(credentials: S3Credentials): Promise<{ valid: boolean; error?: string }> {
   const endpoint = normalizeEndpoint(credentials.endpoint);
 
-  console.log('Validating credentials for bucket:', credentials.bucket, 'endpoint:', endpoint || 'AWS S3');
+  console.debug('Validating credentials for bucket:', credentials.bucket, 'endpoint:', endpoint || 'AWS S3');
 
   const client = new S3Client({
     region: credentials.region,
@@ -162,7 +162,7 @@ export async function validateCredentialsOnly(
 ): Promise<{ valid: boolean; error?: string }> {
   const normalizedEndpoint = normalizeEndpoint(endpoint);
 
-  console.log('Validating credentials (no bucket):', 'endpoint:', normalizedEndpoint || 'AWS');
+  console.debug('Validating credentials (no bucket):', 'endpoint:', normalizedEndpoint || 'AWS');
 
   // For custom endpoints, use S3 ListBuckets as STS may not be available
   if (normalizedEndpoint) {
