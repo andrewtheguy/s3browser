@@ -11,7 +11,7 @@ import {
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
 } from '@aws-sdk/client-s3';
-import { s3Middleware, requireBucket, AuthenticatedRequest } from '../middleware/auth.js';
+import { s3Middleware, requireBucket, AuthenticatedRequest, detectS3Vendor } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -25,6 +25,21 @@ const TEST_SEED_COUNT = 10005;
 const TEST_SEED_CONCURRENCY = 25;
 const SEED_TEST_ITEMS_ENABLED = process.env.FEATURE_SEED_TEST_ITEMS === 'true'
   || process.env.FEATURE_SEED_TEST_ITEMS === '1';
+
+function isAccessDenied(err: unknown): boolean {
+  if (!err || typeof err !== 'object') {
+    return false;
+  }
+
+  const named = err as { name?: string; Code?: string; code?: string; message?: string };
+  const name = named.name ?? named.Code ?? named.code;
+  const message = named.message ?? '';
+
+  return name === 'AccessDenied'
+    || name === 'Forbidden'
+    || message.includes('AccessDenied')
+    || message.includes('Forbidden');
+}
 
 interface FolderRequestBody {
   path?: string;
@@ -171,7 +186,18 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
     ContinuationToken: continuationToken,
   });
 
-  const response = await client.send(command);
+  let response;
+  try {
+    response = await client.send(command);
+  } catch (err: unknown) {
+    if (isAccessDenied(err)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+    console.error('Failed to list objects:', err);
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
   const objects: S3Object[] = [];
 
   // Add folders (CommonPrefixes)
@@ -804,6 +830,7 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     sseKmsKeyId: response.SSEKMSKeyId,
     sseCustomerAlgorithm: response.SSECustomerAlgorithm,
     storageClass: response.StorageClass,
+    vendor: detectS3Vendor(req.s3Credentials?.endpoint),
   });
 });
 

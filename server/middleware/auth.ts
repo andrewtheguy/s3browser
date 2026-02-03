@@ -22,6 +22,25 @@ export interface BucketInfo {
   creationDate?: string;
 }
 
+export type S3Vendor = 'aws' | 'b2' | 'other';
+
+export function detectS3Vendor(endpoint?: string): S3Vendor {
+  if (!endpoint) {
+    return 'aws';
+  }
+
+  const normalized = endpoint.toLowerCase();
+
+  if (normalized.includes('amazonaws.com')) {
+    return 'aws';
+  }
+  if (normalized.includes('backblazeb2.com')) {
+    return 'b2';
+  }
+
+  return 'other';
+}
+
 export function normalizeEndpoint(endpoint?: string): string | undefined {
   if (!endpoint) return undefined;
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {

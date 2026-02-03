@@ -15,6 +15,16 @@ A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, D
 - Support for custom S3-compatible endpoints
 - Save and manage multiple S3 connection profiles
 
+## Vendor Support
+
+Current vendor detection (based on endpoint):
+
+- AWS S3
+- Backblaze B2
+- Other S3-compatible providers (treated as "other")
+
+Object encryption reporting varies by vendor. If the object metadata does not include encryption fields, the UI shows `None` for AWS S3 and Backblaze B2, and `Unknown` for other vendors to avoid false positives. This list is intended to grow as vendor-specific behavior is documented.
+
 ## Quick Install (Linux & macOS)
 
 Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authenticated.

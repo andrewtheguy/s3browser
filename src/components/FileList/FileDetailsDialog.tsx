@@ -166,7 +166,9 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                         Encryption
                       </TableCell>
                       <TableCell>
-                        {metadata.serverSideEncryption || metadata.sseCustomerAlgorithm || 'None'}
+                        {metadata.serverSideEncryption
+                          || metadata.sseCustomerAlgorithm
+                          || (metadata.vendor === 'aws' || metadata.vendor === 'b2' ? 'None' : 'Unknown')}
                       </TableCell>
                     </TableRow>
                     {metadata.sseKmsKeyId && (
