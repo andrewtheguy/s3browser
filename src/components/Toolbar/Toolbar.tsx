@@ -190,15 +190,6 @@ export function Toolbar({
               </Tooltip>
             )}
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="icon" onClick={onUploadClick}>
-                  <Upload className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Upload</TooltipContent>
-            </Tooltip>
-
             {/* More menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -207,10 +198,17 @@ export function Toolbar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onUploadClick}>
+                  <Upload className="h-4 w-4" />
+                  Upload
+                </DropdownMenuItem>
+
                 <DropdownMenuItem onClick={onCreateFolderClick}>
                   <FolderPlus className="h-4 w-4" />
                   New Folder
                 </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
 
                 <DropdownMenuItem
                   onClick={onToggleVersions}
