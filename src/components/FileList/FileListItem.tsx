@@ -131,7 +131,12 @@ export function FileListItem({
         {selectionMode && (
           <TableCell
             className="w-14 px-2"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onSelect) {
+                handleCheckboxToggle(!isSelected);
+              }
+            }}
             onMouseDown={(e) => e.stopPropagation()}
           >
             {onSelect && (
@@ -139,7 +144,7 @@ export function FileListItem({
                 type="button"
                 role="checkbox"
                 aria-checked={isSelected}
-                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                className="flex h-8 w-full items-center justify-center rounded-md hover:bg-muted/70 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleCheckboxToggle(!isSelected);

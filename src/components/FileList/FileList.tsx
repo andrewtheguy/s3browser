@@ -360,12 +360,25 @@ export function FileList({
           <TableHeader>
             <TableRow>
               {selectionMode && (
-                <TableHead className="w-12 px-2">
+                <TableHead className="w-14 px-2">
                   {selectableCount > 0 && (
-                    <Checkbox
-                      checked={isAllSelected ? true : isIndeterminate ? 'indeterminate' : false}
-                      onCheckedChange={(checked) => onSelectAll(!!checked)}
-                    />
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={isAllSelected ? 'true' : isIndeterminate ? 'mixed' : 'false'}
+                      className="flex h-8 w-full items-center justify-center rounded-md hover:bg-muted/70 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectAll(!isAllSelected);
+                      }}
+                    >
+                      <Checkbox
+                        checked={isAllSelected ? true : isIndeterminate ? 'indeterminate' : false}
+                        className="h-5 w-5 pointer-events-none"
+                        aria-hidden="true"
+                        tabIndex={-1}
+                      />
+                    </button>
                   )}
                 </TableHead>
               )}
