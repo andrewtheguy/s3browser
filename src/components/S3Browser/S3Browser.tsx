@@ -67,6 +67,7 @@ export function S3Browser() {
   const [deleteResolveError, setDeleteResolveError] = useState<string | null>(null);
   const [deleteContinuationCount, setDeleteContinuationCount] = useState<number | null>(null);
   const deleteContinuationResolveRef = useRef<((value: boolean) => void) | null>(null);
+  const deleteResolveAbortRef = useRef<AbortController | null>(null);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
@@ -231,6 +232,7 @@ export function S3Browser() {
     }
 
     const abortController = new AbortController();
+    deleteResolveAbortRef.current = abortController;
     setIsResolvingDelete(true);
     setDeleteResolveError(null);
 
@@ -262,6 +264,7 @@ export function S3Browser() {
 
     return () => {
       abortController.abort();
+      deleteResolveAbortRef.current = null;
       if (deleteContinuationResolveRef.current) {
         deleteContinuationResolveRef.current(false);
         deleteContinuationResolveRef.current = null;
@@ -351,12 +354,12 @@ export function S3Browser() {
   }, []);
 
   const handleDeleteContinuationCancel = useCallback(() => {
-    if (deleteContinuationResolveRef.current) {
-      deleteContinuationResolveRef.current(false);
-      deleteContinuationResolveRef.current = null;
+    if (deleteResolveAbortRef.current) {
+      deleteResolveAbortRef.current.abort();
+      deleteResolveAbortRef.current = null;
     }
-    setDeleteContinuationCount(null);
-  }, []);
+    handleDeleteCancel();
+  }, [handleDeleteCancel]);
 
   const handleDeleteContinuationConfirm = useCallback(() => {
     if (deleteContinuationResolveRef.current) {
@@ -728,7 +731,7 @@ export function S3Browser() {
               Found {deleteContinuationCount ?? 0} objects so far. Continue gathering more to delete?
             </p>
             <p className="text-xs text-muted-foreground">
-              You can stop now to delete only the items gathered so far.
+              Stopping will cancel the delete.
             </p>
           </div>
           <DialogFooter>
