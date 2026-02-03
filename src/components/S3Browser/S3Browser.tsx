@@ -49,7 +49,7 @@ export function S3Browser() {
   const { remove, removeMany, resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
-  const { download, getDownloadUrl } = useDownload();
+  const { download, getProxyDownloadUrl } = useDownload();
   const preview = usePreview();
   const { seedTestItems } = useSeedTestItems();
   const seedTestItemsEnabled = FEATURES.seedTestItems;
@@ -585,8 +585,8 @@ export function S3Browser() {
 
       for (const entry of downloadPlan.fileKeys) {
         try {
-          const url = await getDownloadUrl(entry.key, entry.versionId);
-          const response = await fetch(url);
+          const url = getProxyDownloadUrl(entry.key, entry.versionId);
+          const response = await fetch(url, { credentials: 'include' });
           if (!response.ok) {
             throw new Error(`Failed to download ${entry.key}: ${response.status} ${response.statusText}`);
           }
@@ -661,7 +661,7 @@ export function S3Browser() {
   }, [
     batchDownloadEnabled,
     downloadPlan,
-    getDownloadUrl,
+    getProxyDownloadUrl,
     currentPath,
     handleBatchDownloadCancel,
   ]);

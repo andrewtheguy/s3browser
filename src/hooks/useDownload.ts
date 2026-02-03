@@ -8,6 +8,25 @@ export function useDownload() {
   const { bucket: urlBucket } = useParams<{ bucket: string }>();
   const bucket = urlBucket || credentials?.bucket;
 
+  const getProxyDownloadUrl = useCallback(
+    (key: string, versionId?: string): string => {
+      if (!isConnected || !activeConnectionId || !bucket) {
+        throw new Error(
+          `Missing S3 connection details: isConnected=${isConnected} | activeConnectionId=${activeConnectionId} | bucket=${bucket}`
+        );
+      }
+
+      const params = new URLSearchParams();
+      params.append('key', key);
+      if (versionId) {
+        params.append('versionId', versionId);
+      }
+
+      return `/api/download/${activeConnectionId}/${encodeURIComponent(bucket)}/object?${params.toString()}`;
+    },
+    [isConnected, activeConnectionId, bucket]
+  );
+
   const getUrl = useCallback(
     async (key: string, versionId?: string): Promise<string> => {
       if (!isConnected || !activeConnectionId || !bucket) {
@@ -34,5 +53,5 @@ export function useDownload() {
     [isConnected, activeConnectionId, bucket]
   );
 
-  return { download, getDownloadUrl: getUrl };
+  return { download, getDownloadUrl: getUrl, getProxyDownloadUrl };
 }
