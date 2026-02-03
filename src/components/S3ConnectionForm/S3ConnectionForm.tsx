@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { Trash2, LogOut, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -187,7 +187,7 @@ export function S3ConnectionForm({
     }
   };
 
-  const handleSelectOpenChange = (open: boolean) => {
+  const handleSelectOpenChange = useCallback((open: boolean) => {
     if (typeof document === 'undefined') {
       return;
     }
@@ -196,7 +196,7 @@ export function S3ConnectionForm({
     } else {
       document.body.removeAttribute('data-select-open');
     }
-  };
+  }, []);
 
   // Secret key is optional when using an existing saved connection (unless user wants to change it)
   const isExistingConnection = selectedConnectionId !== null;

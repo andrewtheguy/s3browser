@@ -9,8 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -302,12 +301,12 @@ export function FileList({
   return (
     <>
       {isLimited && (
-        <Alert className="mb-3 border-yellow-300 bg-yellow-50 text-yellow-900">
+        <Alert className="mb-3 border-yellow-300 bg-yellow-50 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-200">
           <AlertTitle>Results limited</AlertTitle>
           <AlertDescription>{limitMessage || 'Results are limited for this folder.'}</AlertDescription>
         </Alert>
       )}
-      <div className={cn("overflow-x-auto", isLimited && "bg-yellow-100/70")}>
+      <div className={cn("overflow-x-auto", isLimited && "bg-yellow-100/70 dark:bg-yellow-900/20")}>
         <Table>
           <TableHeader>
             <TableRow>
