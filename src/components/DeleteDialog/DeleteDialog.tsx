@@ -112,12 +112,8 @@ export function DeleteDialog({
 
   const resolvedTotalKeys = totalKeys ?? items.length;
   const remainingPreviewCount = Math.max(resolvedTotalKeys - previewKeys.length, 0);
-  const resolvingFolderCount = isResolving
-    ? (folderCount || items.filter((item) => item.isFolder).length)
-    : folderCount;
-
-  const batchTitle = isResolving && resolvingFolderCount > 0
-    ? `Delete ${resolvingFolderCount} Folder${resolvingFolderCount === 1 ? '' : 's'}`
+  const batchTitle = isResolving
+    ? 'Preparing delete list'
     : resolvedTotalKeys === 0 && folderCount > 0
       ? `Delete ${folderCount} Folder${folderCount === 1 ? '' : 's'}`
       : `Delete ${resolvedTotalKeys} Object${resolvedTotalKeys === 1 ? '' : 's'}`;
@@ -154,14 +150,23 @@ export function DeleteDialog({
             </Alert>
           )}
           <DialogDescription>{message}</DialogDescription>
-          {isBatch && folderCount > 0 && !isResolving && !resolutionError && (
-            <p className="text-sm text-muted-foreground">
-              {resolvedTotalKeys === 0
-                ? (folderCount === 1 ? 'The folder marker will be removed.' : 'Folder markers will be removed.')
-                : (folderCount === 1
-                    ? 'The folder will be removed after all objects are deleted.'
-                    : 'Folders will be removed after all objects are deleted.')}
-            </p>
+          {isBatch && !isResolving && !resolutionError && (
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p>
+                {resolvedTotalKeys === 0
+                  ? 'No objects found to delete.'
+                  : `${resolvedTotalKeys} object${resolvedTotalKeys === 1 ? '' : 's'} will be deleted.`}
+              </p>
+              {folderCount > 0 && (
+                <p>
+                  {resolvedTotalKeys === 0
+                    ? (folderCount === 1 ? 'The folder marker will be removed.' : 'Folder markers will be removed.')
+                    : (folderCount === 1
+                        ? '1 folder will be removed after all objects are deleted.'
+                        : `${folderCount} folders will be removed after all objects are deleted.`)}
+                </p>
+              )}
+            </div>
           )}
           {isBatch && !isResolving && !resolutionError && previewKeys.length > 0 && (
             <div>
