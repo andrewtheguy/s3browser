@@ -20,6 +20,7 @@ export interface S3Object {
   etag?: string;
   versionId?: string;
   isLatest?: boolean;
+  isDeleteMarker?: boolean;
 }
 
 export interface S3ListResult {

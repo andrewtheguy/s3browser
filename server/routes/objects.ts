@@ -82,6 +82,7 @@ interface S3Object {
   etag?: string;
   versionId?: string;
   isLatest?: boolean;
+  isDeleteMarker?: boolean;
 }
 
 function extractFileName(key: string): string {
@@ -258,6 +259,22 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
             etag: item.ETag,
             versionId: item.VersionId,
             isLatest: item.IsLatest,
+          });
+        }
+      }
+    }
+
+    if (versionResponse.DeleteMarkers) {
+      for (const item of versionResponse.DeleteMarkers) {
+        if (item.Key && item.Key !== prefix) {
+          objects.push({
+            key: item.Key,
+            name: extractFileName(item.Key),
+            lastModified: item.LastModified?.toISOString(),
+            isFolder: false,
+            versionId: item.VersionId,
+            isLatest: item.IsLatest,
+            isDeleteMarker: true,
           });
         }
       }

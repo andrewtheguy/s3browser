@@ -198,7 +198,7 @@ export function S3Browser() {
   const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
       const ids = objects
-        .filter((item) => item.isLatest !== false)
+        .filter((item) => item.isLatest !== false && !item.isDeleteMarker)
         .map((item) => getObjectSelectionId(item));
       setSelectedIds(new Set(ids));
     } else {

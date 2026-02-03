@@ -103,8 +103,9 @@ export function FileListItem({
   const IconComponent = iconMap[iconType];
   const iconColor = iconColors[iconType];
   const isPreviousVersion = showVersions && item.isLatest === false;
-  const isInteractive = !isPreviousVersion;
-  const isSelectable = !showVersions || item.isLatest !== false;
+  const isDeleteMarker = showVersions && item.isDeleteMarker === true;
+  const isInteractive = !isPreviousVersion && !isDeleteMarker;
+  const isSelectable = !showVersions || (item.isLatest !== false && !item.isDeleteMarker);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -191,6 +192,9 @@ export function FileListItem({
                 {item.isFolder && '/'}
                 {isPreviousVersion && (
                   <span className="ml-2 text-xs text-muted-foreground">previous version</span>
+                )}
+                {isDeleteMarker && (
+                  <span className="ml-2 text-xs text-muted-foreground">deleted</span>
                 )}
               </span>
             </TooltipTrigger>

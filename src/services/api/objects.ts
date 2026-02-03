@@ -11,6 +11,7 @@ export interface ListObjectsResponse {
     etag?: string;
     versionId?: string;
     isLatest?: boolean;
+    isDeleteMarker?: boolean;
   }>;
   continuationToken?: string;
   isTruncated: boolean;

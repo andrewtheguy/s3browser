@@ -221,7 +221,7 @@ export function FileList({
   }, [totalPages, clampedPage]);
 
   const selectableItems = showVersions
-    ? sortedObjects.filter((item) => item.isLatest !== false)
+    ? sortedObjects.filter((item) => item.isLatest !== false && !item.isDeleteMarker)
     : sortedObjects;
   const selectableCount = selectableItems.length;
   const selectedCount = selectableItems.filter((item) => selectedIds.has(getObjectSelectionId(item))).length;
