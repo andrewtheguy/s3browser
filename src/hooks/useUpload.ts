@@ -195,6 +195,7 @@ export function useUpload() {
           if (currentGeneration === generationRef.current) {
             setPendingResumable([]);
           }
+          return;
         }
         const pending = await listPendingUploads();
         if (currentGeneration === generationRef.current) {
