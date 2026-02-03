@@ -114,7 +114,7 @@ export function FileListItem({
     onDownload(item.key);
   };
 
-  const handleCheckboxChange = (checked: boolean) => {
+  const handleCheckboxToggle = (checked: boolean) => {
     onSelect?.(item.key, checked);
   };
 
@@ -129,13 +129,30 @@ export function FileListItem({
         )}
       >
         {selectionMode && (
-          <TableCell className="w-12 px-2">
+          <TableCell
+            className="w-14 px-2"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             {onSelect && (
-              <Checkbox
-                checked={isSelected}
-                onCheckedChange={handleCheckboxChange}
-                onClick={(e) => e.stopPropagation()}
-              />
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={isSelected}
+                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCheckboxToggle(!isSelected);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  className="h-5 w-5 pointer-events-none"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                />
+              </button>
             )}
           </TableCell>
         )}
