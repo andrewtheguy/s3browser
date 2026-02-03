@@ -7,7 +7,7 @@ import {
   RefreshCw,
   LogOut,
   Trash2,
-  Settings,
+  ArrowLeftRight,
   Info,
   FlaskConical,
 } from 'lucide-react';
@@ -158,7 +158,7 @@ export function Toolbar({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" size="icon" onClick={handleManageConnections}>
-                  <Settings className="h-4 w-4" />
+                  <ArrowLeftRight className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Choose Connection</TooltipContent>
@@ -254,7 +254,7 @@ export function Toolbar({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" onClick={handleManageConnections}>
-                  <Settings className="h-4 w-4 mr-2 sm:mr-1" />
+                  <ArrowLeftRight className="h-4 w-4 mr-2 sm:mr-1" />
                   <span className="hidden sm:inline">Choose Connection</span>
                 </Button>
               </TooltipTrigger>
