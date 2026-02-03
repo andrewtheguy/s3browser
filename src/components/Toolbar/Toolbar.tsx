@@ -58,7 +58,8 @@ interface ToolbarProps {
   onToggleSelection?: () => void;
   showVersions?: boolean;
   onToggleVersions?: () => void;
-  versioningSupported?: boolean;
+  /** null = checking, true = supported, false = not supported */
+  versioningSupported?: boolean | null;
   onSeedTestItems?: () => void;
   isSeedingTestItems?: boolean;
 }
@@ -74,7 +75,7 @@ export function Toolbar({
   onToggleSelection,
   showVersions = false,
   onToggleVersions,
-  versioningSupported = true,
+  versioningSupported = null,
   onSeedTestItems,
   isSeedingTestItems = false,
 }: ToolbarProps) {
@@ -212,12 +213,14 @@ export function Toolbar({
 
                 <DropdownMenuItem
                   onClick={onToggleVersions}
-                  disabled={!versioningSupported}
+                  disabled={versioningSupported !== true}
                 >
                   <History className="h-4 w-4" />
-                  {!versioningSupported
-                    ? 'Versions (not supported)'
-                    : showVersions ? 'Hide Versions' : 'Show Versions'}
+                  {versioningSupported === null
+                    ? 'Versions...'
+                    : versioningSupported === false
+                      ? 'Versions (not supported)'
+                      : showVersions ? 'Hide Versions' : 'Show Versions'}
                 </DropdownMenuItem>
 
                 {seedButtonEnabled && onSeedTestItems && (
@@ -273,26 +276,31 @@ export function Toolbar({
               </Tooltip>
             )}
 
-            {/* Show versions button when:
-                - onToggleVersions is provided (versioning supported, button is clickable)
-                - OR !versioningSupported (show disabled button to indicate feature exists but unavailable) */}
-            {(onToggleVersions || !versioningSupported) && (
+            {/* Show versions button:
+                - versioningSupported === null: checking (disabled, "Versions...")
+                - versioningSupported === true: supported (enabled, clickable)
+                - versioningSupported === false: not supported (disabled, "not supported") */}
+            {(onToggleVersions || versioningSupported !== true) && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant={showVersions ? 'default' : 'outline'}
                     onClick={onToggleVersions}
-                    disabled={!versioningSupported}
+                    disabled={versioningSupported !== true}
                   >
-                    {!versioningSupported
-                      ? 'Versions (not supported)'
-                      : showVersions ? 'Hide Versions' : 'Show Versions'}
+                    {versioningSupported === null
+                      ? 'Versions...'
+                      : versioningSupported === false
+                        ? 'Versions (not supported)'
+                        : showVersions ? 'Hide Versions' : 'Show Versions'}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {!versioningSupported
-                    ? 'Versioning not supported by this storage'
-                    : showVersions ? 'Hide versions' : 'Show versions'}
+                  {versioningSupported === null
+                    ? 'Checking versioning support...'
+                    : versioningSupported === false
+                      ? 'Versioning not supported by this storage'
+                      : showVersions ? 'Hide versions' : 'Show versions'}
                 </TooltipContent>
               </Tooltip>
             )}
