@@ -243,10 +243,16 @@ export function FileListItem({
                     <TooltipContent>Copy URL</TooltipContent>
                   </Tooltip>
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuItem onClick={() => onCopyUrl(item.key, 3600, item.versionId)} disabled={!canPreview}>
+                    <DropdownMenuItem
+                      onClick={() => onCopyUrl(item.key, 3600, showVersions ? item.versionId : undefined)}
+                      disabled={!canPreview}
+                    >
                       Presigned URL (1 hour)
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onCopyUrl(item.key, 86400, item.versionId)} disabled={!canPreview}>
+                    <DropdownMenuItem
+                      onClick={() => onCopyUrl(item.key, 86400, showVersions ? item.versionId : undefined)}
+                      disabled={!canPreview}
+                    >
                       Presigned URL (1 day)
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onCopyS3Uri(item.key)} disabled={!canPreview}>

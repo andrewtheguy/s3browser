@@ -135,6 +135,16 @@ export function S3Browser() {
     return itemsToDelete.every((item) => !item.isFolder);
   }, [itemsToDelete]);
 
+  const resolveDeleteVersionId = useCallback((item: S3Object): string | undefined => {
+    if (item.isDeleteMarker) {
+      return item.versionId;
+    }
+    if (item.isLatest === false) {
+      return item.versionId;
+    }
+    return undefined;
+  }, []);
+
   const itemsToDeleteRef = useRef<S3Object[]>([]);
 
   useEffect(() => {
@@ -251,7 +261,7 @@ export function S3Browser() {
       setDeletePlan({
         fileKeys: itemsToDeleteRef.current.map((item) => ({
           key: item.key,
-          versionId: item.versionId,
+          versionId: resolveDeleteVersionId(item),
         })),
         folderKeys: [],
       });
@@ -304,7 +314,7 @@ export function S3Browser() {
       }
       setDeleteContinuationCount(null);
     };
-  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, deleteSelectionAllFiles, resolveDeletePlan]);
+  }, [deleteDialogOpen, deleteMode, itemsToDeleteKey, deleteSelectionAllFiles, resolveDeletePlan, showVersions]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (itemsToDelete.length === 0) return;
@@ -317,7 +327,7 @@ export function S3Browser() {
     try {
       if (deleteMode === 'single') {
         const item = itemsToDelete[0];
-        await remove(item.key, item.versionId);
+        await remove(item.key, resolveDeleteVersionId(item));
         toast.success(item.isFolder ? 'Folder deleted successfully' : 'File deleted successfully');
       } else {
         const plan = deletePlan ?? { fileKeys: [], folderKeys: [] };
@@ -371,7 +381,7 @@ export function S3Browser() {
       setDeletePlan(null);
       setDeleteResolveError(null);
     }
-  }, [itemsToDelete, deleteMode, deletePlan, remove, removeMany, refresh]);
+  }, [itemsToDelete, deleteMode, deletePlan, remove, removeMany, refresh, showVersions]);
 
   const handleDeleteCancel = useCallback(() => {
     setDeleteDialogOpen(false);
