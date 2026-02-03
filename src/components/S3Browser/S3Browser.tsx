@@ -316,6 +316,16 @@ export function S3Browser() {
     }
   }, [objects, selectedIds]);
 
+  const handleBatchDownloadItem = useCallback((item: S3Object) => {
+    if (!item.isFolder) {
+      return;
+    }
+    setItemsToDownload([item]);
+    setDownloadPlan(null);
+    setDownloadResolveError(null);
+    setDownloadDialogOpen(true);
+  }, []);
+
   useEffect(() => {
     if (!deleteDialogOpen || deleteMode !== 'batch') {
       setDeletePlan(null);
@@ -994,6 +1004,7 @@ export function S3Browser() {
               onCopyUrl={handleCopyUrl}
               onCopyS3Uri={handleCopyS3Uri}
               onPreview={handlePreview}
+              onBatchDownload={batchDownloadEnabled ? handleBatchDownloadItem : undefined}
               selectedIds={selectedIds}
               onSelectItem={handleSelectItem}
               onSelectAll={handleSelectAll}

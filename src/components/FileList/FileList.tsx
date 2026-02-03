@@ -28,6 +28,7 @@ interface FileListProps {
   onCopyUrl: (key: string, ttl: number, versionId?: string) => void;
   onCopyS3Uri: (key: string) => void;
   onPreview: (item: S3Object) => void;
+  onBatchDownload?: (item: S3Object) => void;
   selectedIds: Set<string>;
   onSelectItem: (id: string, checked: boolean) => void;
   onSelectAll: (checked: boolean) => void;
@@ -51,6 +52,7 @@ export function FileList({
   onCopyUrl,
   onCopyS3Uri,
   onPreview,
+  onBatchDownload,
   selectedIds,
   onSelectItem,
   onSelectAll,
@@ -461,6 +463,7 @@ export function FileList({
                   onCopy={onCopyRequest}
                   onMove={onMoveRequest}
                   onPreview={onPreview}
+                  onBatchDownload={onBatchDownload}
                   isSelected={selectedIds.has(selectionId)}
                   onSelect={onSelectItem}
                   selectionMode={selectionMode}
