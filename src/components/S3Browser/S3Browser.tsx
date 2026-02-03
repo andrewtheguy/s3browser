@@ -688,6 +688,7 @@ export function S3Browser() {
           onToggleSelection={handleToggleSelection}
           showVersions={showVersions}
           onToggleVersions={versioningSupported ? toggleShowVersions : undefined}
+          versioningSupported={versioningSupported}
           onSeedTestItems={seedTestItemsEnabled ? handleSeedTestItems : undefined}
           isSeedingTestItems={seedTestItemsEnabled ? isSeedingTestItems : undefined}
         />
