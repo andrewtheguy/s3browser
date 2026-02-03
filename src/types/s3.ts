@@ -36,7 +36,7 @@ export interface UploadProgress {
   loaded: number;
   total: number;
   percentage: number;
-  status: 'pending' | 'uploading' | 'completed' | 'error' | 'paused';
+  status: 'pending' | 'uploading' | 'completed' | 'error';
   error?: string;
   // Multipart upload fields
   uploadId?: string;

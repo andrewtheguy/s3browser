@@ -573,36 +573,6 @@ export function useUpload() {
     [cancelUploadInternal]
   );
 
-  const pauseUpload = useCallback((id: string) => {
-    const controller = abortControllersRef.current.get(id);
-    if (controller) {
-      controller.abort();
-      abortControllersRef.current.delete(id);
-    }
-
-    // inFlight cleanup happens in runUpload/processQueue finally after AbortError.
-    updateUpload(id, {
-      status: 'paused',
-    });
-  }, [updateUpload]);
-
-  const resumeUpload = useCallback(
-    (id: string) => {
-      const uploadItem = uploadsRef.current.find((u) => u.id === id);
-      if (!uploadItem || !uploadItem.persistenceId) {
-        throw new Error('Cannot resume upload - no persistence data');
-      }
-
-      updateUpload(id, {
-        status: 'pending',
-        error: undefined,
-      });
-
-      enqueueUploadIds([id]);
-    },
-    [enqueueUploadIds, updateUpload]
-  );
-
   const retryUpload = useCallback(
     (id: string) => {
       const uploadItem = uploadsRef.current.find((u) => u.id === id);
@@ -682,8 +652,6 @@ export function useUpload() {
     upload,
     cancelUpload,
     cancelAll,
-    pauseUpload,
-    resumeUpload,
     retryUpload,
     clearAll,
     removePendingResumable,

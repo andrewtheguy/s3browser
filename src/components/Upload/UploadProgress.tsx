@@ -3,8 +3,6 @@ import {
   X,
   CheckCircle,
   AlertCircle,
-  Pause,
-  Play,
   RefreshCw,
 } from 'lucide-react';
 import { useMemo } from 'react';
@@ -25,8 +23,6 @@ interface UploadProgressProps {
   uploads: UploadProgressType[];
   completedStats: CompletedStats;
   onCancel: (id: string) => void;
-  onPause?: (id: string) => void;
-  onResume?: (id: string) => void;
   onRetry?: (id: string) => void;
 }
 
@@ -34,8 +30,6 @@ export function UploadProgress({
   uploads,
   completedStats,
   onCancel,
-  onPause,
-  onResume,
   onRetry,
 }: UploadProgressProps) {
   const activeUploads = useMemo(
@@ -78,8 +72,6 @@ export function UploadProgress({
                     <div className="flex-shrink-0 mt-0.5">
                       {upload.status === 'error' ? (
                         <AlertCircle className="h-5 w-5 text-destructive" />
-                      ) : upload.status === 'paused' ? (
-                        <Pause className="h-5 w-5 text-yellow-500" />
                       ) : (
                         <File className="h-5 w-5 text-muted-foreground" />
                       )}
@@ -115,13 +107,6 @@ export function UploadProgress({
                               {upload.percentage}%
                             </span>
                           </div>
-                        ) : upload.status === 'paused' ? (
-                          <div className="flex items-center gap-2">
-                            <Progress value={upload.percentage} className="h-2 flex-grow [&>div]:bg-yellow-500" />
-                            <span className="text-xs text-yellow-600 min-w-[50px]">
-                              Paused
-                            </span>
-                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">
                             Pending
@@ -130,38 +115,6 @@ export function UploadProgress({
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
-                      {upload.status === 'uploading' && upload.isMultipart && onPause && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              aria-label="Pause upload"
-                              onClick={() => onPause(upload.id)}
-                            >
-                              <Pause className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Pause</TooltipContent>
-                        </Tooltip>
-                      )}
-                      {upload.status === 'paused' && onResume && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              aria-label="Resume upload"
-                              onClick={() => onResume(upload.id)}
-                            >
-                              <Play className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Resume</TooltipContent>
-                        </Tooltip>
-                      )}
                       {upload.status === 'error' && onRetry && (
                         <Tooltip>
                           <TooltipTrigger asChild>

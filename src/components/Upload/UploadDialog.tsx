@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Upload, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef } from 'react';
+import { Upload, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -44,68 +43,17 @@ export function UploadDialog({
     upload,
     cancelUpload,
     cancelAll,
-    pauseUpload,
-    resumeUpload,
     retryUpload,
     clearAll,
     removePendingResumable,
     isUploading,
   } = useUpload();
 
-  // State and ref for resuming pending uploads via file picker
-  const resumeFileInputRef = useRef<HTMLInputElement>(null);
-  const [pendingToResume, setPendingToResume] = useState<typeof pendingResumable[0] | null>(null);
-  const [resumeError, setResumeError] = useState<string | null>(null);
-
   const handleFilesSelected = useCallback(
     async (files: UploadCandidate[]) => {
       await upload(files, currentPath);
     },
     [upload, currentPath]
-  );
-
-  const handleResumeFromPending = useCallback(
-    (pending: typeof pendingResumable[0]) => {
-      setPendingToResume(pending);
-      setResumeError(null);
-      // Trigger file picker
-      if (resumeFileInputRef.current) {
-        resumeFileInputRef.current.value = '';
-        resumeFileInputRef.current.click();
-      }
-    },
-    []
-  );
-
-  const handleResumeFileSelect = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      // Clear input for future use
-      if (resumeFileInputRef.current) {
-        resumeFileInputRef.current.value = '';
-      }
-
-      if (!file || !pendingToResume) {
-        setPendingToResume(null);
-        return;
-      }
-
-      // Verify file matches the pending upload (name and size)
-      if (file.name !== pendingToResume.fileName || file.size !== pendingToResume.fileSize) {
-        setResumeError(
-          `File mismatch: Expected "${pendingToResume.fileName}" (${formatFileSize(pendingToResume.fileSize)}), ` +
-          `got "${file.name}" (${formatFileSize(file.size)}). Please select the correct file.`
-        );
-        setPendingToResume(null);
-        return;
-      }
-
-      // File matches - upload will automatically detect and resume the pending upload
-      setResumeError(null);
-      setPendingToResume(null);
-      await upload([{ file, key: pendingToResume.key }], ''); // Use the key from pending upload (already includes path)
-    },
-    [pendingToResume, upload]
   );
 
   const handleClose = useCallback(async () => {
@@ -117,8 +65,6 @@ export function UploadDialog({
       if (!confirmed) return;
     }
     await clearAll();
-    setPendingToResume(null);
-    setResumeError(null);
     onClose();
   }, [isUploading, clearAll, onClose]);
 
@@ -130,8 +76,7 @@ export function UploadDialog({
   useEffect(() => {
     const hasUploading = uploads.some((u) => u.status === 'uploading');
     const hasPending = uploads.some((u) => u.status === 'pending');
-    const hasPaused = uploads.some((u) => u.status === 'paused');
-    const hasActive = hasUploading || hasPending || hasPaused;
+    const hasActive = hasUploading || hasPending;
     const completedCount = completedStats.count;
 
     // Reset flag when new uploads are added
@@ -156,40 +101,15 @@ export function UploadDialog({
           <DialogTitle>Upload Files</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          {/* Hidden file input for resuming uploads */}
-          <input
-            type="file"
-            ref={resumeFileInputRef}
-            onChange={handleResumeFileSelect}
-            className="hidden"
-          />
-
-          {/* Resume error alert */}
-          {resumeError && (
-            <Alert variant="destructive">
-              <AlertDescription className="flex items-center justify-between">
-                {resumeError}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setResumeError(null)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-
           {/* Pending Resumable Uploads Section */}
           {pendingResumable.length > 0 && (
             <TooltipProvider>
               <div>
                 <p className="text-sm font-medium text-yellow-600 mb-1">
-                  Resume Pending Uploads ({pendingResumable.length})
+                  Pending Uploads ({pendingResumable.length})
                 </p>
                 <p className="text-xs text-muted-foreground mb-2">
-                  These uploads were interrupted. Re-select the same file to resume.
+                  These uploads resume automatically when possible. If they stay pending after a reload, re-add the same file.
                 </p>
                 <ScrollArea className="max-h-[200px] rounded-md border border-yellow-200 bg-yellow-50/50">
                   <ul className="p-2 space-y-2">
@@ -221,19 +141,6 @@ export function UploadDialog({
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7"
-                                onClick={() => handleResumeFromPending(pending)}
-                              >
-                                <Upload className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Re-select file to resume upload</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
                                 onClick={() => removePendingResumable(pending.id)}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -257,8 +164,6 @@ export function UploadDialog({
             uploads={uploads}
             completedStats={completedStats}
             onCancel={cancelUpload}
-            onPause={pauseUpload}
-            onResume={resumeUpload}
             onRetry={retryUpload}
           />
         </div>
