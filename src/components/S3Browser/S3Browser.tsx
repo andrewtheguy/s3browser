@@ -41,6 +41,7 @@ import {
   useSeedTestItems,
   useResolveObjectPlan,
 } from '../../hooks';
+import type { ObjectPlan } from '../../hooks/useResolveObjectPlan';
 import { FEATURES } from '../../config';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
@@ -85,7 +86,7 @@ export function S3Browser() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemsToDelete, setItemsToDelete] = useState<S3Object[]>([]);
   const [deleteMode, setDeleteMode] = useState<'single' | 'batch'>('single');
-  const [deletePlan, setDeletePlan] = useState<{ fileKeys: Array<{ key: string; versionId?: string }>; folderKeys: string[] } | null>(null);
+  const [deletePlan, setDeletePlan] = useState<ObjectPlan | null>(null);
   const [isResolvingDelete, setIsResolvingDelete] = useState(false);
   const [deleteResolveError, setDeleteResolveError] = useState<string | null>(null);
   const [deleteContinuationCount, setDeleteContinuationCount] = useState<number | null>(null);
@@ -138,12 +139,11 @@ export function S3Browser() {
     if (deleteMode !== 'batch' || !deletePlan) {
       return null;
     }
-    const sortedKeys = [...deletePlan.fileKeys]
-      .map((entry) => entry.key)
-      .sort((a, b) => a.localeCompare(b));
+    const sortedEntries = [...deletePlan.fileKeys]
+      .sort((a, b) => a.key.localeCompare(b.key));
     return {
-      previewKeys: sortedKeys.slice(0, DELETE_PREVIEW_LIMIT),
-      totalKeys: sortedKeys.length,
+      previewEntries: sortedEntries.slice(0, DELETE_PREVIEW_LIMIT),
+      totalKeys: sortedEntries.length,
       folderCount: deletePlan.folderKeys.length,
     };
   }, [deleteMode, deletePlan]);
@@ -353,6 +353,8 @@ export function S3Browser() {
         fileKeys: itemsToDeleteRef.current.map((item) => ({
           key: item.key,
           versionId: resolveDeleteVersionId(item),
+          isLatest: item.isLatest,
+          isDeleteMarker: item.isDeleteMarker,
         })),
         folderKeys: [],
       });
@@ -372,6 +374,7 @@ export function S3Browser() {
         const folderSelection = itemsToDeleteRef.current.some((item) => item.isFolder);
         const plan = await resolveDeletePlan(itemsToDeleteRef.current, {
           includeFolderContents: true,
+          includeVersions: showVersions,
           signal: abortController.signal,
           continuationPromptStartAt: folderSelection ? DELETE_CONTINUATION_START_AT : undefined,
           continuationPromptEvery: folderSelection ? DELETE_CONTINUATION_EVERY : undefined,
@@ -1079,7 +1082,7 @@ export function S3Browser() {
         items={itemsToDelete}
         isDeleting={isDeleting}
         isResolving={isResolvingDelete}
-        previewKeys={deletePreview?.previewKeys}
+        previewEntries={deletePreview?.previewEntries}
         totalKeys={deletePreview?.totalKeys}
         folderCount={deletePreview?.folderCount}
         isBatch={deleteMode === 'batch'}

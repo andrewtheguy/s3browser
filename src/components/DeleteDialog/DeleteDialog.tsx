@@ -12,13 +12,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import type { S3Object } from '../../types';
+import type { ObjectPlanEntry } from '../../hooks/useResolveObjectPlan';
 
 interface DeleteDialogProps {
   open: boolean;
   items: S3Object[];
   isDeleting: boolean;
   isResolving?: boolean;
-  previewKeys?: string[];
+  previewEntries?: ObjectPlanEntry[];
   totalKeys?: number;
   folderCount?: number;
   isBatch?: boolean;
@@ -96,7 +97,7 @@ export function DeleteDialog({
   items,
   isDeleting,
   isResolving = false,
-  previewKeys = [],
+  previewEntries = [],
   totalKeys,
   folderCount = 0,
   isBatch = false,
@@ -111,7 +112,7 @@ export function DeleteDialog({
   const isFolder = isSingleItem && singleItem.isFolder;
 
   const resolvedTotalKeys = totalKeys ?? items.length;
-  const remainingPreviewCount = Math.max(resolvedTotalKeys - previewKeys.length, 0);
+  const remainingPreviewCount = Math.max(resolvedTotalKeys - previewEntries.length, 0);
   const batchTitle = isResolving
     ? 'Preparing delete list'
     : resolvedTotalKeys === 0 && folderCount > 0
@@ -170,14 +171,19 @@ export function DeleteDialog({
               )}
             </div>
           )}
-          {isBatch && !isResolving && !resolutionError && previewKeys.length > 0 && (
+          {isBatch && !isResolving && !resolutionError && previewEntries.length > 0 && (
             <div>
               <ScrollArea className="h-[320px] rounded-md border">
                 <div className="p-2 space-y-1">
                   <ul className="space-y-1">
-                    {previewKeys.map((key) => (
-                      <li key={key} className="text-sm break-all py-1">
-                        {key}
+                    {previewEntries.map((entry) => (
+                      <li key={`${entry.key}::${entry.versionId ?? ''}`} className="text-sm break-all py-1">
+                        {entry.key}
+                        {entry.isDeleteMarker ? (
+                          <span className="ml-2 text-xs text-muted-foreground">deleted</span>
+                        ) : entry.isLatest === false ? (
+                          <span className="ml-2 text-xs text-muted-foreground">previous version</span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>

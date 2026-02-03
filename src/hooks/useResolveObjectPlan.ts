@@ -13,16 +13,20 @@ export interface ResolveObjectPlanOptions {
   continuationPromptStartAt?: number;
 }
 
+export interface ObjectPlanEntry {
+  key: string;
+  versionId?: string;
+  isLatest?: boolean;
+  isDeleteMarker?: boolean;
+}
+
 export interface ObjectPlan {
-  fileKeys: Array<{ key: string; versionId?: string }>;
+  fileKeys: ObjectPlanEntry[];
   folderKeys: string[];
 }
 
 const CONTINUATION_PROMPT_EVERY = 10_000;
-const buildCompositeKey = (key: string, versionId?: string, includeVersions?: boolean): string => {
-  if (!includeVersions) {
-    return `${key}::`;
-  }
+const buildCompositeKey = (key: string, versionId?: string): string => {
   return `${key}::${versionId ?? ''}`;
 };
 
@@ -45,7 +49,7 @@ export function useResolveObjectPlan() {
 
       const includeFolderContents = options.includeFolderContents ?? false;
       const includeVersions = options.includeVersions ?? false;
-      const fileKeys = new Map<string, { key: string; versionId?: string }>();
+      const fileKeys = new Map<string, ObjectPlanEntry>();
       const folderKeys = new Set<string>();
       const queue: string[] = [];
       const promptEvery = Math.max(
@@ -67,9 +71,12 @@ export function useResolveObjectPlan() {
             }
           }
         } else {
-          fileKeys.set(buildCompositeKey(item.key, item.versionId, includeVersions), {
+          const versionId = includeVersions ? item.versionId : undefined;
+          fileKeys.set(buildCompositeKey(item.key, versionId), {
             key: item.key,
-            versionId: includeVersions ? item.versionId : undefined,
+            versionId,
+            isLatest: item.isLatest,
+            isDeleteMarker: item.isDeleteMarker,
           });
         }
       }
@@ -96,15 +103,19 @@ export function useResolveObjectPlan() {
             options.signal
           );
           for (const obj of result.objects) {
+            throwIfAborted(options.signal);
             if (obj.isFolder) {
               if (!folderKeys.has(obj.key)) {
                 folderKeys.add(obj.key);
                 queue.push(obj.key);
               }
             } else {
-              fileKeys.set(buildCompositeKey(obj.key, obj.versionId, includeVersions), {
+              const versionId = includeVersions ? obj.versionId : undefined;
+              fileKeys.set(buildCompositeKey(obj.key, versionId), {
                 key: obj.key,
-                versionId: includeVersions ? obj.versionId : undefined,
+                versionId,
+                isLatest: obj.isLatest,
+                isDeleteMarker: obj.isDeleteMarker,
               });
             }
           }
