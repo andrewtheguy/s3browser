@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   Home,
@@ -61,8 +61,9 @@ interface ToolbarProps {
   onToggleSelection?: () => void;
   showVersions?: boolean;
   onToggleVersions?: () => void;
-  /** null = checking, true = supported, false = not supported */
+  /** null = checking, true = supported, false = not supported/disabled */
   versioningSupported?: boolean | null;
+  bucketVersioningStatus?: 'enabled' | 'suspended' | 'disabled' | null;
   onSeedTestItems?: () => void;
   isSeedingTestItems?: boolean;
 }
@@ -81,6 +82,7 @@ export function Toolbar({
   showVersions = false,
   onToggleVersions,
   versioningSupported = null,
+  bucketVersioningStatus = null,
   onSeedTestItems,
   isSeedingTestItems = false,
 }: ToolbarProps) {
@@ -88,6 +90,32 @@ export function Toolbar({
   const { connectionId } = useParams<{ connectionId?: string }>();
   const { credentials, disconnect, activeConnectionId } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
+
+  const versionsButtonLabel = useMemo(() => {
+    if (bucketVersioningStatus === 'disabled') {
+      return 'Versions Disabled';
+    }
+    if (versioningSupported === null) {
+      return 'Versions...';
+    }
+    if (versioningSupported === false) {
+      return 'Versions (not supported)';
+    }
+    return showVersions ? 'Hide Versions' : 'Show Versions';
+  }, [bucketVersioningStatus, showVersions, versioningSupported]);
+
+  const versionsButtonTooltip = useMemo(() => {
+    if (bucketVersioningStatus === 'disabled') {
+      return 'Bucket versioning is disabled';
+    }
+    if (versioningSupported === null) {
+      return 'Checking versioning support...';
+    }
+    if (versioningSupported === false) {
+      return 'Versioning not supported by this storage';
+    }
+    return showVersions ? 'Hide versions' : 'Show versions';
+  }, [bucketVersioningStatus, showVersions, versioningSupported]);
 
   const handleDisconnect = useCallback(async () => {
     try {
@@ -237,11 +265,7 @@ export function Toolbar({
                   disabled={versioningSupported !== true}
                 >
                   <History className="h-4 w-4" />
-                  {versioningSupported === null
-                    ? 'Versions...'
-                    : versioningSupported === false
-                      ? 'Versions (not supported)'
-                      : showVersions ? 'Hide Versions' : 'Show Versions'}
+                  {versionsButtonLabel}
                 </DropdownMenuItem>
 
                 {seedButtonEnabled && onSeedTestItems && (
@@ -309,19 +333,11 @@ export function Toolbar({
                     onClick={onToggleVersions}
                     disabled={versioningSupported !== true}
                   >
-                    {versioningSupported === null
-                      ? 'Versions...'
-                      : versioningSupported === false
-                        ? 'Versions (not supported)'
-                        : showVersions ? 'Hide Versions' : 'Show Versions'}
+                    {versionsButtonLabel}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {versioningSupported === null
-                    ? 'Checking versioning support...'
-                    : versioningSupported === false
-                      ? 'Versioning not supported by this storage'
-                      : showVersions ? 'Hide versions' : 'Show versions'}
+                  {versionsButtonTooltip}
                 </TooltipContent>
               </Tooltip>
             )}

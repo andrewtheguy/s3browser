@@ -538,6 +538,7 @@ export function BrowserProvider({
       showVersions,
       toggleShowVersions,
       versioningSupported: effectiveVersioningSupported,
+      bucketVersioningStatus,
     }),
     [
       currentPath,
@@ -557,6 +558,7 @@ export function BrowserProvider({
       showVersions,
       toggleShowVersions,
       effectiveVersioningSupported,
+      bucketVersioningStatus,
     ]
   );
 

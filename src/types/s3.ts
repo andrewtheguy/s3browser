@@ -103,8 +103,10 @@ export interface BrowserContextValue {
   pathSegments: string[];
   showVersions: boolean;
   toggleShowVersions: () => void;
-  /** null = still checking, true = supported, false = not supported */
+  /** null = still checking, true = supported, false = not supported/disabled */
   versioningSupported: boolean | null;
+  /** Bucket versioning status when available */
+  bucketVersioningStatus: 'enabled' | 'suspended' | 'disabled' | null;
 }
 
 export interface SavedConnection {
