@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { LogOut, RefreshCw, ArrowLeftRight } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
@@ -28,6 +28,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualBucket, setManualBucket] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
+  const didClearCacheRef = useRef(false);
 
   const fetchBuckets = useCallback(async () => {
     setIsLoading(true);
@@ -35,7 +36,11 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
     setAccessDenied(false);
 
     try {
-      const bucketList = await listBuckets(connectionId);
+      const shouldClearCache = !didClearCacheRef.current;
+      if (shouldClearCache) {
+        didClearCacheRef.current = true;
+      }
+      const bucketList = await listBuckets(connectionId, { clearCache: shouldClearCache });
       // Sort buckets alphabetically by name
       const sortedBuckets = [...bucketList].sort((a, b) =>
         a.name.localeCompare(b.name)

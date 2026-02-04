@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, type NextFunction } from 'express';
 import {
   validateCredentials,
   validateCredentialsOnly,
@@ -37,6 +37,18 @@ interface S3CredentialsRequestBody {
   endpoint?: string;
   profileName?: string;
   autoDetectRegion?: boolean;
+}
+
+function shouldClearCache(req: Request): boolean {
+  const clearCacheParam = req.query?.clear_cache;
+  return clearCacheParam === '1' || clearCacheParam === 'true';
+}
+
+function clearCacheMiddleware(req: Request, _res: Response, next: NextFunction): void {
+  if (shouldClearCache(req)) {
+    clearBucketRegionCache();
+  }
+  next();
 }
 
 interface SelectBucketRequestBody {
@@ -373,9 +385,10 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
 
 // GET /api/auth/connections - List saved S3 connections
 // Note: secretAccessKey is never returned to client for security
-router.get('/connections', loginMiddleware, (_req: AuthenticatedRequest, res: Response): void => {
-  // Clear bucket region cache on page load/refresh
-  clearBucketRegionCache();
+router.get('/connections', loginMiddleware, (req: AuthenticatedRequest, res: Response): void => {
+  if (shouldClearCache(req)) {
+    clearBucketRegionCache();
+  }
 
   const fetchAllConnections = getAllConnections as () => DbConnectionRow[];
   const connections = fetchAllConnections();
@@ -441,7 +454,7 @@ router.delete('/connections/:id', loginMiddleware, (req: AuthenticatedRequest, r
 });
 
 // GET /api/auth/buckets/:connectionId - List available buckets for a connection
-router.get('/buckets/:connectionId', s3Middleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/buckets/:connectionId', clearCacheMiddleware, s3Middleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const client = req.s3Client!;
 
   try {
