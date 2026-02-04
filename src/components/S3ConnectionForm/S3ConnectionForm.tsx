@@ -257,7 +257,7 @@ export function S3ConnectionForm({
       )}
 
       <div className="space-y-2 mb-4">
-        <Label htmlFor="connection-select">Saved Connection</Label>
+        <Label htmlFor="connection-select">Saved Connection Profile</Label>
         <Select
           value={selectedConnectionId !== null ? String(selectedConnectionId) : 'new'}
           onValueChange={handleConnectionChange}
@@ -265,10 +265,10 @@ export function S3ConnectionForm({
           disabled={connectionsLoading}
         >
           <SelectTrigger id="connection-select">
-            <SelectValue placeholder="Select a connection" />
+            <SelectValue placeholder="Select a profile" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="new">New Connection</SelectItem>
+            <SelectItem value="new">New Connection Profile</SelectItem>
             {connections.map((connection) => (
               <SelectItem key={connection.id} value={String(connection.id)}>
                 <div className="flex items-center justify-between w-full gap-2">
