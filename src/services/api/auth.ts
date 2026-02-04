@@ -114,8 +114,8 @@ export async function getConnections(): Promise<ServerSavedConnection[]> {
   return response.connections;
 }
 
-export async function getConnection(connectionId: number): Promise<ServerSavedConnection> {
-  const response = await apiGet<ServerSavedConnection>(`/auth/connections/${connectionId}`);
+export async function getConnection(connectionId: number, signal?: AbortSignal): Promise<ServerSavedConnection> {
+  const response = await apiGet<ServerSavedConnection>(`/auth/connections/${connectionId}`, signal);
   if (!response) {
     throw new Error('Failed to get connection: empty response');
   }

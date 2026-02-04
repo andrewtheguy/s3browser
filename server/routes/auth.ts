@@ -258,7 +258,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     return;
   }
 
-  if (!profileName) {
+  if (!profileName || !profileName.trim()) {
     res.status(400).json({ error: 'Profile name is required' });
     return;
   }

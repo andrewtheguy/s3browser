@@ -308,8 +308,8 @@ export function S3ConnectionForm({
           />
           <p className={`text-xs ${showNameError ? 'text-destructive' : 'text-muted-foreground'}`}>
             {showNameError
-              ? 'Profile name cannot contain spaces'
-              : 'A unique name for this profile (no spaces).'}
+              ? 'Profile name may only contain letters, numbers, dots, underscores, and hyphens'
+              : 'Letters, numbers, dots, underscores, and hyphens only.'}
           </p>
         </div>
 

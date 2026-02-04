@@ -141,21 +141,40 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
     setError(null);
 
     void (async () => {
+      let connectionError: Error | null = null;
+      let bucketError: Error | null = null;
+
       try {
-        const connectionPromise = getConnection(activeConnectionId);
-        const data = await getBucketInfo(
-          activeConnectionId,
-          bucket,
-          abortController.signal
-        );
-        const connection = await connectionPromise;
+        const connectionPromise = getConnection(activeConnectionId, abortController.signal);
+        const bucketPromise = getBucketInfo(activeConnectionId, bucket, abortController.signal);
+
+        const [connectionResult, bucketResult] = await Promise.allSettled([connectionPromise, bucketPromise]);
+
+        if (connectionResult.status === 'rejected') {
+          connectionError = connectionResult.reason instanceof Error
+            ? connectionResult.reason
+            : new Error('Failed to load connection');
+        }
+
+        if (bucketResult.status === 'rejected') {
+          bucketError = bucketResult.reason instanceof Error
+            ? bucketResult.reason
+            : new Error('Failed to load bucket info');
+        }
+
         if (!abortController.signal.aborted) {
-          setInfo(data);
-          setProfileName(connection.profileName);
+          if (connectionError) {
+            setError(`Failed to load connection: ${connectionError.message}`);
+          } else if (bucketError) {
+            setError(`Failed to load bucket info: ${bucketError.message}`);
+          } else {
+            setInfo((bucketResult as PromiseFulfilledResult<BucketInfo>).value);
+            setProfileName((connectionResult as PromiseFulfilledResult<Awaited<ReturnType<typeof getConnection>>>).value.profileName);
+          }
         }
       } catch (err) {
         if (!abortController.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Failed to load bucket info');
+          setError(err instanceof Error ? err.message : 'Failed to load data');
         }
       } finally {
         if (!abortController.signal.aborted) {
