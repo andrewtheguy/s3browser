@@ -162,9 +162,12 @@ export function Toolbar({
                   variant="outline"
                   size="sm"
                   onClick={handleChooseConnection}
+                  className="min-w-0"
                 >
                   <ArrowLeftRight className="h-4 w-4 mr-1" />
-                  {activeProfileName ?? '—'}
+                  <span className="block max-w-[10rem] truncate sm:max-w-none">
+                    {activeProfileName ?? '—'}
+                  </span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Change connection profile</TooltipContent>
@@ -175,9 +178,12 @@ export function Toolbar({
                   variant="outline"
                   size="sm"
                   onClick={handleChangeBucket}
+                  className="min-w-0"
                 >
                   <BucketIcon className="h-4 w-4 mr-1" />
-                  {credentials?.bucket ?? '—'}
+                  <span className="block max-w-[10rem] truncate sm:max-w-none">
+                    {credentials?.bucket ?? '—'}
+                  </span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Click to change bucket</TooltipContent>
