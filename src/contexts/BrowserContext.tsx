@@ -11,7 +11,7 @@ import {
 import { useNavigate, useParams } from 'react-router';
 import type { S3Object, BrowserContextValue } from '../types';
 import { useS3ClientContext } from './useS3ClientContext';
-import { listObjects, ApiHttpError } from '../services/api';
+import { listObjects, ApiHttpError, getBucketInfo } from '../services/api';
 import { getPathSegments, sortObjects } from '../utils/formatters';
 import { decodeUrlToS3Path } from '../utils/urlEncoding';
 import { BROWSE_WINDOW_LIMIT } from '../config/browse';
@@ -116,6 +116,7 @@ export function BrowserProvider({
   const [showVersions, setShowVersions] = useState(false);
   // null = checking, true = supported, false = not supported
   const [versioningSupported, setVersioningSupported] = useState<boolean | null>(null);
+  const [bucketVersioningStatus, setBucketVersioningStatus] = useState<'enabled' | 'suspended' | 'disabled' | null>(null);
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const navigate = useNavigate();
   const { '*': splatPath, bucket: urlBucket } = useParams<{ '*': string; bucket: string }>();
@@ -225,7 +226,7 @@ export function BrowserProvider({
           lastFetchedPathRef.current = path;
           lastFetchedVersionsRef.current = showVersions;
         }
-      } catch (err) {
+      } catch (err: unknown) {
         // Skip dispatch for aborted requests
         if (err instanceof DOMException && err.name === 'AbortError') {
           return;
@@ -298,9 +299,48 @@ export function BrowserProvider({
       lastFetchedVersionsRef.current = null;
       setShowVersions(false);
       setVersioningSupported(null);
+      setBucketVersioningStatus(null);
       versioningCheckRef.current++;
     }
   }, [isConnected]);
+
+  // Fetch bucket versioning status to disable versions when versioning is disabled
+  useEffect(() => {
+    if (!isConnected || !activeConnectionId || !bucket) {
+      setBucketVersioningStatus(null);
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    void (async () => {
+      try {
+        const info = await getBucketInfo(activeConnectionId, bucket, abortController.signal);
+        if (abortController.signal.aborted) {
+          return;
+        }
+        const status = info.versioning?.status;
+        const normalizedStatus =
+          status === 'Enabled'
+            ? 'enabled'
+            : status === 'Suspended'
+              ? 'suspended'
+              : 'disabled';
+        setBucketVersioningStatus(normalizedStatus);
+        if (normalizedStatus === 'disabled') {
+          setShowVersions(false);
+        }
+      } catch {
+        if (!abortController.signal.aborted) {
+          setBucketVersioningStatus(null);
+        }
+      }
+    })();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [isConnected, activeConnectionId, bucket]);
 
   // Probe versioning support when connected
   useEffect(() => {
@@ -387,6 +427,19 @@ export function BrowserProvider({
     setShowVersions((prev) => !prev);
   }, []);
 
+  const effectiveVersioningSupported = useMemo(() => {
+    if (versioningSupported === null) {
+      return null;
+    }
+    if (versioningSupported === false) {
+      return false;
+    }
+    if (bucketVersioningStatus === 'disabled') {
+      return false;
+    }
+    return true;
+  }, [versioningSupported, bucketVersioningStatus]);
+
   const value: BrowserContextValue = useMemo(
     () => ({
       currentPath,
@@ -406,7 +459,7 @@ export function BrowserProvider({
       pathSegments: getPathSegments(currentPath),
       showVersions,
       toggleShowVersions,
-      versioningSupported,
+      versioningSupported: effectiveVersioningSupported,
     }),
     [
       currentPath,
@@ -425,7 +478,7 @@ export function BrowserProvider({
       refresh,
       showVersions,
       toggleShowVersions,
-      versioningSupported,
+      effectiveVersioningSupported,
     ]
   );
 

@@ -11,6 +11,7 @@ import {
   validateBucket,
   normalizeEndpoint,
   detectS3Vendor,
+  clearBucketRegionCache,
 } from '../middleware/auth.js';
 import {
   getAllConnections,
@@ -229,6 +230,7 @@ router.post('/login', (req: Request, res: Response): void => {
 
 // POST /api/auth/logout
 router.post('/logout', (_req: Request, res: Response): void => {
+  clearBucketRegionCache();
   res.clearCookie(AUTH_COOKIE_NAME);
   res.json({ success: true });
 });
@@ -343,7 +345,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     savedConnection = saveConnection(
       connectionId ?? null,
       connectionName.trim(),
-      endpoint || 'https://s3.amazonaws.com',
+      endpoint || '',
       accessKeyId,
       secretAccessKey || null,
       bucket || null,
@@ -372,6 +374,9 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
 // GET /api/auth/connections - List saved S3 connections
 // Note: secretAccessKey is never returned to client for security
 router.get('/connections', loginMiddleware, (_req: AuthenticatedRequest, res: Response): void => {
+  // Clear bucket region cache on page load/refresh
+  clearBucketRegionCache();
+
   const fetchAllConnections = getAllConnections as () => DbConnectionRow[];
   const connections = fetchAllConnections();
 

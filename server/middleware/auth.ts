@@ -9,6 +9,13 @@ import {
   type DbS3Connection,
 } from '../db/index.js';
 
+// Cache for bucket regions: Map<"connectionId:bucket", region>
+const bucketRegionCache = new Map<string, string>();
+
+export function clearBucketRegionCache(): void {
+  bucketRegionCache.clear();
+}
+
 export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
@@ -43,6 +50,7 @@ export function detectS3Vendor(endpoint?: string): S3Vendor {
 
 export function normalizeEndpoint(endpoint?: string): string | undefined {
   if (!endpoint) return undefined;
+
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
     return endpoint;
   }
@@ -67,15 +75,44 @@ function createS3Client(credentials: S3Credentials): S3Client {
 }
 
 // Create S3 client from a database connection
-export function createS3ClientFromConnection(connection: DbS3Connection, bucket?: string): { client: S3Client; credentials: S3Credentials } {
+export async function createS3ClientFromConnection(
+  connection: DbS3Connection,
+  bucket?: string
+): Promise<{ client: S3Client; credentials: S3Credentials }> {
   const secretAccessKey = decryptConnectionSecretKey(connection);
   const endpoint = normalizeEndpoint(connection.endpoint);
+  const effectiveBucket = bucket || connection.bucket || undefined;
+
+  let region = connection.region || 'us-east-1';
+
+  // If auto-detect is enabled and we have a bucket, detect its region
+  if (connection.auto_detect_region && effectiveBucket && !endpoint) {
+    const cacheKey = `${connection.id}:${effectiveBucket}`;
+    const cachedRegion = bucketRegionCache.get(cacheKey);
+
+    if (cachedRegion) {
+      region = cachedRegion;
+    } else {
+      try {
+        region = await getBucketRegion(
+          connection.access_key_id,
+          secretAccessKey,
+          effectiveBucket,
+          endpoint
+        );
+        bucketRegionCache.set(cacheKey, region);
+      } catch (error) {
+        // Fall back to connection region on error
+        console.warn('Failed to auto-detect bucket region, using connection region:', error);
+      }
+    }
+  }
 
   const credentials: S3Credentials = {
     accessKeyId: connection.access_key_id,
     secretAccessKey,
-    region: connection.region || 'us-east-1',
-    bucket: bucket || connection.bucket || undefined,
+    region,
+    bucket: effectiveBucket,
     endpoint,
   };
 
@@ -203,9 +240,12 @@ export async function validateCredentialsOnly(
   }
 
   // For AWS, try STS GetCallerIdentity first
+  // useGlobalEndpoint: false ensures we use the regional STS endpoint
+  // instead of the global sts.amazonaws.com which only works for us-east-1
   const stsClient = new STSClient({
     region,
     credentials: { accessKeyId, secretAccessKey },
+    useGlobalEndpoint: false,
   });
 
   try {
@@ -334,18 +374,24 @@ export function s3Middleware(
       return;
     }
 
-    // Create S3 client from connection
-    const { client, credentials } = createS3ClientFromConnection(connection, bucket);
+    // Create S3 client from connection (may auto-detect bucket region)
+    void (async () => {
+      try {
+        const { client, credentials } = await createS3ClientFromConnection(connection, bucket);
+        req.connectionId = connectionId;
+        req.s3Connection = connection;
+        req.s3Client = client;
+        req.s3Credentials = credentials;
 
-    req.connectionId = connectionId;
-    req.s3Connection = connection;
-    req.s3Client = client;
-    req.s3Credentials = credentials;
+        // Update last used timestamp
+        updateConnectionLastUsed(connectionId);
 
-    // Update last used timestamp
-    updateConnectionLastUsed(connectionId);
-
-    next();
+        next();
+      } catch (error) {
+        console.error('Failed to create S3 client:', error);
+        res.status(500).json({ error: 'Failed to initialize S3 connection' });
+      }
+    })();
   });
 }
 

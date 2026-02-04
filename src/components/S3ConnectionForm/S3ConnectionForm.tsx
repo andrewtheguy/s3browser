@@ -59,13 +59,14 @@ export function S3ConnectionForm({
   const [selectedConnectionId, setSelectedConnectionId] = useState<number | null>(null);
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const [wantsToChangeSecretKey, setWantsToChangeSecretKey] = useState(false);
+  const [useAwsDefault, setUseAwsDefault] = useState(true);
   const [formData, setFormData] = useState({
     connectionName: '',
     region: '',
     accessKeyId: '',
     secretAccessKey: '',
     bucket: '',
-    endpoint: 'https://s3.amazonaws.com',
+    endpoint: '',
   });
 
   useEffect(() => {
@@ -76,8 +77,8 @@ export function S3ConnectionForm({
     };
   }, []);
 
-  const endpointValid = isValidUrl(formData.endpoint);
-  const showEndpointError = endpointTouched && !endpointValid;
+  const endpointValid = useAwsDefault || (formData.endpoint.trim() !== '' && isValidUrl(formData.endpoint));
+  const showEndpointError = endpointTouched && !useAwsDefault && !endpointValid;
   const nameValid = isValidConnectionName(formData.connectionName);
   const showNameError = nameTouched && !nameValid;
 
@@ -91,7 +92,7 @@ export function S3ConnectionForm({
         secretAccessKey: formData.secretAccessKey,
         bucket: formData.bucket || undefined,
         region: autoDetectRegion ? undefined : formData.region || undefined,
-        endpoint: formData.endpoint || undefined,
+        endpoint: useAwsDefault ? '' : formData.endpoint,
         connectionName: formData.connectionName.trim(),
         autoDetectRegion,
         connectionId: selectedConnectionId ?? undefined,
@@ -126,13 +127,14 @@ export function S3ConnectionForm({
       setSelectedConnectionId(null);
       setFormData({
         connectionName: '',
-        endpoint: 'https://s3.amazonaws.com',
+        endpoint: '',
         accessKeyId: '',
         bucket: '',
         region: '',
         secretAccessKey: '',
       });
       setAutoDetectRegion(true);
+      setUseAwsDefault(true);
       setEndpointTouched(false);
       setNameTouched(false);
       setWantsToChangeSecretKey(false);
@@ -143,9 +145,11 @@ export function S3ConnectionForm({
     const connection = connections.find((c) => c.id === id);
     if (connection) {
       setSelectedConnectionId(connection.id);
+      const isAwsDefault = !connection.endpoint || connection.endpoint === '';
+      setUseAwsDefault(isAwsDefault);
       setFormData({
         connectionName: connection.name,
-        endpoint: connection.endpoint,
+        endpoint: connection.endpoint || '',
         accessKeyId: connection.accessKeyId,
         bucket: connection.bucket || '',
         region: connection.region || '',
@@ -168,13 +172,14 @@ export function S3ConnectionForm({
         setSelectedConnectionId(null);
         setFormData({
           connectionName: '',
-          endpoint: 'https://s3.amazonaws.com',
+          endpoint: '',
           accessKeyId: '',
           bucket: '',
           region: '',
           secretAccessKey: '',
         });
         setAutoDetectRegion(true);
+        setUseAwsDefault(true);
         setWantsToChangeSecretKey(false);
       }
     } catch (err) {
@@ -270,7 +275,7 @@ export function S3ConnectionForm({
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{connection.name}</div>
                     <div className="truncate text-xs text-muted-foreground">
-                      {connection.bucket ? `${connection.bucket} @ ${connection.endpoint}` : connection.endpoint}
+                      {connection.bucket ? `${connection.bucket} @ ${connection.endpoint || 'AWS'}` : (connection.endpoint || 'AWS')}
                     </div>
                   </div>
                   <Button
@@ -309,20 +314,35 @@ export function S3ConnectionForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="endpoint">Endpoint URL</Label>
-          <Input
-            id="endpoint"
-            value={formData.endpoint}
-            onChange={handleChange('endpoint')}
-            onBlur={() => setEndpointTouched(true)}
-            autoComplete="off"
-            className={showEndpointError ? 'border-destructive' : ''}
-          />
-          <p className={`text-xs ${showEndpointError ? 'text-destructive' : 'text-muted-foreground'}`}>
-            {showEndpointError
-              ? 'Please enter a valid URL (e.g., https://s3.amazonaws.com)'
-              : 'Default is AWS S3. Change for S3-compatible services (MinIO, etc.)'}
-          </p>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="useAwsDefault"
+              checked={useAwsDefault}
+              onCheckedChange={(checked) => setUseAwsDefault(checked === true)}
+            />
+            <Label htmlFor="useAwsDefault" className="cursor-pointer">
+              Use AWS Default Endpoint
+            </Label>
+          </div>
+          {!useAwsDefault && (
+            <div className="space-y-2">
+              <Label htmlFor="endpoint">Endpoint URL</Label>
+              <Input
+                id="endpoint"
+                value={formData.endpoint}
+                onChange={handleChange('endpoint')}
+                onBlur={() => setEndpointTouched(true)}
+                placeholder="https://s3.example.com"
+                autoComplete="off"
+                className={showEndpointError ? 'border-destructive' : ''}
+              />
+              <p className={`text-xs ${showEndpointError ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {showEndpointError
+                  ? 'Please enter a valid URL (e.g., https://s3.example.com)'
+                  : 'Endpoint URL for S3-compatible services (MinIO, Backblaze B2, etc.)'}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">

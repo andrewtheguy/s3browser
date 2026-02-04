@@ -26,7 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useS3ClientContext } from '../../contexts';
 import { getBucketInfo, type BucketInfo, type LifecycleRule } from '../../services/api/bucket';
-import { exportConnectionProfile } from '../../services/api/auth';
+import { exportConnectionProfile, getConnection } from '../../services/api/auth';
 
 interface BucketInfoDialogProps {
   open: boolean;
@@ -113,6 +113,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const bucket = urlBucket || credentials?.bucket;
 
   const [info, setInfo] = useState<BucketInfo | null>(null);
+  const [connectionName, setConnectionName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<null | 'aws' | 'rclone'>(null);
@@ -128,6 +129,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   useEffect(() => {
     if (!open || !activeConnectionId || !bucket) {
       setInfo(null);
+      setConnectionName(null);
       setError(null);
       setIsLoading(false);
       return;
@@ -139,13 +141,16 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
 
     void (async () => {
       try {
+        const connectionPromise = getConnection(activeConnectionId);
         const data = await getBucketInfo(
           activeConnectionId,
           bucket,
           abortController.signal
         );
+        const connection = await connectionPromise;
         if (!abortController.signal.aborted) {
           setInfo(data);
+          setConnectionName(connection.name);
         }
       } catch (err) {
         if (!abortController.signal.aborted) {
@@ -211,6 +216,14 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
             <>
               <Table>
                 <TableBody>
+                  <TableRow>
+                    <TableCell className="font-medium w-[140px]">
+                      Connection
+                    </TableCell>
+                    <TableCell className="break-all">
+                      {connectionName ?? '—'}
+                    </TableCell>
+                  </TableRow>
                   <TableRow>
                     <TableCell className="font-medium w-[140px]">
                       Endpoint
