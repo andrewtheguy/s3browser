@@ -13,8 +13,6 @@ import {
   FlaskConical,
   History,
   MoreVertical,
-  CheckSquare,
-  X,
 } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -88,7 +86,7 @@ export function Toolbar({
 }: ToolbarProps) {
   const navigate = useNavigate();
   const { connectionId } = useParams<{ connectionId?: string }>();
-  const { credentials, disconnect, activeConnectionId } = useS3ClientContext();
+  const { credentials, disconnect, activeConnectionId, activeProfileName } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
 
   const versionsButtonLabel = useMemo(() => {
@@ -163,10 +161,29 @@ export function Toolbar({
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={handleChooseConnection}
+                  className="min-w-0"
+                >
+                  <ArrowLeftRight className="h-4 w-4 mr-1" />
+                  <span className="block max-w-[10rem] truncate sm:max-w-none">
+                    {activeProfileName ?? '—'}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Change connection profile</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={handleChangeBucket}
+                  className="min-w-0"
                 >
                   <BucketIcon className="h-4 w-4 mr-1" />
-                  {credentials?.bucket ?? '—'}
+                  <span className="block max-w-[10rem] truncate sm:max-w-none">
+                    {credentials?.bucket ?? '—'}
+                  </span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Click to change bucket</TooltipContent>
@@ -183,30 +200,6 @@ export function Toolbar({
 
           {/* Mobile actions */}
           <div className="flex sm:hidden gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={refresh} disabled={isLoading}>
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Refresh</TooltipContent>
-            </Tooltip>
-
-            {onToggleSelection && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={selectionMode ? 'default' : 'outline'}
-                    size="icon"
-                    onClick={onToggleSelection}
-                  >
-                    {selectionMode ? <X className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{selectionMode ? 'Cancel selection' : 'Select items'}</TooltipContent>
-              </Tooltip>
-            )}
-
             {selectionMode && selectedCount > 0 && onBatchDownload && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -248,14 +241,21 @@ export function Toolbar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onUploadClick}>
-                  <Upload className="h-4 w-4" />
-                  Upload
+                <DropdownMenuItem onClick={refresh} disabled={isLoading}>
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
                 </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
 
                 <DropdownMenuItem onClick={onCreateFolderClick}>
                   <FolderPlus className="h-4 w-4" />
                   New Folder
+                </DropdownMenuItem>
+
+                <DropdownMenuItem onClick={onUploadClick}>
+                  <Upload className="h-4 w-4" />
+                  Upload
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
@@ -279,11 +279,6 @@ export function Toolbar({
                 )}
 
                 <DropdownMenuSeparator />
-
-                <DropdownMenuItem onClick={handleChooseConnection}>
-                  <ArrowLeftRight className="h-4 w-4" />
-                  Change Connection
-                </DropdownMenuItem>
 
                 <DropdownMenuItem
                   onClick={handleDisconnect}
@@ -412,16 +407,6 @@ export function Toolbar({
                 <TooltipContent>Seed {SEED_TEST_ITEM_COUNT} test items</TooltipContent>
               </Tooltip>
             )}
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" onClick={handleChooseConnection}>
-                  <ArrowLeftRight className="h-4 w-4 mr-2 sm:mr-1" />
-                  <span className="hidden sm:inline">Change Connection</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Change Connection</TooltipContent>
-            </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>

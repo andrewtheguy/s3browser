@@ -90,8 +90,12 @@ export async function saveConnection(credentials: S3ConnectionCredentials): Prom
   return response;
 }
 
-export async function listBuckets(connectionId: number): Promise<BucketInfo[]> {
-  const response = await apiGet<BucketsResponse>(`/auth/buckets/${connectionId}`);
+export async function listBuckets(
+  connectionId: number,
+  options?: { clearRegionCache?: boolean }
+): Promise<BucketInfo[]> {
+  const query = options?.clearRegionCache ? '?clear_region_cache=1' : '';
+  const response = await apiGet<BucketsResponse>(`/auth/buckets/${connectionId}${query}`);
   if (!response) {
     throw new Error('Failed to list buckets: empty response');
   }
@@ -106,8 +110,9 @@ export async function validateBucket(connectionId: number, bucket: string): Prom
   return response;
 }
 
-export async function getConnections(): Promise<ServerSavedConnection[]> {
-  const response = await apiGet<ConnectionsResponse>('/auth/connections');
+export async function getConnections(options?: { clearRegionCache?: boolean }): Promise<ServerSavedConnection[]> {
+  const query = options?.clearRegionCache ? '?clear_region_cache=1' : '';
+  const response = await apiGet<ConnectionsResponse>(`/auth/connections${query}`);
   if (!response) {
     throw new Error('Failed to get connections: empty response');
   }

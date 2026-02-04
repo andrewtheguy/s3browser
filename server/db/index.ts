@@ -140,24 +140,12 @@ function initializeDatabase(): Database {
     );
   `);
 
-  // Migrate 'name' column to 'profile_name' if needed (SQLite 3.25.0+)
-  migrateNameToProfileName(database);
-
   // Verify encryption key matches what was used to initialize the database
   verifyEncryptionKey(database);
 
   return database;
 }
 
-function migrateNameToProfileName(database: Database): void {
-  const tableInfo = database.prepare(`PRAGMA table_info(s3_connections)`).all() as Array<{name: string}>;
-  const hasNameColumn = tableInfo.some(col => col.name === 'name');
-  const hasProfileNameColumn = tableInfo.some(col => col.name === 'profile_name');
-
-  if (hasNameColumn && !hasProfileNameColumn) {
-    database.exec(`ALTER TABLE s3_connections RENAME COLUMN name TO profile_name;`);
-  }
-}
 
 export function getDb(): Database {
   if (!db) {

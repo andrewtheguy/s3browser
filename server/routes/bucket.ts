@@ -8,6 +8,46 @@ import { s3Middleware, requireBucket, AuthenticatedRequest } from '../middleware
 
 const router = Router();
 
+function isEncryptionNotSupported(error: unknown): boolean {
+  const err = error as {
+    name?: string;
+    code?: string;
+    Code?: string;
+    message?: string;
+    $metadata?: { httpStatusCode?: number };
+  };
+  const httpStatus = err.$metadata?.httpStatusCode;
+  if (httpStatus === 501) {
+    return true;
+  }
+  const name = err.name ?? err.code ?? err.Code;
+  if (name && ['NotImplemented', 'NotImplementedException', 'NotImplementedError', 'UnsupportedOperation'].includes(name)) {
+    return true;
+  }
+  const message = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+  return message.includes('not implemented') || message.includes('notimplemented') || message.includes('unimplemented');
+}
+
+function isLifecycleNotConfigured(error: unknown): boolean {
+  const err = error as {
+    name?: string;
+    code?: string;
+    Code?: string;
+    message?: string;
+    $metadata?: { httpStatusCode?: number };
+  };
+  const httpStatus = err.$metadata?.httpStatusCode;
+  const name = err.name ?? err.code ?? err.Code;
+  if (httpStatus === 404 && name && ['NoSuchLifecycleConfiguration', 'NotFound'].includes(name)) {
+    return true;
+  }
+  const message = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+  if (!name && httpStatus === 404) {
+    return message.includes('lifecycle');
+  }
+  return message.includes('nosuchlifecycleconfiguration') || message.includes('no such lifecycle configuration');
+}
+
 interface LifecycleRule {
   id?: string;
   status: 'Enabled' | 'Disabled' | 'Unknown';
@@ -40,7 +80,8 @@ interface BucketInfo {
     algorithm?: string;
     kmsKeyId?: string;
   } | null;
-  encryptionError?: string;
+  encryptionError: string | null;
+  lifecycleError: string | null;
   lifecycleRules: LifecycleRule[];
 }
 
@@ -57,6 +98,8 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
   const result: BucketInfo = {
     versioning: null,
     encryption: null,
+    encryptionError: null,
+    lifecycleError: null,
     lifecycleRules: [],
   };
 
@@ -89,13 +132,16 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
     }
   } catch (err: unknown) {
     const errorName = (err as { name?: string })?.name;
-    if (errorName !== 'ServerSideEncryptionConfigurationNotFoundError') {
+    if (errorName === 'ServerSideEncryptionConfigurationNotFoundError') {
+      // No encryption configured - leave as null
+    } else if (isEncryptionNotSupported(err)) {
+      result.encryptionError = 'Not supported by this storage provider';
+    } else {
       // Real error - store for display
       console.error('Failed to get bucket encryption:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       result.encryptionError = errorName ? `${errorName}: ${errorMessage}` : errorMessage;
     }
-    // ServerSideEncryptionConfigurationNotFoundError means no encryption - leave as null
   }
 
   // Get lifecycle rules
@@ -127,10 +173,12 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
       }));
     }
   } catch (err: unknown) {
-    // NoSuchLifecycleConfiguration means no lifecycle rules configured
-    const errorName = (err as { name?: string })?.name;
-    if (errorName !== 'NoSuchLifecycleConfiguration') {
+    // Treat "not configured" as empty lifecycle rules (no log).
+    if (!isLifecycleNotConfigured(err)) {
       console.error('Failed to get bucket lifecycle:', err);
+      const errorName = (err as { name?: string })?.name;
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      result.lifecycleError = errorName ? `${errorName}: ${errorMessage}` : errorMessage;
     }
   }
 

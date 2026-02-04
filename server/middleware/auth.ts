@@ -14,6 +14,7 @@ const bucketRegionCache = new Map<string, string>();
 
 export function clearBucketRegionCache(): void {
   bucketRegionCache.clear();
+  console.log('[s3browser] Bucket region cache cleared');
 }
 
 export interface S3Credentials {

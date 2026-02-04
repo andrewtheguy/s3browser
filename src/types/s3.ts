@@ -73,6 +73,7 @@ export interface S3ClientContextValue {
   isConnected: boolean;
   isLoggedIn: boolean;
   activeConnectionId: number | null;
+  activeProfileName: string | null;
   isCheckingSession: boolean;
   requiresBucketSelection: boolean;
   login: (credentials: LoginCredentials) => Promise<boolean>;
