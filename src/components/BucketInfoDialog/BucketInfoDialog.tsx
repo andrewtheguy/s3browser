@@ -24,7 +24,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { useS3ClientContext } from '../../contexts';
+import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { getBucketInfo, type BucketInfo, type LifecycleRule } from '../../services/api/bucket';
 import { exportConnectionProfile, getConnection } from '../../services/api/auth';
 
@@ -109,6 +109,7 @@ function LifecycleRuleDetails({ rule }: { rule: LifecycleRule }) {
 
 export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const { activeConnectionId, credentials } = useS3ClientContext();
+  const { versioningSupported, bucketVersioningStatus } = useBrowserContext();
   const { bucket: urlBucket } = useParams<{ bucket: string }>();
   const bucket = urlBucket || credentials?.bucket;
 
@@ -198,6 +199,14 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const showExportSection = Boolean(activeConnectionId);
   const showSeparator = showExportSection && (isLoading || !!error || !!info);
   const exportBusy = exportingFormat !== null;
+  const versionSupportState: { label: string; variant: 'default' | 'outline' | 'secondary' } =
+    bucketVersioningStatus === 'disabled'
+      ? { label: 'Disabled', variant: 'secondary' }
+      : versioningSupported === null
+        ? { label: 'Checking', variant: 'outline' }
+        : versioningSupported === false
+          ? { label: 'Not Supported', variant: 'secondary' }
+          : { label: 'Supported', variant: 'default' };
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -239,7 +248,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                     <TableCell>{bucket}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium w-[140px]">
                       Versioning
                     </TableCell>
                     <TableCell>
@@ -255,6 +264,16 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium w-[140px]">
+                      Version Support
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={versionSupportState.variant}>
+                        {versionSupportState.label}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                   <TableRow>
