@@ -374,6 +374,9 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
 // GET /api/auth/connections - List saved S3 connections
 // Note: secretAccessKey is never returned to client for security
 router.get('/connections', loginMiddleware, (_req: AuthenticatedRequest, res: Response): void => {
+  // Clear bucket region cache on page load/refresh
+  clearBucketRegionCache();
+
   const fetchAllConnections = getAllConnections as () => DbConnectionRow[];
   const connections = fetchAllConnections();
 
