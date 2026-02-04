@@ -79,15 +79,36 @@ function createS3Client(credentials: S3Credentials): S3Client {
 }
 
 // Create S3 client from a database connection
-export function createS3ClientFromConnection(connection: DbS3Connection, bucket?: string): { client: S3Client; credentials: S3Credentials } {
+export async function createS3ClientFromConnection(
+  connection: DbS3Connection,
+  bucket?: string
+): Promise<{ client: S3Client; credentials: S3Credentials }> {
   const secretAccessKey = decryptConnectionSecretKey(connection);
   const endpoint = normalizeEndpoint(connection.endpoint);
+  const effectiveBucket = bucket || connection.bucket || undefined;
+
+  let region = connection.region || 'us-east-1';
+
+  // If auto-detect is enabled and we have a bucket, detect its region
+  if (connection.auto_detect_region && effectiveBucket && !endpoint) {
+    try {
+      region = await getBucketRegion(
+        connection.access_key_id,
+        secretAccessKey,
+        effectiveBucket,
+        endpoint
+      );
+    } catch (error) {
+      // Fall back to connection region on error
+      console.warn('Failed to auto-detect bucket region, using connection region:', error);
+    }
+  }
 
   const credentials: S3Credentials = {
     accessKeyId: connection.access_key_id,
     secretAccessKey,
-    region: connection.region || 'us-east-1',
-    bucket: bucket || connection.bucket || undefined,
+    region,
+    bucket: effectiveBucket,
     endpoint,
   };
 
@@ -349,18 +370,23 @@ export function s3Middleware(
       return;
     }
 
-    // Create S3 client from connection
-    const { client, credentials } = createS3ClientFromConnection(connection, bucket);
+    // Create S3 client from connection (may auto-detect bucket region)
+    createS3ClientFromConnection(connection, bucket)
+      .then(({ client, credentials }) => {
+        req.connectionId = connectionId;
+        req.s3Connection = connection;
+        req.s3Client = client;
+        req.s3Credentials = credentials;
 
-    req.connectionId = connectionId;
-    req.s3Connection = connection;
-    req.s3Client = client;
-    req.s3Credentials = credentials;
+        // Update last used timestamp
+        updateConnectionLastUsed(connectionId);
 
-    // Update last used timestamp
-    updateConnectionLastUsed(connectionId);
-
-    next();
+        next();
+      })
+      .catch((error) => {
+        console.error('Failed to create S3 client:', error);
+        res.status(500).json({ error: 'Failed to initialize S3 connection' });
+      });
   });
 }
 
