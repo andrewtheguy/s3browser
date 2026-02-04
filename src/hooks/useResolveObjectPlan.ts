@@ -33,7 +33,7 @@ const buildCompositeKey = (key: string, versionId?: string): string => {
 function processFolder(
   folder: S3Object,
   fileKeys: Map<string, ObjectPlanEntry>,
-  folderPrefixes: Set<string>,
+  folderPrefixes: Map<string, boolean>,
   folderDeleteKeys: Set<string>,
   queue: string[],
   includeVersions: boolean,
@@ -50,9 +50,12 @@ function processFolder(
   if (!includeFolderContents) {
     return;
   }
-  if (!folderPrefixes.has(folder.key)) {
-    folderPrefixes.add(folder.key);
+  const existing = folderPrefixes.get(folder.key);
+  if (existing === undefined) {
+    folderPrefixes.set(folder.key, includeVersions);
     queue.push(folder.key);
+  } else if (!existing && includeVersions) {
+    folderPrefixes.set(folder.key, true);
   }
   if (!includeVersions) {
     folderDeleteKeys.add(folder.key);
@@ -79,7 +82,7 @@ export function useResolveObjectPlan() {
       const includeFolderContents = options.includeFolderContents ?? false;
       const includeVersions = options.includeVersions ?? false;
       const fileKeys = new Map<string, ObjectPlanEntry>();
-      const folderPrefixes = new Set<string>();
+      const folderPrefixes = new Map<string, boolean>();
       const folderDeleteKeys = new Set<string>();
       const queue: string[] = [];
       const promptEvery = Math.max(
@@ -94,13 +97,16 @@ export function useResolveObjectPlan() {
 
       for (const item of items) {
         if (item.isFolder) {
+          const includeFolderVersions = includeFolderContents
+            ? includeVersions && !!item.isDeleteMarker
+            : includeVersions;
           processFolder(
             item,
             fileKeys,
             folderPrefixes,
             folderDeleteKeys,
             queue,
-            includeVersions,
+            includeFolderVersions,
             includeFolderContents
           );
         } else {
@@ -126,6 +132,7 @@ export function useResolveObjectPlan() {
         if (!prefix) {
           continue;
         }
+        const includeFolderVersions = folderPrefixes.get(prefix) ?? includeVersions;
 
         let continuationToken: string | undefined = undefined;
         do {
@@ -134,7 +141,7 @@ export function useResolveObjectPlan() {
             activeConnectionId,
             bucket,
             prefix,
-            includeVersions,
+            includeFolderVersions,
             continuationToken,
             options.signal
           );
@@ -147,11 +154,11 @@ export function useResolveObjectPlan() {
                 folderPrefixes,
                 folderDeleteKeys,
                 queue,
-                includeVersions,
+                includeFolderVersions,
                 true
               );
             } else {
-              const versionId = includeVersions ? obj.versionId : undefined;
+              const versionId = includeFolderVersions ? obj.versionId : undefined;
               fileKeys.set(buildCompositeKey(obj.key, versionId), {
                 key: obj.key,
                 versionId,
