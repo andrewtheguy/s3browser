@@ -45,7 +45,7 @@ app.use('/api/bucket', bucketRoutes);
 
 // Serve static frontend assets (production build)
 const distPath = path.resolve(process.cwd(), 'dist');
-app.use(express.static(distPath));
+app.use(express.static(distPath, { index: false }));
 
 const indexPath = path.join(distPath, 'index.html');
 const serveIndexWithCacheClear = (_req: Request, res: Response) => {
