@@ -234,7 +234,23 @@ export async function listLiveFolders(
     const response = await apiGet<ListObjectsResponse>(url, signal);
 
     if (!response || !Array.isArray(response.objects)) {
-      break;
+      const diagnostics = (() => {
+        if (!response) {
+          return 'response=null';
+        }
+        if (typeof response !== 'object') {
+          return `response=${String(response)}`;
+        }
+        if ('status' in response) {
+          return `response.status=${String((response as { status?: unknown }).status)}`;
+        }
+        try {
+          return `response=${JSON.stringify(response)}`;
+        } catch {
+          return 'response=[unserializable]';
+        }
+      })();
+      throw new Error(`Failed to list live folders: missing or invalid response (${diagnostics})`);
     }
 
     // Extract folder keys
