@@ -51,21 +51,10 @@ export function detectS3Vendor(endpoint?: string): S3Vendor {
 export function normalizeEndpoint(endpoint?: string): string | undefined {
   if (!endpoint) return undefined;
 
-  let normalized: string;
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
-    normalized = endpoint;
-  } else {
-    normalized = `https://${endpoint}`;
+    return endpoint;
   }
-
-  // Treat the default AWS S3 endpoint as "no endpoint" so the SDK
-  // uses automatic regional routing instead of forcing path-style access
-  const url = new URL(normalized);
-  if (url.hostname === 's3.amazonaws.com') {
-    return undefined;
-  }
-
-  return normalized;
+  return `https://${endpoint}`;
 }
 
 // Create S3 client from credentials

@@ -345,7 +345,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     savedConnection = saveConnection(
       connectionId ?? null,
       connectionName.trim(),
-      endpoint || 'https://s3.amazonaws.com',
+      endpoint || '',
       accessKeyId,
       secretAccessKey || null,
       bucket || null,
