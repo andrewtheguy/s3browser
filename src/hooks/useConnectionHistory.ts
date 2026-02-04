@@ -24,19 +24,19 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
-  const didClearCacheRef = useRef(false);
+  const didClearRegionCacheRef = useRef(false);
 
   // Shared fetch helper with cancellation via requestId
-  const doFetch = useCallback(async (options?: { clearCache?: boolean }) => {
+  const doFetch = useCallback(async (options?: { clearRegionCache?: boolean }) => {
     const currentRequestId = ++requestIdRef.current;
-    const shouldClearCache = options?.clearCache === true && !didClearCacheRef.current;
-    if (shouldClearCache) {
-      didClearCacheRef.current = true;
+    const shouldClearRegionCache = options?.clearRegionCache === true && !didClearRegionCacheRef.current;
+    if (shouldClearRegionCache) {
+      didClearRegionCacheRef.current = true;
     }
     setIsLoading(true);
     setError(null);
     try {
-      const serverConnections = await getConnections({ clearCache: shouldClearCache });
+      const serverConnections = await getConnections({ clearRegionCache: shouldClearRegionCache });
       // Only update state if this is still the latest request
       if (currentRequestId === requestIdRef.current) {
         setConnections(serverConnections.map(serverToSavedConnection));
@@ -57,11 +57,11 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
   useEffect(() => {
     if (!isUserLoggedIn) {
       setConnections([]);
-      didClearCacheRef.current = false;
+      didClearRegionCacheRef.current = false;
       return;
     }
 
-    void doFetch({ clearCache: true });
+    void doFetch({ clearRegionCache: true });
   }, [isUserLoggedIn, doFetch]);
 
   const deleteConnection = useCallback(async (connectionId: number) => {

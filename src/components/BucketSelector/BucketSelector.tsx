@@ -28,7 +28,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualBucket, setManualBucket] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
-  const didClearCacheRef = useRef(false);
+  const didClearRegionCacheRef = useRef(false);
 
   const fetchBuckets = useCallback(async () => {
     setIsLoading(true);
@@ -36,11 +36,11 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
     setAccessDenied(false);
 
     try {
-      const shouldClearCache = !didClearCacheRef.current;
-      if (shouldClearCache) {
-        didClearCacheRef.current = true;
+      const shouldClearRegionCache = !didClearRegionCacheRef.current;
+      if (shouldClearRegionCache) {
+        didClearRegionCacheRef.current = true;
       }
-      const bucketList = await listBuckets(connectionId, { clearCache: shouldClearCache });
+      const bucketList = await listBuckets(connectionId, { clearRegionCache: shouldClearRegionCache });
       // Sort buckets alphabetically by name
       const sortedBuckets = [...bucketList].sort((a, b) =>
         a.name.localeCompare(b.name)
