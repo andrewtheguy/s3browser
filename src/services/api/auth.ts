@@ -16,7 +16,7 @@ export interface S3ConnectionCredentials {
   region?: string;
   bucket?: string;
   endpoint?: string;
-  connectionName: string;
+  profileName: string;
   autoDetectRegion?: boolean;
 }
 
@@ -43,7 +43,7 @@ export interface ValidateBucketResponse {
 
 export interface ServerSavedConnection {
   id: number;
-  name: string;
+  profileName: string;
   endpoint: string;
   accessKeyId: string;
   // Note: secretAccessKey is never returned from server for security
@@ -114,8 +114,8 @@ export async function getConnections(): Promise<ServerSavedConnection[]> {
   return response.connections;
 }
 
-export async function getConnection(connectionId: number): Promise<ServerSavedConnection> {
-  const response = await apiGet<ServerSavedConnection>(`/auth/connections/${connectionId}`);
+export async function getConnection(connectionId: number, signal?: AbortSignal): Promise<ServerSavedConnection> {
+  const response = await apiGet<ServerSavedConnection>(`/auth/connections/${connectionId}`, signal);
   if (!response) {
     throw new Error('Failed to get connection: empty response');
   }

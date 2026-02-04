@@ -63,7 +63,7 @@ export interface LoginCredentials {
 
 export interface S3ConnectionCredentials extends Omit<S3Credentials, 'region'> {
   region?: string;
-  connectionName: string;
+  profileName: string;
   autoDetectRegion?: boolean;
   connectionId?: number;
 }
@@ -110,7 +110,7 @@ export interface BrowserContextValue {
 }
 
 export interface SavedConnection {
-  name: string;              // Used as unique key
+  profileName: string;       // Unique profile name
   endpoint: string;
   accessKeyId: string;
   bucket?: string;           // Optional - can be selected after login

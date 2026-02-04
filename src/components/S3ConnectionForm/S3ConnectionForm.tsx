@@ -28,7 +28,7 @@ function isValidUrl(value: string): boolean {
   }
 }
 
-function isValidConnectionName(value: string): boolean {
+function isValidProfileName(value: string): boolean {
   if (!value) return false;
   // Allow only letters, numbers, dashes, underscores, and dots
   // Enforce length between 1 and 64 characters
@@ -61,7 +61,7 @@ export function S3ConnectionForm({
   const [wantsToChangeSecretKey, setWantsToChangeSecretKey] = useState(false);
   const [useAwsDefault, setUseAwsDefault] = useState(true);
   const [formData, setFormData] = useState({
-    connectionName: '',
+    profileName: '',
     region: '',
     accessKeyId: '',
     secretAccessKey: '',
@@ -79,7 +79,7 @@ export function S3ConnectionForm({
 
   const endpointValid = useAwsDefault || (formData.endpoint.trim() !== '' && isValidUrl(formData.endpoint));
   const showEndpointError = endpointTouched && !useAwsDefault && !endpointValid;
-  const nameValid = isValidConnectionName(formData.connectionName);
+  const nameValid = isValidProfileName(formData.profileName);
   const showNameError = nameTouched && !nameValid;
 
   const handleSubmit = async (e: FormEvent) => {
@@ -93,7 +93,7 @@ export function S3ConnectionForm({
         bucket: formData.bucket || undefined,
         region: autoDetectRegion ? undefined : formData.region || undefined,
         endpoint: useAwsDefault ? '' : formData.endpoint,
-        connectionName: formData.connectionName.trim(),
+        profileName: formData.profileName.trim(),
         autoDetectRegion,
         connectionId: selectedConnectionId ?? undefined,
       };
@@ -126,7 +126,7 @@ export function S3ConnectionForm({
     if (value === 'new') {
       setSelectedConnectionId(null);
       setFormData({
-        connectionName: '',
+        profileName: '',
         endpoint: '',
         accessKeyId: '',
         bucket: '',
@@ -148,7 +148,7 @@ export function S3ConnectionForm({
       const isAwsDefault = !connection.endpoint || connection.endpoint === '';
       setUseAwsDefault(isAwsDefault);
       setFormData({
-        connectionName: connection.name,
+        profileName: connection.profileName,
         endpoint: connection.endpoint || '',
         accessKeyId: connection.accessKeyId,
         bucket: connection.bucket || '',
@@ -162,7 +162,7 @@ export function S3ConnectionForm({
     }
   };
 
-  const handleDeleteConnection = async (e: React.MouseEvent, connectionId: number, name: string) => {
+  const handleDeleteConnection = async (e: React.MouseEvent, connectionId: number, profileName: string) => {
     e.stopPropagation();
     e.preventDefault();
     setDeletionError(null);
@@ -171,7 +171,7 @@ export function S3ConnectionForm({
       if (selectedConnectionId === connectionId) {
         setSelectedConnectionId(null);
         setFormData({
-          connectionName: '',
+          profileName: '',
           endpoint: '',
           accessKeyId: '',
           bucket: '',
@@ -185,7 +185,7 @@ export function S3ConnectionForm({
     } catch (err) {
       console.error('Failed to delete connection:', err);
       const message = err instanceof Error ? err.message : 'Failed to delete connection';
-      setDeletionError(`Could not delete "${name}": ${message}`);
+      setDeletionError(`Could not delete "${profileName}": ${message}`);
     }
   };
 
@@ -205,7 +205,7 @@ export function S3ConnectionForm({
   const secretKeyRequired = !isExistingConnection || wantsToChangeSecretKey;
   const isFormValid =
     (autoDetectRegion || formData.bucket || formData.region) &&
-    formData.connectionName.trim() &&
+    formData.profileName.trim() &&
     formData.accessKeyId &&
     (!secretKeyRequired || formData.secretAccessKey) &&
     endpointValid &&
@@ -273,7 +273,7 @@ export function S3ConnectionForm({
               <SelectItem key={connection.id} value={String(connection.id)}>
                 <div className="flex items-center justify-between w-full gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{connection.name}</div>
+                    <div className="truncate font-medium">{connection.profileName}</div>
                     <div className="truncate text-xs text-muted-foreground">
                       {connection.bucket ? `${connection.bucket} @ ${connection.endpoint || 'AWS'}` : (connection.endpoint || 'AWS')}
                     </div>
@@ -282,7 +282,7 @@ export function S3ConnectionForm({
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 shrink-0"
-                    onClick={(e) => handleDeleteConnection(e, connection.id, connection.name)}
+                    onClick={(e) => handleDeleteConnection(e, connection.id, connection.profileName)}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -295,11 +295,11 @@ export function S3ConnectionForm({
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="connectionName">Connection Name</Label>
+          <Label htmlFor="profileName">Profile Name</Label>
           <Input
-            id="connectionName"
-            value={formData.connectionName}
-            onChange={handleChange('connectionName')}
+            id="profileName"
+            value={formData.profileName}
+            onChange={handleChange('profileName')}
             onBlur={() => setNameTouched(true)}
             autoComplete="off"
             placeholder="my-aws-account"
@@ -308,8 +308,8 @@ export function S3ConnectionForm({
           />
           <p className={`text-xs ${showNameError ? 'text-destructive' : 'text-muted-foreground'}`}>
             {showNameError
-              ? 'Connection name cannot contain spaces'
-              : 'A unique name for this connection (no spaces).'}
+              ? 'Profile name may only contain letters, numbers, dots, underscores, and hyphens'
+              : 'Letters, numbers, dots, underscores, and hyphens only.'}
           </p>
         </div>
 

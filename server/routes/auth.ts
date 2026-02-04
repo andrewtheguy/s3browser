@@ -35,7 +35,7 @@ interface S3CredentialsRequestBody {
   region?: string;
   bucket?: string;
   endpoint?: string;
-  connectionName?: string;
+  profileName?: string;
   autoDetectRegion?: boolean;
 }
 
@@ -56,7 +56,7 @@ interface ExportProfileResponse {
 
 interface DbConnectionRow {
   id: number;
-  name: string;
+  profile_name: string;
   endpoint: string;
   access_key_id: string;
   bucket: string | null;
@@ -251,15 +251,15 @@ router.get('/status', (req: Request, res: Response): void => {
 // POST /api/auth/connections - Save a new S3 connection or update existing
 router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const body = req.body as S3CredentialsRequestBody;
-  const { connectionId, accessKeyId, secretAccessKey, region, bucket, endpoint, connectionName, autoDetectRegion } = body;
+  const { connectionId, accessKeyId, secretAccessKey, region, bucket, endpoint, profileName, autoDetectRegion } = body;
 
   if (!accessKeyId) {
     res.status(400).json({ error: 'Access key ID is required' });
     return;
   }
 
-  if (!connectionName) {
-    res.status(400).json({ error: 'Connection name is required' });
+  if (!profileName || !profileName.trim()) {
+    res.status(400).json({ error: 'Profile name is required' });
     return;
   }
 
@@ -344,7 +344,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
   try {
     savedConnection = saveConnection(
       connectionId ?? null,
-      connectionName.trim(),
+      profileName.trim(),
       endpoint || '',
       accessKeyId,
       secretAccessKey || null,
@@ -354,7 +354,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     );
   } catch (error) {
     if (isUniqueConstraintError(error)) {
-      res.status(400).json({ error: 'Connection name already exists' });
+      res.status(400).json({ error: 'Profile name already exists' });
       return;
     }
     console.error('saveConnection failed:', error);
@@ -382,7 +382,7 @@ router.get('/connections', loginMiddleware, (_req: AuthenticatedRequest, res: Re
 
   const sanitizedConnections = connections.map(conn => ({
     id: conn.id,
-    name: conn.name,
+    profileName: conn.profile_name,
     endpoint: conn.endpoint,
     accessKeyId: conn.access_key_id,
     bucket: conn.bucket,
@@ -412,7 +412,7 @@ router.get('/connections/:id', loginMiddleware, (req: AuthenticatedRequest, res:
 
   res.json({
     id: connection.id,
-    name: connection.name,
+    profileName: connection.profile_name,
     endpoint: connection.endpoint,
     accessKeyId: connection.access_key_id,
     bucket: connection.bucket,
@@ -575,13 +575,13 @@ router.post('/connections/:id/export', loginMiddleware, (req: AuthenticatedReque
   } catch (error) {
     console.error('Failed to decrypt connection secret key for export:', {
       connectionId: connection.id,
-      connectionName: connection.name,
+      profileName: connection.profile_name,
       error,
     });
     res.status(422).json({ error: 'Failed to decrypt connection secret key' });
     return;
   }
-  const profileName = sanitizeProfileName(connection.name, `connection-${connection.id}`);
+  const profileName = sanitizeProfileName(connection.profile_name, `connection-${connection.id}`);
   const filenameBase = sanitizeFilename(profileName);
   const normalizedEndpoint = normalizeEndpoint(connection.endpoint);
   const region = connection.region || 'us-east-1';

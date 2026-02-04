@@ -9,7 +9,7 @@ import {
 function serverToSavedConnection(conn: ServerSavedConnection): SavedConnection & { id: number } {
   return {
     id: conn.id,
-    name: conn.name,
+    profileName: conn.profileName,
     endpoint: conn.endpoint,
     accessKeyId: conn.accessKeyId,
     bucket: conn.bucket || undefined,

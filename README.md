@@ -163,7 +163,7 @@ For MinIO, DigitalOcean Spaces, or other S3-compatible services:
 
 After successfully connecting, you can save the connection profile:
 
-1. Enter a connection name (no spaces)
+1. Enter a profile name (no spaces)
 2. All credentials are saved (secret access key encrypted with AES-256-GCM)
 3. Select a saved connection from the dropdown to quickly fill in credentials
 
