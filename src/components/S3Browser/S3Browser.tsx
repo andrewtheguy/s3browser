@@ -3,6 +3,8 @@ import {
   Upload,
   FolderPlus,
   History,
+  CheckSquare,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -1036,6 +1038,19 @@ export function S3Browser() {
           <TooltipProvider>
             <div className="flex sm:hidden items-center justify-between p-2 border-t bg-card">
               <div className="flex flex-wrap gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={selectionMode ? 'default' : 'outline'}
+                      size="icon"
+                      onClick={handleToggleSelection}
+                      aria-label={selectionMode ? 'Cancel selection' : 'Select items'}
+                    >
+                      {selectionMode ? <X className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{selectionMode ? 'Cancel selection' : 'Select items'}</TooltipContent>
+                </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="ghost" size="icon" onClick={handleCreateFolderClick}>

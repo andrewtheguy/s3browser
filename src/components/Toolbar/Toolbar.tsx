@@ -13,8 +13,6 @@ import {
   FlaskConical,
   History,
   MoreVertical,
-  CheckSquare,
-  X,
 } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -243,13 +241,6 @@ export function Toolbar({
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
-
-                {onToggleSelection && (
-                  <DropdownMenuItem onClick={onToggleSelection}>
-                    {selectionMode ? <X className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
-                    {selectionMode ? 'Cancel Selection' : 'Select'}
-                  </DropdownMenuItem>
-                )}
 
                 <DropdownMenuItem onClick={onCreateFolderClick}>
                   <FolderPlus className="h-4 w-4" />
