@@ -37,14 +37,14 @@ function isLifecycleNotConfigured(error: unknown): boolean {
     $metadata?: { httpStatusCode?: number };
   };
   const httpStatus = err.$metadata?.httpStatusCode;
-  if (httpStatus === 404) {
-    return true;
-  }
   const name = err.name ?? err.code ?? err.Code;
-  if (name && ['NoSuchLifecycleConfiguration', 'NotFound'].includes(name)) {
+  if (httpStatus === 404 && name && ['NoSuchLifecycleConfiguration', 'NotFound'].includes(name)) {
     return true;
   }
   const message = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+  if (!name && httpStatus === 404) {
+    return message.includes('lifecycle');
+  }
   return message.includes('nosuchlifecycleconfiguration') || message.includes('no such lifecycle configuration');
 }
 
@@ -81,6 +81,7 @@ interface BucketInfo {
     kmsKeyId?: string;
   } | null;
   encryptionError?: string;
+  lifecycleError?: string | null;
   lifecycleRules: LifecycleRule[];
 }
 
@@ -97,6 +98,7 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
   const result: BucketInfo = {
     versioning: null,
     encryption: null,
+    lifecycleError: null,
     lifecycleRules: [],
   };
 
@@ -173,6 +175,9 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
     // Treat "not configured" as empty lifecycle rules (no log).
     if (!isLifecycleNotConfigured(err)) {
       console.error('Failed to get bucket lifecycle:', err);
+      const errorName = (err as { name?: string })?.name;
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      result.lifecycleError = errorName ? `${errorName}: ${errorMessage}` : errorMessage;
     }
   }
 

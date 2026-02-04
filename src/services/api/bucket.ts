@@ -33,6 +33,7 @@ export interface BucketInfo {
     kmsKeyId?: string;
   } | null;
   encryptionError?: string;
+  lifecycleError?: string | null;
   lifecycleRules: LifecycleRule[];
 }
 

@@ -30,6 +30,10 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const [accessDenied, setAccessDenied] = useState(false);
   const didClearRegionCacheRef = useRef(false);
 
+  useEffect(() => {
+    didClearRegionCacheRef.current = false;
+  }, [connectionId]);
+
   const fetchBuckets = useCallback(async () => {
     setIsLoading(true);
     setError(null);

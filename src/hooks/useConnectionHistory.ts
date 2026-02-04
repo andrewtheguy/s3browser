@@ -30,13 +30,13 @@ export function useConnectionHistory(isUserLoggedIn: boolean) {
   const doFetch = useCallback(async (options?: { clearRegionCache?: boolean }) => {
     const currentRequestId = ++requestIdRef.current;
     const shouldClearRegionCache = options?.clearRegionCache === true && !didClearRegionCacheRef.current;
-    if (shouldClearRegionCache) {
-      didClearRegionCacheRef.current = true;
-    }
     setIsLoading(true);
     setError(null);
     try {
       const serverConnections = await getConnections({ clearRegionCache: shouldClearRegionCache });
+      if (shouldClearRegionCache) {
+        didClearRegionCacheRef.current = true;
+      }
       // Only update state if this is still the latest request
       if (currentRequestId === requestIdRef.current) {
         setConnections(serverConnections.map(serverToSavedConnection));
