@@ -12,7 +12,7 @@ let db: Database | null = null;
 
 export interface DbS3Connection {
   id: number;
-  name: string;
+  profile_name: string;
   endpoint: string;
   access_key_id: string;
   secret_access_key: string;
@@ -126,10 +126,10 @@ function initializeDatabase(): Database {
 
   // Create tables
   database.exec(`
-    -- S3 connections: saved S3 connection profiles (globally unique names)
+    -- S3 connections: saved S3 connection profiles (globally unique profile names)
     CREATE TABLE IF NOT EXISTS s3_connections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
+      profile_name TEXT NOT NULL UNIQUE,
       endpoint TEXT NOT NULL,
       access_key_id TEXT NOT NULL,
       secret_access_key TEXT NOT NULL,
@@ -140,10 +140,23 @@ function initializeDatabase(): Database {
     );
   `);
 
+  // Migrate 'name' column to 'profile_name' if needed (SQLite 3.25.0+)
+  migrateNameToProfileName(database);
+
   // Verify encryption key matches what was used to initialize the database
   verifyEncryptionKey(database);
 
   return database;
+}
+
+function migrateNameToProfileName(database: Database): void {
+  const tableInfo = database.prepare(`PRAGMA table_info(s3_connections)`).all() as Array<{name: string}>;
+  const hasNameColumn = tableInfo.some(col => col.name === 'name');
+  const hasProfileNameColumn = tableInfo.some(col => col.name === 'profile_name');
+
+  if (hasNameColumn && !hasProfileNameColumn) {
+    database.exec(`ALTER TABLE s3_connections RENAME COLUMN name TO profile_name;`);
+  }
 }
 
 export function getDb(): Database {
@@ -181,7 +194,7 @@ export function getConnectionById(connectionId: number): DbS3Connection | undefi
 
 export function saveConnection(
   connectionId: number | null,
-  name: string,
+  profileName: string,
   endpoint: string,
   accessKeyId: string,
   secretAccessKey: string | null,
@@ -199,7 +212,7 @@ export function saveConnection(
       const encryptedSecretAccessKey = encrypt(secretAccessKey);
       const stmt = database.prepare(`
         UPDATE s3_connections SET
-          name = ?,
+          profile_name = ?,
           endpoint = ?,
           access_key_id = ?,
           secret_access_key = ?,
@@ -209,12 +222,12 @@ export function saveConnection(
           last_used_at = unixepoch()
         WHERE id = ?
       `);
-      result = stmt.run(name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
+      result = stmt.run(profileName, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
     } else {
       // Update without changing the secret key
       const stmt = database.prepare(`
         UPDATE s3_connections SET
-          name = ?,
+          profile_name = ?,
           endpoint = ?,
           access_key_id = ?,
           bucket = ?,
@@ -223,7 +236,7 @@ export function saveConnection(
           last_used_at = unixepoch()
         WHERE id = ?
       `);
-      result = stmt.run(name, endpoint, accessKeyId, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
+      result = stmt.run(profileName, endpoint, accessKeyId, bucket, region, autoDetectRegion ? 1 : 0, connectionId);
     }
     // Check that the update affected a row (avoids TOCTOU race condition)
     if (result.changes === 0) {
@@ -237,10 +250,10 @@ export function saveConnection(
     }
     const encryptedSecretAccessKey = encrypt(secretAccessKey);
     const stmt = database.prepare(`
-      INSERT INTO s3_connections (name, endpoint, access_key_id, secret_access_key, bucket, region, auto_detect_region, last_used_at)
+      INSERT INTO s3_connections (profile_name, endpoint, access_key_id, secret_access_key, bucket, region, auto_detect_region, last_used_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
     `);
-    const result = stmt.run(name, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0);
+    const result = stmt.run(profileName, endpoint, accessKeyId, encryptedSecretAccessKey, bucket, region, autoDetectRegion ? 1 : 0);
     return getConnectionById(Number(result.lastInsertRowid))!;
   }
 }

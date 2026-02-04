@@ -114,7 +114,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const bucket = urlBucket || credentials?.bucket;
 
   const [info, setInfo] = useState<BucketInfo | null>(null);
-  const [connectionName, setConnectionName] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<null | 'aws' | 'rclone'>(null);
@@ -130,7 +130,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   useEffect(() => {
     if (!open || !activeConnectionId || !bucket) {
       setInfo(null);
-      setConnectionName(null);
+      setProfileName(null);
       setError(null);
       setIsLoading(false);
       return;
@@ -151,7 +151,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
         const connection = await connectionPromise;
         if (!abortController.signal.aborted) {
           setInfo(data);
-          setConnectionName(connection.name);
+          setProfileName(connection.profileName);
         }
       } catch (err) {
         if (!abortController.signal.aborted) {
@@ -227,10 +227,10 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                 <TableBody>
                   <TableRow>
                     <TableCell className="font-medium w-[140px]">
-                      Connection
+                      Profile
                     </TableCell>
                     <TableCell className="break-all">
-                      {connectionName ?? '—'}
+                      {profileName ?? '—'}
                     </TableCell>
                   </TableRow>
                   <TableRow>

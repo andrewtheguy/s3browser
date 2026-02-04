@@ -16,7 +16,7 @@ export interface S3ConnectionCredentials {
   region?: string;
   bucket?: string;
   endpoint?: string;
-  connectionName: string;
+  profileName: string;
   autoDetectRegion?: boolean;
 }
 
@@ -43,7 +43,7 @@ export interface ValidateBucketResponse {
 
 export interface ServerSavedConnection {
   id: number;
-  name: string;
+  profileName: string;
   endpoint: string;
   accessKeyId: string;
   // Note: secretAccessKey is never returned from server for security
