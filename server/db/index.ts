@@ -244,7 +244,7 @@ export function saveConnection(
     }
     return getConnectionById(connectionId)!;
   } else {
-    // INSERT new connection (name uniqueness enforced by DB UNIQUE constraint)
+    // INSERT new connection (profile_name uniqueness enforced by DB UNIQUE constraint)
     if (!secretAccessKey) {
       throw new Error('Secret access key is required for new connections');
     }
