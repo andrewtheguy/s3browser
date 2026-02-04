@@ -7,6 +7,7 @@ import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
 import downloadRoutes from './routes/download.js';
 import bucketRoutes from './routes/bucket.js';
+import { clearBucketRegionCache } from './middleware/auth.js';
 
 // Initialize database (validates encryption key and creates tables)
 try {
@@ -46,12 +47,20 @@ app.use('/api/bucket', bucketRoutes);
 const distPath = path.resolve(process.cwd(), 'dist');
 app.use(express.static(distPath));
 
+const indexPath = path.join(distPath, 'index.html');
+const serveIndexWithCacheClear = (_req: Request, res: Response) => {
+  clearBucketRegionCache();
+  return res.sendFile(indexPath);
+};
+
+app.get(['/', '/connection/:connectionId/select-bucket'], serveIndexWithCacheClear);
+
 // SPA fallback: serve index.html for non-API GET routes
 app.use((req, res, next) => {
   if (req.method !== 'GET' || req.path.startsWith('/api/')) {
     return next();
   }
-  return res.sendFile(path.join(distPath, 'index.html'));
+  return res.sendFile(indexPath);
 });
 
 // Health check

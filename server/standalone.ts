@@ -8,6 +8,7 @@ import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
 import downloadRoutes from './routes/download.js';
 import bucketRoutes from './routes/bucket.js';
+import { clearBucketRegionCache } from './middleware/auth.js';
 
 // Embedded frontend assets (Bun embeds these at compile time)
 import indexHtml from '../dist/index.html' with { type: 'text' };
@@ -55,6 +56,12 @@ Encryption Key:
 
   Generate a key with: openssl rand -hex 32`);
   process.exit(0);
+}
+
+function sendIndexHtml(res: Response): void {
+  const indexHtmlAsset = embeddedAssets['/index.html'];
+  res.setHeader('Content-Type', indexHtmlAsset.mime);
+  res.send(indexHtmlAsset.content);
 }
 
 // Parse bind address
@@ -138,6 +145,11 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.get(['/', '/connection/:connectionId/select-bucket'], (_req, res) => {
+  clearBucketRegionCache();
+  sendIndexHtml(res);
+});
+
 // Serve embedded static assets
 app.get('/{*splat}', (req, res) => {
   const assetPath = req.path;
@@ -158,9 +170,7 @@ app.get('/{*splat}', (req, res) => {
   }
 
   // SPA fallback: serve index.html for all other routes
-  const indexHtmlAsset = embeddedAssets['/index.html'];
-  res.setHeader('Content-Type', indexHtmlAsset.mime);
-  res.send(indexHtmlAsset.content);
+  sendIndexHtml(res);
 });
 
 // Global error handler
