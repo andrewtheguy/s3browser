@@ -43,10 +43,22 @@ export function detectS3Vendor(endpoint?: string): S3Vendor {
 
 export function normalizeEndpoint(endpoint?: string): string | undefined {
   if (!endpoint) return undefined;
+
+  let normalized: string;
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
-    return endpoint;
+    normalized = endpoint;
+  } else {
+    normalized = `https://${endpoint}`;
   }
-  return `https://${endpoint}`;
+
+  // Treat the default AWS S3 endpoint as "no endpoint" so the SDK
+  // uses automatic regional routing instead of forcing path-style access
+  const url = new URL(normalized);
+  if (url.hostname === 's3.amazonaws.com') {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 // Create S3 client from credentials
@@ -203,9 +215,12 @@ export async function validateCredentialsOnly(
   }
 
   // For AWS, try STS GetCallerIdentity first
+  // useGlobalEndpoint: false ensures we use the regional STS endpoint
+  // instead of the global sts.amazonaws.com which only works for us-east-1
   const stsClient = new STSClient({
     region,
     credentials: { accessKeyId, secretAccessKey },
+    useGlobalEndpoint: false,
   });
 
   try {
