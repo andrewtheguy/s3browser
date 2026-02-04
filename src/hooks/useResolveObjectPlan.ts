@@ -30,6 +30,35 @@ const buildCompositeKey = (key: string, versionId?: string): string => {
   return `${key}::${versionId ?? ''}`;
 };
 
+function processFolder(
+  folder: S3Object,
+  fileKeys: Map<string, ObjectPlanEntry>,
+  folderPrefixes: Set<string>,
+  folderDeleteKeys: Set<string>,
+  queue: string[],
+  includeVersions: boolean,
+  includeFolderContents: boolean
+) {
+  if (includeVersions && folder.versionId) {
+    fileKeys.set(buildCompositeKey(folder.key, folder.versionId), {
+      key: folder.key,
+      versionId: folder.versionId,
+      isLatest: folder.isLatest,
+      isDeleteMarker: folder.isDeleteMarker,
+    });
+  }
+  if (!includeFolderContents) {
+    return;
+  }
+  if (!folderPrefixes.has(folder.key)) {
+    folderPrefixes.add(folder.key);
+    queue.push(folder.key);
+  }
+  if (!includeVersions) {
+    folderDeleteKeys.add(folder.key);
+  }
+}
+
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new DOMException('Aborted', 'AbortError');
@@ -65,23 +94,15 @@ export function useResolveObjectPlan() {
 
       for (const item of items) {
         if (item.isFolder) {
-          if (includeVersions && item.versionId) {
-            fileKeys.set(buildCompositeKey(item.key, item.versionId), {
-              key: item.key,
-              versionId: item.versionId,
-              isLatest: item.isLatest,
-              isDeleteMarker: item.isDeleteMarker,
-            });
-          }
-          if (includeFolderContents) {
-            if (!folderPrefixes.has(item.key)) {
-              folderPrefixes.add(item.key);
-              queue.push(item.key);
-            }
-            if (!includeVersions) {
-              folderDeleteKeys.add(item.key);
-            }
-          }
+          processFolder(
+            item,
+            fileKeys,
+            folderPrefixes,
+            folderDeleteKeys,
+            queue,
+            includeVersions,
+            includeFolderContents
+          );
         } else {
           const versionId = includeVersions ? item.versionId : undefined;
           fileKeys.set(buildCompositeKey(item.key, versionId), {
@@ -120,21 +141,15 @@ export function useResolveObjectPlan() {
           for (const obj of result.objects) {
             throwIfAborted(options.signal);
             if (obj.isFolder) {
-              if (includeVersions && obj.versionId) {
-                fileKeys.set(buildCompositeKey(obj.key, obj.versionId), {
-                  key: obj.key,
-                  versionId: obj.versionId,
-                  isLatest: obj.isLatest,
-                  isDeleteMarker: obj.isDeleteMarker,
-                });
-              }
-              if (!folderPrefixes.has(obj.key)) {
-                folderPrefixes.add(obj.key);
-                queue.push(obj.key);
-              }
-              if (!includeVersions) {
-                folderDeleteKeys.add(obj.key);
-              }
+              processFolder(
+                obj,
+                fileKeys,
+                folderPrefixes,
+                folderDeleteKeys,
+                queue,
+                includeVersions,
+                true
+              );
             } else {
               const versionId = includeVersions ? obj.versionId : undefined;
               fileKeys.set(buildCompositeKey(obj.key, versionId), {
