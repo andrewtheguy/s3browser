@@ -9,6 +9,13 @@ import {
   type DbS3Connection,
 } from '../db/index.js';
 
+// Cache for bucket regions: Map<"connectionId:bucket", region>
+const bucketRegionCache = new Map<string, string>();
+
+export function clearBucketRegionCache(): void {
+  bucketRegionCache.clear();
+}
+
 export interface S3Credentials {
   accessKeyId: string;
   secretAccessKey: string;
@@ -91,16 +98,24 @@ export async function createS3ClientFromConnection(
 
   // If auto-detect is enabled and we have a bucket, detect its region
   if (connection.auto_detect_region && effectiveBucket && !endpoint) {
-    try {
-      region = await getBucketRegion(
-        connection.access_key_id,
-        secretAccessKey,
-        effectiveBucket,
-        endpoint
-      );
-    } catch (error) {
-      // Fall back to connection region on error
-      console.warn('Failed to auto-detect bucket region, using connection region:', error);
+    const cacheKey = `${connection.id}:${effectiveBucket}`;
+    const cachedRegion = bucketRegionCache.get(cacheKey);
+
+    if (cachedRegion) {
+      region = cachedRegion;
+    } else {
+      try {
+        region = await getBucketRegion(
+          connection.access_key_id,
+          secretAccessKey,
+          effectiveBucket,
+          endpoint
+        );
+        bucketRegionCache.set(cacheKey, region);
+      } catch (error) {
+        // Fall back to connection region on error
+        console.warn('Failed to auto-detect bucket region, using connection region:', error);
+      }
     }
   }
 
