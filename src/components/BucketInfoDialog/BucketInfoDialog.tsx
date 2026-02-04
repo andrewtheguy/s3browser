@@ -199,20 +199,14 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const showExportSection = Boolean(activeConnectionId);
   const showSeparator = showExportSection && (isLoading || !!error || !!info);
   const exportBusy = exportingFormat !== null;
-  const versionSupportLabel =
+  const versionSupportState: { label: string; variant: 'default' | 'outline' | 'secondary' } =
     bucketVersioningStatus === 'disabled'
-      ? 'Disabled'
+      ? { label: 'Disabled', variant: 'secondary' }
       : versioningSupported === null
-        ? 'Checking'
+        ? { label: 'Checking', variant: 'outline' }
         : versioningSupported === false
-          ? 'Not Supported'
-          : 'Supported';
-  const versionSupportVariant =
-    versionSupportLabel === 'Supported'
-      ? 'default'
-      : versionSupportLabel === 'Checking'
-        ? 'outline'
-        : 'secondary';
+          ? { label: 'Not Supported', variant: 'secondary' }
+          : { label: 'Supported', variant: 'default' };
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -254,7 +248,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                     <TableCell>{bucket}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium w-[140px]">
                       Versioning
                     </TableCell>
                     <TableCell>
@@ -273,12 +267,12 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium w-[140px]">
                       Version Support
                     </TableCell>
                     <TableCell>
-                      <Badge variant={versionSupportVariant}>
-                        {versionSupportLabel}
+                      <Badge variant={versionSupportState.variant}>
+                        {versionSupportState.label}
                       </Badge>
                     </TableCell>
                   </TableRow>
