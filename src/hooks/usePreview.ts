@@ -3,7 +3,7 @@ import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { getPresignedUrl } from '../services/api';
 import { isPreviewableFile, getMimeType, type EmbedType } from '../utils/previewUtils';
-import { formatFileSize } from '../utils/formatters';
+import { formatFileSize, getFileExtension } from '../utils/formatters';
 import type { S3Object } from '../types';
 
 // TTL for preview signed URLs (1 hour)
@@ -74,11 +74,10 @@ export function usePreview() {
         return;
       }
 
-      if (
-        previewability.embedType === 'text'
-        && typeof item.size === 'number'
-        && item.size > TEXT_PREVIEW_LIMIT_BYTES
-      ) {
+      const extension = getFileExtension(item.name);
+      const isTextPreview = previewability.embedType === 'text' || extension === 'json';
+
+      if (isTextPreview && typeof item.size === 'number' && item.size > TEXT_PREVIEW_LIMIT_BYTES) {
         setState({
           isOpen: true,
           isLoading: false,
