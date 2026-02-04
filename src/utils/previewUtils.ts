@@ -59,6 +59,8 @@ const MIME_TYPES: Record<string, string> = {
   // Text types
   txt: 'text/plain',
   md: 'text/markdown',
+  // Force CSV previews to render inline as plain text to avoid browser download behavior.
+  csv: 'text/plain',
   json: 'application/json',
   // Force XML previews to render as plain text to avoid inline rendering in the preview dialog.
   xml: 'text/plain',
