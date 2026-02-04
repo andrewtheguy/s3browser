@@ -55,7 +55,15 @@ const DOWNLOAD_CONTINUATION_START_AT = 500;
 const DOWNLOAD_CONTINUATION_EVERY = 10_000;
 
 export function S3Browser() {
-  const { refresh, currentPath, objects, showVersions, toggleShowVersions, versioningSupported } = useBrowserContext();
+  const {
+    refresh,
+    currentPath,
+    objects,
+    showVersions,
+    toggleShowVersions,
+    versioningSupported,
+    bucketVersioningStatus,
+  } = useBrowserContext();
   const { remove, removeMany, resolveObjectPlan: resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
@@ -1005,6 +1013,7 @@ export function S3Browser() {
           showVersions={showVersions}
           onToggleVersions={versioningSupported ? toggleShowVersions : undefined}
           versioningSupported={versioningSupported}
+          bucketVersioningStatus={bucketVersioningStatus}
           onSeedTestItems={seedTestItemsEnabled ? handleSeedTestItems : undefined}
           isSeedingTestItems={seedTestItemsEnabled ? isSeedingTestItems : undefined}
         />
