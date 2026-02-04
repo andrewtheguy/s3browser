@@ -106,7 +106,8 @@ export function FileListItem({
   const iconColor = iconColors[iconType];
   const isPreviousVersion = showVersions && item.isLatest === false;
   const isDeleteMarker = showVersions && item.isDeleteMarker === true;
-  const canPreview = !isDeleteMarker;
+  // Folders can always be navigated (even if deleted), but deleted files can't be previewed
+  const canPreview = !isDeleteMarker || item.isFolder;
   const canCopyMove = !isDeleteMarker && !isPreviousVersion;
   const canBatchDownload = Boolean(onBatchDownload) && item.isFolder && !isDeleteMarker && !isPreviousVersion;
   const isInteractive = canPreview;

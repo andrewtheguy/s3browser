@@ -11,7 +11,7 @@ import {
 import { useNavigate, useParams } from 'react-router';
 import type { S3Object, BrowserContextValue } from '../types';
 import { useS3ClientContext } from './useS3ClientContext';
-import { listObjects, ApiHttpError, getBucketInfo } from '../services/api';
+import { listObjects, ApiHttpError, getBucketInfo, listLiveFolders } from '../services/api';
 import { getPathSegments, sortObjects } from '../utils/formatters';
 import { decodeUrlToS3Path } from '../utils/urlEncoding';
 import { BROWSE_WINDOW_LIMIT } from '../config/browse';
@@ -101,6 +101,41 @@ const MAX_OBJECTS = BROWSE_WINDOW_LIMIT;
 
 export const BrowserContext = createContext<BrowserContextValue | null>(null);
 
+async function markDeletedFolders(
+  objects: S3Object[],
+  activeConnectionId: number,
+  bucket: string,
+  path: string,
+  maxItems: number,
+  signal: AbortSignal
+): Promise<S3Object[]> {
+  const folders = objects.filter(obj => obj.isFolder);
+  if (folders.length === 0) {
+    return objects;
+  }
+
+  try {
+    // Cap to aggregated count - non-versioned listing will have fewer items
+    // since it doesn't include multiple versions of the same file
+    const liveFolders = await listLiveFolders(activeConnectionId, bucket, path, maxItems, signal);
+    return objects.map(obj => {
+      if (obj.isFolder && !liveFolders.has(obj.key)) {
+        return { ...obj, isDeleteMarker: true };
+      }
+      return obj;
+    });
+  } catch (error) {
+    console.debug('Failed to mark deleted folders with live-folder check', {
+      error,
+      connectionId: activeConnectionId,
+      bucket,
+      path,
+      maxItems,
+    });
+    return objects;
+  }
+}
+
 interface BrowserProviderProps {
   children: ReactNode;
   initialPath?: string;
@@ -184,7 +219,21 @@ export function BrowserProvider({
 
           if (aggregated.length + result.objects.length > MAX_OBJECTS) {
             if (requestId === requestIdRef.current) {
-              const limitedObjects = sortObjects(aggregated);
+              let limitedObjects = sortObjects(aggregated);
+
+              // When viewing versions on the first window, mark folders that have no live content as deleted
+              // Skip this check for subsequent windows to avoid inaccurate results (see listLiveFolders docs)
+              if (showVersions && windowIndex === 0) {
+                limitedObjects = await markDeletedFolders(
+                  limitedObjects,
+                  activeConnectionId,
+                  bucket,
+                  path,
+                  aggregated.length,
+                  abortController.signal
+                );
+              }
+
               dispatch({
                 type: 'FETCH_LIMIT_REACHED',
                 objects: limitedObjects,
@@ -201,7 +250,21 @@ export function BrowserProvider({
 
           if (aggregated.length >= MAX_OBJECTS && result.isTruncated) {
             if (requestId === requestIdRef.current) {
-              const limitedObjects = sortObjects(aggregated.slice(0, MAX_OBJECTS));
+              let limitedObjects = sortObjects(aggregated.slice(0, MAX_OBJECTS));
+
+              // When viewing versions on the first window, mark folders that have no live content as deleted
+              // Skip this check for subsequent windows to avoid inaccurate results (see listLiveFolders docs)
+              if (showVersions && windowIndex === 0) {
+                limitedObjects = await markDeletedFolders(
+                  limitedObjects,
+                  activeConnectionId,
+                  bucket,
+                  path,
+                  aggregated.length,
+                  abortController.signal
+                );
+              }
+
               dispatch({
                 type: 'FETCH_LIMIT_REACHED',
                 objects: limitedObjects,
@@ -218,10 +281,25 @@ export function BrowserProvider({
         } while (continuationToken);
 
         if (requestId === requestIdRef.current) {
+          let finalObjects = aggregated;
+
+          // When viewing versions on the first window, mark folders that have no live content as deleted
+          // Skip this check for subsequent windows to avoid inaccurate results (see listLiveFolders docs)
+          if (showVersions && windowIndex === 0) {
+            finalObjects = await markDeletedFolders(
+              finalObjects,
+              activeConnectionId,
+              bucket,
+              path,
+              aggregated.length,
+              abortController.signal
+            );
+          }
+
           // Sort client-side: folders first, then files, alphabetically
           dispatch({
             type: 'FETCH_SUCCESS',
-            objects: sortObjects(aggregated),
+            objects: sortObjects(finalObjects),
           });
           lastFetchedPathRef.current = path;
           lastFetchedVersionsRef.current = showVersions;

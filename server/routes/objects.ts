@@ -243,6 +243,9 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
       return;
     }
 
+    // Collect folder prefixes from version listing
+    // Note: isDeleteMarker status for folders is determined on the frontend after aggregation
+    // by comparing with a non-versioned listing (more efficient than checking per-page)
     if (versionResponse.CommonPrefixes) {
       for (const prefixObj of versionResponse.CommonPrefixes) {
         if (prefixObj.Prefix) {
@@ -275,11 +278,12 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
     if (versionResponse.DeleteMarkers) {
       for (const item of versionResponse.DeleteMarkers) {
         if (item.Key && item.Key !== prefix) {
+          const isFolderObject = item.Key.endsWith('/');
           objects.push({
             key: item.Key,
             name: extractFileName(item.Key),
             lastModified: item.LastModified?.toISOString(),
-            isFolder: false,
+            isFolder: isFolderObject,
             versionId: item.VersionId,
             isLatest: item.IsLatest,
             isDeleteMarker: true,
@@ -443,8 +447,8 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
 
   const fileKeys = keys
     .filter((entry) => entry && typeof entry.key === 'string')
-    .map((entry) => ({ key: entry.key!.trim(), versionId: entry.versionId }))
-    .filter((entry) => entry.key.length > 0 && !entry.key.endsWith('/'));
+    .map((entry) => ({ key: entry.key!.trim(), versionId: sanitizeVersionId(entry.versionId) }))
+    .filter((entry) => entry.key.length > 0 && (!entry.key.endsWith('/') || entry.versionId));
 
   if (fileKeys.length === 0) {
     res.status(400).json({ error: 'No valid file keys provided' });

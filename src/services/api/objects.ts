@@ -200,6 +200,77 @@ export async function moveObjects(
   return response;
 }
 
+/**
+ * Fetches folders that have live (non-deleted) content.
+ * Used to determine which folders are "effectively deleted" when viewing versions.
+ * Returns a Set of folder keys that have live content.
+ *
+ * @param maxItems - Cap on items to fetch. Should be set to the aggregated count from
+ * the versioned listing. The non-versioned listing will typically return fewer items
+ * since it doesn't include multiple versions of the same file.
+ *
+ * LIMITATION: This only fetches up to maxItems from the start of the listing.
+ * For browse windows beyond the first (e.g., items 5001+), this check is skipped
+ * entirely and folders appear as live. This is an acceptable trade-off since
+ * viewing versions beyond the first window is a rare edge case.
+ */
+export async function listLiveFolders(
+  connectionId: number,
+  bucket: string,
+  prefix: string = '',
+  maxItems: number,
+  signal?: AbortSignal
+): Promise<Set<string>> {
+  const liveFolders = new Set<string>();
+  let continuationToken: string | undefined;
+  let itemCount = 0;
+
+  do {
+    let url = `/objects/${connectionId}/${encodeURIComponent(bucket)}?prefix=${encodeURIComponent(prefix)}`;
+    if (continuationToken) {
+      url += `&continuationToken=${encodeURIComponent(continuationToken)}`;
+    }
+
+    const response = await apiGet<ListObjectsResponse>(url, signal);
+
+    if (!response || !Array.isArray(response.objects)) {
+      const diagnostics = (() => {
+        if (!response) {
+          return 'response=null';
+        }
+        if (typeof response !== 'object') {
+          return `response=${String(response)}`;
+        }
+        if ('status' in response) {
+          return `response.status=${String((response as { status?: unknown }).status)}`;
+        }
+        try {
+          return `response=${JSON.stringify(response)}`;
+        } catch {
+          return 'response=[unserializable]';
+        }
+      })();
+      throw new Error(`Failed to list live folders: missing or invalid response (${diagnostics})`);
+    }
+
+    // Extract folder keys
+    for (const obj of response.objects) {
+      if (obj.isFolder) {
+        liveFolders.add(obj.key);
+      }
+    }
+
+    itemCount += response.objects.length;
+    if (itemCount >= maxItems) {
+      break;
+    }
+
+    continuationToken = response.isTruncated ? response.continuationToken : undefined;
+  } while (continuationToken);
+
+  return liveFolders;
+}
+
 export interface ObjectMetadata {
   key: string;
   size?: number;
