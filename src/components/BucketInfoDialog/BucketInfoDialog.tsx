@@ -24,7 +24,7 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { useS3ClientContext } from '../../contexts';
+import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import { getBucketInfo, type BucketInfo, type LifecycleRule } from '../../services/api/bucket';
 import { exportConnectionProfile, getConnection } from '../../services/api/auth';
 
@@ -109,6 +109,7 @@ function LifecycleRuleDetails({ rule }: { rule: LifecycleRule }) {
 
 export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const { activeConnectionId, credentials } = useS3ClientContext();
+  const { versioningSupported, bucketVersioningStatus } = useBrowserContext();
   const { bucket: urlBucket } = useParams<{ bucket: string }>();
   const bucket = urlBucket || credentials?.bucket;
 
@@ -198,6 +199,20 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   const showExportSection = Boolean(activeConnectionId);
   const showSeparator = showExportSection && (isLoading || !!error || !!info);
   const exportBusy = exportingFormat !== null;
+  const versionSupportLabel =
+    bucketVersioningStatus === 'disabled'
+      ? 'Disabled'
+      : versioningSupported === null
+        ? 'Checking'
+        : versioningSupported === false
+          ? 'Not Supported'
+          : 'Supported';
+  const versionSupportVariant =
+    versionSupportLabel === 'Supported'
+      ? 'default'
+      : versionSupportLabel === 'Checking'
+        ? 'outline'
+        : 'secondary';
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -255,6 +270,16 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">
+                      Version Support
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={versionSupportVariant}>
+                        {versionSupportLabel}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                   <TableRow>
