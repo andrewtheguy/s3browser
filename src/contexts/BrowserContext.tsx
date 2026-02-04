@@ -124,7 +124,14 @@ async function markDeletedFolders(
       }
       return obj;
     });
-  } catch {
+  } catch (error) {
+    console.debug('Failed to mark deleted folders with live-folder check', {
+      error,
+      connectionId: activeConnectionId,
+      bucket,
+      path,
+      maxItems,
+    });
     return objects;
   }
 }
