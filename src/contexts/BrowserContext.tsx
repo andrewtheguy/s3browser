@@ -192,11 +192,13 @@ export function BrowserProvider({
                 const folders = limitedObjects.filter(obj => obj.isFolder);
                 if (folders.length > 0) {
                   try {
+                    // Cap to aggregated count - non-versioned listing will have fewer items
+                    // since it doesn't include multiple versions of the same file
                     const liveFolders = await listLiveFolders(
                       activeConnectionId,
                       bucket,
                       path,
-                      MAX_OBJECTS,
+                      aggregated.length,
                       abortController.signal
                     );
                     limitedObjects = limitedObjects.map(obj => {
@@ -235,11 +237,13 @@ export function BrowserProvider({
                 const folders = limitedObjects.filter(obj => obj.isFolder);
                 if (folders.length > 0) {
                   try {
+                    // Cap to aggregated count - non-versioned listing will have fewer items
+                    // since it doesn't include multiple versions of the same file
                     const liveFolders = await listLiveFolders(
                       activeConnectionId,
                       bucket,
                       path,
-                      MAX_OBJECTS,
+                      aggregated.length,
                       abortController.signal
                     );
                     limitedObjects = limitedObjects.map(obj => {
@@ -278,11 +282,13 @@ export function BrowserProvider({
             const folders = aggregated.filter(obj => obj.isFolder);
             if (folders.length > 0) {
               try {
+                // Cap to aggregated count - non-versioned listing will have fewer items
+                // since it doesn't include multiple versions of the same file
                 const liveFolders = await listLiveFolders(
                   activeConnectionId,
                   bucket,
                   path,
-                  MAX_OBJECTS,
+                  aggregated.length,
                   abortController.signal
                 );
                 finalObjects = aggregated.map(obj => {
