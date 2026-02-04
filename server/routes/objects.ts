@@ -447,8 +447,8 @@ router.post('/:connectionId/:bucket/batch-delete', s3Middleware, requireBucket, 
 
   const fileKeys = keys
     .filter((entry) => entry && typeof entry.key === 'string')
-    .map((entry) => ({ key: entry.key!.trim(), versionId: entry.versionId }))
-    .filter((entry) => entry.key.length > 0 && !entry.key.endsWith('/'));
+    .map((entry) => ({ key: entry.key!.trim(), versionId: sanitizeVersionId(entry.versionId) }))
+    .filter((entry) => entry.key.length > 0 && (!entry.key.endsWith('/') || entry.versionId));
 
   if (fileKeys.length === 0) {
     res.status(400).json({ error: 'No valid file keys provided' });

@@ -50,7 +50,8 @@ export function useResolveObjectPlan() {
       const includeFolderContents = options.includeFolderContents ?? false;
       const includeVersions = options.includeVersions ?? false;
       const fileKeys = new Map<string, ObjectPlanEntry>();
-      const folderKeys = new Set<string>();
+      const folderPrefixes = new Set<string>();
+      const folderDeleteKeys = new Set<string>();
       const queue: string[] = [];
       const promptEvery = Math.max(
         options.continuationPromptEvery ?? CONTINUATION_PROMPT_EVERY,
@@ -64,10 +65,21 @@ export function useResolveObjectPlan() {
 
       for (const item of items) {
         if (item.isFolder) {
+          if (includeVersions && item.versionId) {
+            fileKeys.set(buildCompositeKey(item.key, item.versionId), {
+              key: item.key,
+              versionId: item.versionId,
+              isLatest: item.isLatest,
+              isDeleteMarker: item.isDeleteMarker,
+            });
+          }
           if (includeFolderContents) {
-            if (!folderKeys.has(item.key)) {
-              folderKeys.add(item.key);
+            if (!folderPrefixes.has(item.key)) {
+              folderPrefixes.add(item.key);
               queue.push(item.key);
+            }
+            if (!includeVersions) {
+              folderDeleteKeys.add(item.key);
             }
           }
         } else {
@@ -82,7 +94,10 @@ export function useResolveObjectPlan() {
       }
 
       if (!includeFolderContents || queue.length === 0) {
-        return { fileKeys: Array.from(fileKeys.values()), folderKeys: [] };
+        return {
+          fileKeys: Array.from(fileKeys.values()),
+          folderKeys: includeVersions ? [] : Array.from(folderDeleteKeys),
+        };
       }
 
       while (queue.length > 0) {
@@ -105,9 +120,20 @@ export function useResolveObjectPlan() {
           for (const obj of result.objects) {
             throwIfAborted(options.signal);
             if (obj.isFolder) {
-              if (!folderKeys.has(obj.key)) {
-                folderKeys.add(obj.key);
+              if (includeVersions && obj.versionId) {
+                fileKeys.set(buildCompositeKey(obj.key, obj.versionId), {
+                  key: obj.key,
+                  versionId: obj.versionId,
+                  isLatest: obj.isLatest,
+                  isDeleteMarker: obj.isDeleteMarker,
+                });
+              }
+              if (!folderPrefixes.has(obj.key)) {
+                folderPrefixes.add(obj.key);
                 queue.push(obj.key);
+              }
+              if (!includeVersions) {
+                folderDeleteKeys.add(obj.key);
               }
             } else {
               const versionId = includeVersions ? obj.versionId : undefined;
@@ -129,14 +155,20 @@ export function useResolveObjectPlan() {
               options.onContinuationPrompt?.(fileKeys.size) ?? true
             );
             if (!shouldContinue) {
-              return { fileKeys: Array.from(fileKeys.values()), folderKeys: Array.from(folderKeys) };
+              return {
+                fileKeys: Array.from(fileKeys.values()),
+                folderKeys: includeVersions ? [] : Array.from(folderDeleteKeys),
+              };
             }
             nextContinuationPromptAt += promptEvery;
           }
         } while (continuationToken);
       }
 
-      return { fileKeys: Array.from(fileKeys.values()), folderKeys: Array.from(folderKeys) };
+      return {
+        fileKeys: Array.from(fileKeys.values()),
+        folderKeys: includeVersions ? [] : Array.from(folderDeleteKeys),
+      };
     },
     [isConnected, activeConnectionId, bucket]
   );
