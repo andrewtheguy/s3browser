@@ -204,12 +204,15 @@ export async function moveObjects(
  * Fetches folders that have live (non-deleted) content.
  * Used to determine which folders are "effectively deleted" when viewing versions.
  * Returns a Set of folder keys that have live content.
- * Paginates up to maxItems to match the browse window limit.
+ *
+ * @param maxItems - Cap on items to fetch. Should be set to the aggregated count from
+ * the versioned listing. The non-versioned listing will typically return fewer items
+ * since it doesn't include multiple versions of the same file.
  *
  * LIMITATION: This only fetches up to maxItems from the start of the listing.
- * For browse windows beyond the first (e.g., items 5001+), folders may incorrectly
- * appear as live even if all their contents are deleted. This is an acceptable
- * trade-off since viewing versions beyond the first window is a rare edge case.
+ * For browse windows beyond the first (e.g., items 5001+), this check is skipped
+ * entirely and folders appear as live. This is an acceptable trade-off since
+ * viewing versions beyond the first window is a rare edge case.
  */
 export async function listLiveFolders(
   connectionId: number,
