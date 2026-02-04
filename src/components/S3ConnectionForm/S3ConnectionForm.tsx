@@ -92,7 +92,7 @@ export function S3ConnectionForm({
         secretAccessKey: formData.secretAccessKey,
         bucket: formData.bucket || undefined,
         region: autoDetectRegion ? undefined : formData.region || undefined,
-        endpoint: useAwsDefault ? '' : formData.endpoint || undefined,
+        endpoint: useAwsDefault ? '' : formData.endpoint,
         connectionName: formData.connectionName.trim(),
         autoDetectRegion,
         connectionId: selectedConnectionId ?? undefined,

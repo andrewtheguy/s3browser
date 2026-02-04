@@ -375,8 +375,9 @@ export function s3Middleware(
     }
 
     // Create S3 client from connection (may auto-detect bucket region)
-    createS3ClientFromConnection(connection, bucket)
-      .then(({ client, credentials }) => {
+    void (async () => {
+      try {
+        const { client, credentials } = await createS3ClientFromConnection(connection, bucket);
         req.connectionId = connectionId;
         req.s3Connection = connection;
         req.s3Client = client;
@@ -386,11 +387,11 @@ export function s3Middleware(
         updateConnectionLastUsed(connectionId);
 
         next();
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error('Failed to create S3 client:', error);
         res.status(500).json({ error: 'Failed to initialize S3 connection' });
-      });
+      }
+    })();
   });
 }
 
