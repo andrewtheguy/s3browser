@@ -200,6 +200,58 @@ export async function moveObjects(
   return response;
 }
 
+/**
+ * Fetches folders that have live (non-deleted) content.
+ * Used to determine which folders are "effectively deleted" when viewing versions.
+ * Returns a Set of folder keys that have live content.
+ * Paginates up to maxItems to match the browse window limit.
+ *
+ * LIMITATION: This only fetches up to maxItems from the start of the listing.
+ * For browse windows beyond the first (e.g., items 5001+), folders may incorrectly
+ * appear as live even if all their contents are deleted. This is an acceptable
+ * trade-off since viewing versions beyond the first window is a rare edge case.
+ */
+export async function listLiveFolders(
+  connectionId: number,
+  bucket: string,
+  prefix: string = '',
+  maxItems: number,
+  signal?: AbortSignal
+): Promise<Set<string>> {
+  const liveFolders = new Set<string>();
+  let continuationToken: string | undefined;
+  let itemCount = 0;
+
+  do {
+    let url = `/objects/${connectionId}/${encodeURIComponent(bucket)}?prefix=${encodeURIComponent(prefix)}`;
+    if (continuationToken) {
+      url += `&continuationToken=${encodeURIComponent(continuationToken)}`;
+    }
+
+    const response = await apiGet<ListObjectsResponse>(url, signal);
+
+    if (!response || !Array.isArray(response.objects)) {
+      break;
+    }
+
+    // Extract folder keys
+    for (const obj of response.objects) {
+      if (obj.isFolder) {
+        liveFolders.add(obj.key);
+      }
+    }
+
+    itemCount += response.objects.length;
+    if (itemCount >= maxItems) {
+      break;
+    }
+
+    continuationToken = response.isTruncated ? response.continuationToken : undefined;
+  } while (continuationToken);
+
+  return liveFolders;
+}
+
 export interface ObjectMetadata {
   key: string;
   size?: number;

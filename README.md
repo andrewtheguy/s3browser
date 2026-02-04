@@ -193,6 +193,7 @@ All data is stored in `~/.s3browser/`:
 | Delete | No hard item cap overall; requests are batched in 1,000 objects (S3 DeleteObjects API limit). |
 | Copy / Move | No hard item cap overall; requests are batched in 1,000 operations per request. |
 | Download | Presigned URL TTL must be between 60 seconds (application-level validation) and 7 days (AWS S3 presigned URL limit) (default 1 hour if not provided). |
+| Show Versions | Deleted folder detection (folders where all contents are deleted) only works accurately in the first 5,000-item window. Folders in subsequent windows may appear as live even if all their contents are deleted. |
 
 ### Browse window caveats (examples)
 
