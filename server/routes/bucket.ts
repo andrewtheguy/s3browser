@@ -80,8 +80,8 @@ interface BucketInfo {
     algorithm?: string;
     kmsKeyId?: string;
   } | null;
-  encryptionError?: string;
-  lifecycleError?: string | null;
+  encryptionError: string | null;
+  lifecycleError: string | null;
   lifecycleRules: LifecycleRule[];
 }
 
@@ -98,6 +98,7 @@ router.get('/:connectionId/:bucket/info', s3Middleware, requireBucket, async (re
   const result: BucketInfo = {
     versioning: null,
     encryption: null,
+    encryptionError: null,
     lifecycleError: null,
     lifecycleRules: [],
   };
