@@ -243,7 +243,7 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
       return;
     }
 
-    // Collect folder prefixes and check if they contain only deleted objects
+    // Collect folder prefixes from version listing (includes folders with any content - live or deleted)
     const folderPrefixes: string[] = [];
     if (versionResponse.CommonPrefixes) {
       for (const prefixObj of versionResponse.CommonPrefixes) {
@@ -253,33 +253,34 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
       }
     }
 
-    // Check each folder to see if it contains only deleted objects
-    // by making a ListObjectsV2 call - if it returns empty, all content is deleted
-    const folderStatusPromises = folderPrefixes.map(async (folderPrefix) => {
+    // Make ONE call to get folders with live content
+    // Compare: version listing shows all folders, live listing shows only folders with non-deleted content
+    // If a folder appears in version listing but not in live listing, it's effectively deleted
+    let liveFolders = new Set<string>();
+    if (folderPrefixes.length > 0) {
       try {
-        const checkCommand = new ListObjectsV2Command({
+        const liveCommand = new ListObjectsV2Command({
           Bucket: bucket,
-          Prefix: folderPrefix,
-          MaxKeys: 1,
+          Prefix: prefix,
+          Delimiter: '/',
+          MaxKeys: 1000,
         });
-        const checkResponse = await client.send(checkCommand);
-        const hasLiveContent = (checkResponse.Contents?.length ?? 0) > 0;
-        return { prefix: folderPrefix, isEffectivelyDeleted: !hasLiveContent };
+        const liveResponse = await client.send(liveCommand);
+        liveFolders = new Set(
+          liveResponse.CommonPrefixes?.map(p => p.Prefix).filter((p): p is string => !!p) ?? []
+        );
       } catch {
-        // If we can't check, assume not deleted
-        return { prefix: folderPrefix, isEffectivelyDeleted: false };
+        // If we can't check, assume all folders are live
+        liveFolders = new Set(folderPrefixes);
       }
-    });
-
-    const folderStatuses = await Promise.all(folderStatusPromises);
-    const folderStatusMap = new Map(folderStatuses.map(s => [s.prefix, s.isEffectivelyDeleted]));
+    }
 
     for (const folderPrefix of folderPrefixes) {
       objects.push({
         key: folderPrefix,
         name: extractFileName(folderPrefix),
         isFolder: true,
-        isDeleteMarker: folderStatusMap.get(folderPrefix) ?? false,
+        isDeleteMarker: !liveFolders.has(folderPrefix),
       });
     }
 
