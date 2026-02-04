@@ -18,6 +18,7 @@ interface SessionInfo {
   region: string;
   bucket: string | null;
   endpoint: string | null;
+  profileName: string | null;
 }
 
 interface S3ClientState {
@@ -170,7 +171,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
       const response = await saveConnection(credentials);
       dispatch({
         type: 'CONNECT_SUCCESS',
-        session: { region: response.region, bucket: response.bucket, endpoint: response.endpoint },
+        session: { region: response.region, bucket: response.bucket, endpoint: response.endpoint, profileName: credentials.profileName },
         connectionId: response.connectionId,
       });
       return { success: true, connectionId: response.connectionId };
@@ -201,6 +202,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
           region: connection.region || 'us-east-1',
           bucket: bucket || connection.bucket,
           endpoint: connection.endpoint,
+          profileName: connection.profileName,
         },
         connectionId: connection.id,
       });
@@ -305,6 +307,7 @@ export function S3ClientProvider({ children }: { children: ReactNode }) {
     isConnected: state.isConnected,
     isLoggedIn: state.isLoggedIn,
     activeConnectionId: state.activeConnectionId,
+    activeProfileName: state.session?.profileName || null,
     isCheckingSession: state.isCheckingSession,
     requiresBucketSelection,
     error: state.error,
