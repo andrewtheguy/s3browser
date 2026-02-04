@@ -243,16 +243,44 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
       return;
     }
 
+    // Collect folder prefixes and check if they contain only deleted objects
+    const folderPrefixes: string[] = [];
     if (versionResponse.CommonPrefixes) {
       for (const prefixObj of versionResponse.CommonPrefixes) {
         if (prefixObj.Prefix) {
-          objects.push({
-            key: prefixObj.Prefix,
-            name: extractFileName(prefixObj.Prefix),
-            isFolder: true,
-          });
+          folderPrefixes.push(prefixObj.Prefix);
         }
       }
+    }
+
+    // Check each folder to see if it contains only deleted objects
+    // by making a ListObjectsV2 call - if it returns empty, all content is deleted
+    const folderStatusPromises = folderPrefixes.map(async (folderPrefix) => {
+      try {
+        const checkCommand = new ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: folderPrefix,
+          MaxKeys: 1,
+        });
+        const checkResponse = await client.send(checkCommand);
+        const hasLiveContent = (checkResponse.Contents?.length ?? 0) > 0;
+        return { prefix: folderPrefix, isEffectivelyDeleted: !hasLiveContent };
+      } catch {
+        // If we can't check, assume not deleted
+        return { prefix: folderPrefix, isEffectivelyDeleted: false };
+      }
+    });
+
+    const folderStatuses = await Promise.all(folderStatusPromises);
+    const folderStatusMap = new Map(folderStatuses.map(s => [s.prefix, s.isEffectivelyDeleted]));
+
+    for (const folderPrefix of folderPrefixes) {
+      objects.push({
+        key: folderPrefix,
+        name: extractFileName(folderPrefix),
+        isFolder: true,
+        isDeleteMarker: folderStatusMap.get(folderPrefix) ?? false,
+      });
     }
 
     if (versionResponse.Versions) {
@@ -275,11 +303,12 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
     if (versionResponse.DeleteMarkers) {
       for (const item of versionResponse.DeleteMarkers) {
         if (item.Key && item.Key !== prefix) {
+          const isFolderObject = item.Key.endsWith('/');
           objects.push({
             key: item.Key,
             name: extractFileName(item.Key),
             lastModified: item.LastModified?.toISOString(),
-            isFolder: false,
+            isFolder: isFolderObject,
             versionId: item.VersionId,
             isLatest: item.IsLatest,
             isDeleteMarker: true,
