@@ -3,10 +3,12 @@ import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
 import { getPresignedUrl } from '../services/api';
 import { isPreviewableFile, getMimeType, type EmbedType } from '../utils/previewUtils';
+import { formatFileSize } from '../utils/formatters';
 import type { S3Object } from '../types';
 
 // TTL for preview signed URLs (1 hour)
 const PREVIEW_TTL_SECONDS = 3600;
+const TEXT_PREVIEW_LIMIT_BYTES = 2 * 1024 * 1024;
 
 interface PreviewState {
   isOpen: boolean;
@@ -68,6 +70,23 @@ export function usePreview() {
           embedType: previewability.embedType,
           item,
           cannotPreviewReason: previewability.reason || 'Cannot preview this file',
+        });
+        return;
+      }
+
+      if (
+        previewability.embedType === 'text'
+        && typeof item.size === 'number'
+        && item.size > TEXT_PREVIEW_LIMIT_BYTES
+      ) {
+        setState({
+          isOpen: true,
+          isLoading: false,
+          error: null,
+          signedUrl: null,
+          embedType: previewability.embedType,
+          item,
+          cannotPreviewReason: `Text previews are limited to ${formatFileSize(TEXT_PREVIEW_LIMIT_BYTES)}. Download the file to view it.`,
         });
         return;
       }
