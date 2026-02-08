@@ -5,8 +5,6 @@
 #
 # Usage: ./install.sh [RELEASE_TAG]
 # Or set RELEASE_TAG environment variable
-#
-# Requires: gh CLI (https://cli.github.com/) for private repo authentication
 
 set -e
 
@@ -32,24 +30,22 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check for gh CLI
-check_gh_cli() {
-    if ! command -v gh >/dev/null 2>&1; then
-        print_error "GitHub CLI (gh) is required but not installed."
-        print_error "Install it from: https://cli.github.com/"
-        exit 1
-    fi
-
-    if ! gh auth status >/dev/null 2>&1; then
-        print_error "GitHub CLI is not authenticated. Run 'gh auth login' first."
-        exit 1
-    fi
-}
-
-# Fetch the latest release tag using gh CLI
+# Fetch the latest release tag using GitHub API
 get_latest_release_tag() {
+    local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
+    local release_json
+
+    if command -v curl >/dev/null 2>&1; then
+        release_json=$(curl -s "$api_url")
+    elif command -v wget >/dev/null 2>&1; then
+        release_json=$(wget -qO- "$api_url")
+    else
+        print_error "Neither curl nor wget is available. Please install one of them."
+        exit 1
+    fi
+
     local tag
-    tag=$(gh release view --repo "${REPO_OWNER}/${REPO_NAME}" --json tagName -q '.tagName' 2>/dev/null)
+    tag=$(echo "$release_json" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
 
     if [ -z "$tag" ]; then
         print_error "Could not find a latest release on GitHub"
@@ -59,20 +55,30 @@ get_latest_release_tag() {
     echo "$tag"
 }
 
-# Extract SHA-256 checksum for a specific binary from release
-get_expected_checksum() {
+# Fetch full release info (including asset checksums) from GitHub API
+get_release_info() {
     local tag="$1"
+    local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${tag}"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -s "$api_url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$api_url"
+    else
+        print_error "Neither curl nor wget is available."
+        return 1
+    fi
+}
+
+# Extract SHA-256 checksum from release JSON for a specific binary
+get_expected_checksum() {
+    local release_json="$1"
     local binary_name="$2"
 
-    # Use gh api with jq to extract the digest for the matching asset
-    local digest
-    digest=$(gh api "repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${tag}" \
-        --jq ".assets[] | select(.name == \"${binary_name}\") | .digest" 2>/dev/null)
-
-    # Extract just the hash from "sha256:..."
-    if [ -n "$digest" ]; then
-        echo "$digest" | sed 's/^sha256://'
-    fi
+    # Extract sha256 hash for matching asset
+    # The digest field appears ~35 lines after the name field due to nested uploader object
+    echo "$release_json" | grep -A40 "\"name\": \"${binary_name}\"" | \
+        grep '"digest"' | head -1 | grep -o 'sha256:[a-f0-9]*' | cut -d: -f2
 }
 
 # Compute SHA-256 checksum of a file (cross-platform)
@@ -184,37 +190,39 @@ get_binary_name() {
     INSTALL_NAME="s3browser"
 }
 
-# Download binary using gh CLI
+# Download binary and verify checksum
 download_binary() {
+    local base_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${RELEASE_TAG}"
+    local url="${base_url}/${BINARY_NAME}"
     local output_path="$1"
-    local output_dir
-    output_dir=$(dirname "$output_path")
 
-    print_info "Downloading ${BINARY_NAME} from release ${RELEASE_TAG}"
+    print_info "Downloading ${BINARY_NAME} from ${url}"
 
-    if ! gh release download "${RELEASE_TAG}" \
-        --repo "${REPO_OWNER}/${REPO_NAME}" \
-        --pattern "${BINARY_NAME}" \
-        --dir "$output_dir" \
-        --clobber; then
-        print_error "Failed to download binary"
-        exit 1
-    fi
-
-    # gh downloads to output_dir/BINARY_NAME, move if needed
-    if [ "$output_dir/${BINARY_NAME}" != "$output_path" ]; then
-        mv "$output_dir/${BINARY_NAME}" "$output_path"
-    fi
-
-    # Verify checksum if available
-    if [ -n "$EXPECTED_CHECKSUM" ]; then
-        if ! verify_checksum "$output_path" "$EXPECTED_CHECKSUM"; then
-            print_error "Binary integrity check failed. Aborting."
-            rm -f "$output_path"
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -L -o "$output_path" "$url"; then
+            print_error "Failed to download binary"
+            exit 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! wget -O "$output_path" "$url"; then
+            print_error "Failed to download binary"
             exit 1
         fi
     else
-        print_warn "No checksum available for verification (skipping)"
+        print_error "Neither curl nor wget is available. Please install one of them."
+        exit 1
+    fi
+
+    # Verify checksum
+    if [ -z "$EXPECTED_CHECKSUM" ]; then
+        print_error "No checksum available. Aborting."
+        rm -f "$output_path"
+        exit 1
+    fi
+    if ! verify_checksum "$output_path" "$EXPECTED_CHECKSUM"; then
+        print_error "Binary integrity check failed. Aborting."
+        rm -f "$output_path"
+        exit 1
     fi
 }
 
@@ -357,7 +365,7 @@ show_usage() {
     echo ""
     echo "Examples:"
     echo "  $0                       # Install latest s3browser"
-    echo "  $0 v1.0.0                # Install specific release"
+    echo "  $0 v0.0.1                # Install specific release"
     echo "  $0 --download-only       # Download latest to current directory"
     echo ""
     echo "Supported platforms: Linux (x64, arm64), macOS (x64, arm64)"
@@ -387,12 +395,21 @@ install() {
     print_info "Platform detected: ${OS}-${ARCH}"
     print_info "Binary name: ${BINARY_NAME}"
 
-    # Fetch checksum for verification
-    print_info "Fetching checksum..."
-    EXPECTED_CHECKSUM=$(get_expected_checksum "$RELEASE_TAG" "$BINARY_NAME")
-    if [ -n "$EXPECTED_CHECKSUM" ]; then
-        print_info "Expected checksum: ${EXPECTED_CHECKSUM:0:16}..."
+    # Fetch release info for checksum verification
+    print_info "Fetching release information..."
+    RELEASE_JSON=$(get_release_info "$RELEASE_TAG")
+
+    if [ -z "$RELEASE_JSON" ] || echo "$RELEASE_JSON" | grep -q '"message": "Not Found"'; then
+        print_error "Could not fetch release info from GitHub. Cannot verify binary integrity."
+        exit 1
     fi
+
+    EXPECTED_CHECKSUM=$(get_expected_checksum "$RELEASE_JSON" "$BINARY_NAME")
+    if [ -z "$EXPECTED_CHECKSUM" ]; then
+        print_error "No checksum found for ${BINARY_NAME} in release. Cannot verify binary integrity."
+        exit 1
+    fi
+    print_info "Expected checksum: ${EXPECTED_CHECKSUM:0:16}..."
 
     if [ "$DOWNLOAD_ONLY" = true ]; then
         download_only
@@ -406,7 +423,6 @@ install() {
 
 # Main execution
 main() {
-    check_gh_cli
     parse_args "$@"
 
     if [ "$DOWNLOAD_ONLY" = true ]; then
