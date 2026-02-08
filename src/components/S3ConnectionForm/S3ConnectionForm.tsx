@@ -264,7 +264,7 @@ export function S3ConnectionForm({
           onOpenChange={handleSelectOpenChange}
           disabled={connectionsLoading}
         >
-          <SelectTrigger id="connection-select">
+          <SelectTrigger id="connection-select" className="text-left">
             <SelectValue placeholder="Select a profile" />
           </SelectTrigger>
           <SelectContent>
