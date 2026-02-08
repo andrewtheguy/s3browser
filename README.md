@@ -1,6 +1,6 @@
 # S3 Browser
 
-A web-based file manager for AWS S3 and S3-compatible storage services (MinIO, DigitalOcean Spaces, etc.).
+A web-based file manager for AWS S3 and S3-compatible storage services (Backblaze B2, GarageHQ, etc.).
 
 > [!CAUTION]
 > This application is designed for use on **private networks** or **trusted devices** only. It uses a single shared password for authentication and is not intended for public internet deployment. Do not expose this application to untrusted networks.
