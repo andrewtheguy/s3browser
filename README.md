@@ -31,16 +31,14 @@ Object encryption reporting varies by vendor. If the object metadata does not in
 
 ## Quick Install (Linux & macOS)
 
-Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authenticated.
-
 ```bash
-gh api repos/andrewtheguy/s3browser/contents/install.sh --jq '.content' | base64 -d | bash
+curl -sSL https://andrewtheguy.github.io/s3browser/install.sh | bash
 ```
 
 To install a specific version:
 
 ```bash
-gh api repos/andrewtheguy/s3browser/contents/install.sh --jq '.content' | base64 -d | bash -s v1.0.0
+curl -sSL https://andrewtheguy.github.io/s3browser/install.sh | bash -s v0.0.1
 ```
 
 ## Tech Stack
