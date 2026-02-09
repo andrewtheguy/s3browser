@@ -15,7 +15,7 @@ export const router = createBrowserRouter([
         element: <HomePage />,
       },
       {
-        path: 'connection/:connectionId/select-bucket',
+        path: 'connection/:connectionId/browse',
         element: (
           <AuthGuard>
             <SelectBucketPage />
