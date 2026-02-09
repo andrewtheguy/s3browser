@@ -99,9 +99,9 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const displayError = error || contextError;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="max-w-[500px] w-full">
-        <CardContent className="p-8">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 md:py-8">
+      <Card className="max-w-[500px] w-full md:h-[calc(100vh-4rem)]">
+        <CardContent className="p-8 h-full flex flex-col">
           <div className="flex items-center justify-center mb-6">
             <BucketIcon className="h-10 w-10 mr-2 text-primary" />
             <h1 className="text-2xl font-bold">
@@ -134,7 +134,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
           ) : (
             <>
               {!showManualInput && buckets.length > 0 && (
-                <>
+                <div className="flex flex-col min-h-0 flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm text-muted-foreground">
                       Available Buckets ({buckets.length})
@@ -149,19 +149,19 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
                       <RefreshCw className="h-4 w-4" />
                     </Button>
                   </div>
-                  <ScrollArea className="h-[300px] rounded-md border mb-4">
+                  <ScrollArea className="min-h-[200px] flex-1 rounded-md border mb-4">
                     <div className="divide-y">
                       {buckets.map((bucket) => (
                         <button
                           key={bucket.name}
                           onClick={() => handleSelectBucket(bucket.name)}
                           disabled={isSelecting}
-                          className="w-full text-left px-4 py-3 hover:bg-muted transition-colors disabled:opacity-50"
+                          className="w-full text-left px-4 py-3 hover:bg-muted transition-colors disabled:opacity-50 flex items-baseline justify-between gap-2"
                         >
                           <p className="font-medium">{bucket.name}</p>
                           {bucket.creationDate && (
-                            <p className="text-xs text-muted-foreground">
-                              Created: {new Date(bucket.creationDate).toLocaleDateString()}
+                            <p className="text-xs text-muted-foreground shrink-0">
+                              {new Date(bucket.creationDate).toLocaleDateString()}
                             </p>
                           )}
                         </button>
@@ -171,12 +171,11 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
                   <Button
                     variant="link"
                     onClick={() => setShowManualInput(true)}
-                    className="mb-4"
                     disabled={isSelecting}
                   >
                     Enter bucket name manually
                   </Button>
-                </>
+                </div>
               )}
 
               {(showManualInput || buckets.length === 0) && (
@@ -224,7 +223,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
             </>
           )}
 
-          <Separator className="my-6" />
+          <Separator className="mt-auto mb-6" />
 
           <div className="flex gap-2">
             <Button
