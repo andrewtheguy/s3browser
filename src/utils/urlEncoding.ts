@@ -48,7 +48,7 @@ export function buildBrowseUrl(connectionId: number, bucket: string, path: strin
  * Build a select-bucket URL for a given connection
  */
 export function buildSelectBucketUrl(connectionId: number): string {
-  return `/connection/${connectionId}/select-bucket`;
+  return `/connection/${connectionId}/browse`;
 }
 
 /**
