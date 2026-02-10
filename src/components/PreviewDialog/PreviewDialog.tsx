@@ -58,7 +58,7 @@ const buildMediaSrcdoc = (
 
   doc.head.append(style);
   doc.body.append(mediaElement);
-  return `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
+  return new XMLSerializer().serializeToString(doc);
 };
 
 interface PreviewDialogProps {
