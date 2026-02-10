@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Download, File } from 'lucide-react';
+import { Download, ExternalLink, File } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -46,11 +46,9 @@ const buildMediaSrcdoc = (
   }
 };
 
-const getSandboxValue = (embedType: EmbedType): string => {
-  // Chrome's native PDF viewer needs allow-same-origin to load the document.
-  // This is safe without allow-scripts: no JS can execute, so the origin
-  // access cannot be exploited programmatically.
-  if (embedType === 'pdf') return 'allow-same-origin';
+const getSandboxValue = (embedType: EmbedType): string | undefined => {
+  // PDFs are opened in a separate tab, so iframe sandbox is only needed for non-PDF previews.
+  if (embedType === 'pdf') return undefined;
   return '';
 };
 
@@ -137,6 +135,32 @@ export function PreviewDialog({
 
     if (signedUrl !== null) {
       const title = item?.name || 'Preview';
+
+      if (embedType === 'pdf') {
+        return (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+            <File className="h-16 w-16 mb-2 opacity-50" />
+            <h3 className="text-lg font-semibold mb-1">Open PDF Preview</h3>
+            <p className="text-sm text-center">
+              PDF previews open in a new browser tab.
+            </p>
+            <Button
+              asChild
+              className="mt-6"
+            >
+              <a
+                href={signedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in New Tab
+              </a>
+            </Button>
+          </div>
+        );
+      }
 
       if (embedType === 'image' || embedType === 'video' || embedType === 'audio') {
         return (
