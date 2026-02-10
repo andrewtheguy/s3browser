@@ -28,7 +28,7 @@ Preview functionality is implemented in:
 - Larger text files are not rendered inline and must be downloaded.
 
 4. Short-lived presigned URLs for preview
-- Preview requests use presigned URLs with a 1-hour TTL.
+- Preview requests use presigned URLs with a client default of 1 hour (3600 s); the server accepts a configurable range of 60–604800 s (1 minute to 7 days).
 - URLs are generated server-side; the client does not construct S3 signatures.
 
 5. Rendering behavior by type
