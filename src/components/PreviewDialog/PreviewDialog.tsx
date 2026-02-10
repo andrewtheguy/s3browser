@@ -18,33 +18,47 @@ const cleanupIframe = (iframe: HTMLIFrameElement | null) => {
   iframe.removeAttribute('srcDoc');
 };
 
-const escapeHtmlAttr = (str: string): string => {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-};
-
 const buildMediaSrcdoc = (
   embedType: 'image' | 'video' | 'audio',
   signedUrl: string,
   alt: string,
 ): string => {
-  const url = escapeHtmlAttr(signedUrl);
-  const altText = escapeHtmlAttr(alt);
+  const doc = document.implementation.createHTMLDocument('');
   const baseStyle =
     'body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:transparent}';
+  const style = doc.createElement('style');
+  let mediaElement: HTMLImageElement | HTMLVideoElement | HTMLAudioElement;
 
   switch (embedType) {
-    case 'image':
-      return `<!DOCTYPE html><html><head><style>${baseStyle}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${url}" alt="${altText}" /></body></html>`;
-    case 'video':
-      return `<!DOCTYPE html><html><head><style>${baseStyle}video{max-width:100%;max-height:100vh}</style></head><body><video controls src="${url}"></video></body></html>`;
-    case 'audio':
-      return `<!DOCTYPE html><html><head><style>${baseStyle}audio{width:100%;max-width:500px}</style></head><body><audio controls src="${url}"></audio></body></html>`;
+    case 'image': {
+      style.textContent = `${baseStyle}img{max-width:100%;max-height:100vh;object-fit:contain}`;
+      const image = doc.createElement('img');
+      image.src = signedUrl;
+      image.alt = alt;
+      mediaElement = image;
+      break;
+    }
+    case 'video': {
+      style.textContent = `${baseStyle}video{max-width:100%;max-height:100vh}`;
+      const video = doc.createElement('video');
+      video.controls = true;
+      video.src = signedUrl;
+      mediaElement = video;
+      break;
+    }
+    case 'audio': {
+      style.textContent = `${baseStyle}audio{width:100%;max-width:500px}`;
+      const audio = doc.createElement('audio');
+      audio.controls = true;
+      audio.src = signedUrl;
+      mediaElement = audio;
+      break;
+    }
   }
+
+  doc.head.append(style);
+  doc.body.append(mediaElement);
+  return new XMLSerializer().serializeToString(doc);
 };
 
 interface PreviewDialogProps {
