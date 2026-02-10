@@ -37,10 +37,10 @@ Preview functionality is implemented in:
 - Reason: Chrome blocks sandboxed PDF iframes ("This page has been blocked by Chrome"), so PDF preview is intentionally routed to a separate tab.
 - Preview iframes use `referrerPolicy="no-referrer"`.
 
-6. Escaping in generated `srcDoc`
-- Media previews rendered through `srcDoc` escape HTML attribute-sensitive characters:
-- `&`, `"`, `'`, `<`, `>`
-- This prevents attribute/markup injection when embedding signed URLs and filenames.
+6. DOM construction for generated `srcDoc`
+- Media previews are built using `DOMImplementation.createHTMLDocument` and serialized with `XMLSerializer`.
+- Signed URLs and filenames are assigned via DOM property setters (e.g. `element.src`, `element.alt`), so the browser handles all necessary escaping implicitly.
+- This prevents attribute/markup injection without relying on manual escape functions.
 
 7. Request lifecycle safety
 - In-flight preview requests are aborted when a new preview starts or dialog closes.
