@@ -22,6 +22,7 @@ const escapeHtmlAttr = (str: string): string => {
   return str
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 };
@@ -44,12 +45,6 @@ const buildMediaSrcdoc = (
     case 'audio':
       return `<!DOCTYPE html><html><head><style>${baseStyle}audio{width:100%;max-width:500px}</style></head><body><audio controls src="${url}"></audio></body></html>`;
   }
-};
-
-const getSandboxValue = (embedType: EmbedType): string | undefined => {
-  // PDFs are opened in a separate tab, so iframe sandbox is only needed for non-PDF previews.
-  if (embedType === 'pdf') return undefined;
-  return '';
 };
 
 interface PreviewDialogProps {
@@ -166,7 +161,7 @@ export function PreviewDialog({
         return (
           <iframe
             ref={iframeRef}
-            sandbox={getSandboxValue(embedType)}
+            sandbox=""
             srcDoc={buildMediaSrcdoc(embedType, signedUrl, title)}
             referrerPolicy="no-referrer"
             title={title}
@@ -175,11 +170,11 @@ export function PreviewDialog({
         );
       }
 
-      // Text and PDF: load directly via src in sandboxed iframe
+      // Text: load directly via src in sandboxed iframe
       return (
         <iframe
           ref={iframeRef}
-          sandbox={getSandboxValue(embedType)}
+          sandbox=""
           src={signedUrl}
           referrerPolicy="no-referrer"
           title={title}
