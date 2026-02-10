@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { LogOut, RefreshCw, ArrowLeftRight } from 'lucide-react';
+import { LogOut, RefreshCw, ArrowLeftRight, Search } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const [showManualInput, setShowManualInput] = useState(false);
   const [manualBucket, setManualBucket] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const didClearRegionCacheRef = useRef(false);
 
   useEffect(() => {
@@ -98,18 +99,22 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
 
   const displayError = error || contextError;
 
+  const filteredBuckets = searchQuery
+    ? buckets.filter((b) => b.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : buckets;
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 md:py-8">
       <Card className="max-w-[500px] w-full md:h-[calc(100vh-4rem)]">
         <CardContent className="p-8 h-full flex flex-col">
-          <div className="flex items-center justify-center mb-6">
+          <div className="flex items-center justify-center mb-2">
             <BucketIcon className="h-10 w-10 mr-2 text-primary" />
             <h1 className="text-2xl font-bold">
               Select Bucket
             </h1>
           </div>
 
-          <p className="text-sm text-muted-foreground text-center mb-6">
+          <p className="text-sm text-muted-foreground text-center mb-3">
             Choose a bucket to browse or enter one manually
           </p>
 
@@ -137,7 +142,9 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
                 <div className="flex flex-col min-h-0 flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm text-muted-foreground">
-                      Available Buckets ({buckets.length})
+                      {searchQuery
+                        ? `${filteredBuckets.length} of ${buckets.length} buckets`
+                        : `Available Buckets (${buckets.length})`}
                     </p>
                     <Button
                       variant="ghost"
@@ -149,9 +156,18 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
                       <RefreshCw className="h-4 w-4" />
                     </Button>
                   </div>
+                  <div className="relative mb-2">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter buckets..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
                   <ScrollArea className="min-h-[200px] flex-1 rounded-md border mb-4">
                     <div className="divide-y">
-                      {buckets.map((bucket) => (
+                      {filteredBuckets.map((bucket) => (
                         <button
                           key={bucket.name}
                           onClick={() => handleSelectBucket(bucket.name)}
