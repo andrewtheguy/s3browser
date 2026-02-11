@@ -57,16 +57,16 @@ const MIME_TYPES: Record<string, string> = {
   // PDF
   pdf: 'application/pdf',
   // Text types
-  txt: 'text/plain',
-  md: 'text/markdown',
+  txt: 'text/plain;charset=utf-8',
+  md: 'text/markdown;charset=utf-8',
   // Force CSV previews to render inline as plain text to avoid browser download behavior.
-  csv: 'text/plain',
+  csv: 'text/plain;charset=utf-8',
   json: 'application/json',
   // Force XML previews to render as plain text to avoid inline rendering in the preview dialog.
-  xml: 'text/plain',
+  xml: 'text/plain;charset=utf-8',
   // Force HTML previews to render as plain text to avoid executing markup in the preview dialog.
-  html: 'text/plain',
-  htm: 'text/plain',
+  html: 'text/plain;charset=utf-8',
+  htm: 'text/plain;charset=utf-8',
   css: 'text/css',
   js: 'text/javascript',
   ts: 'application/typescript',
