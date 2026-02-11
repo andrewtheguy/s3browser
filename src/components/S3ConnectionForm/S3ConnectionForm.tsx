@@ -269,15 +269,11 @@ export function S3ConnectionForm({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="new">New Connection Profile</SelectItem>
-            {connections.map((connection) => (
-              <SelectItem key={connection.id} value={String(connection.id)}>
-                <div className="flex items-center justify-between w-full gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{connection.profileName}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {connection.bucket ? `${connection.bucket} @ ${connection.endpoint || 'AWS'}` : (connection.endpoint || 'AWS')}
-                    </div>
-                  </div>
+            {[...connections].sort((a, b) => a.profileName.localeCompare(b.profileName)).map((connection) => (
+              <SelectItem
+                key={connection.id}
+                value={String(connection.id)}
+                suffix={
                   <Button
                     variant="ghost"
                     size="icon"
@@ -286,6 +282,13 @@ export function S3ConnectionForm({
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
+                }
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{connection.profileName}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {connection.bucket ? `${connection.bucket} @ ${connection.endpoint || 'AWS'}` : (connection.endpoint || 'AWS')}
+                  </div>
                 </div>
               </SelectItem>
             ))}
