@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { Trash2, ArrowRight } from 'lucide-react';
+import { Trash2, ArrowRight, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,6 +59,9 @@ export function S3ConnectionForm({
   const [selectedConnectionId, setSelectedConnectionId] = useState<number | null>(null);
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const [wantsToChangeSecretKey, setWantsToChangeSecretKey] = useState(false);
+  const [searchMode, setSearchMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [awsOnly, setAwsOnly] = useState(false);
   const [useAwsDefault, setUseAwsDefault] = useState(true);
   const [formData, setFormData] = useState({
     profileName: '',
@@ -200,6 +203,26 @@ export function S3ConnectionForm({
     }
   }, []);
 
+  const sortedConnections = [...connections].sort((a, b) =>
+    a.profileName.localeCompare(b.profileName),
+  );
+
+  const filteredConnections = sortedConnections.filter((c) => {
+    if (awsOnly && c.endpoint) return false;
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      c.profileName.toLowerCase().includes(q) ||
+      (c.endpoint || '').toLowerCase().includes(q)
+    );
+  });
+
+  const exitSearchMode = () => {
+    setSearchMode(false);
+    setSearchQuery('');
+    setAwsOnly(false);
+  };
+
   // Secret key is optional when using an existing saved connection (unless user wants to change it)
   const isExistingConnection = selectedConnectionId !== null;
   const secretKeyRequired = !isExistingConnection || wantsToChangeSecretKey;
@@ -258,39 +281,133 @@ export function S3ConnectionForm({
 
       <div className="space-y-2 mb-4">
         <Label htmlFor="connection-select">Saved Connection Profile</Label>
-        <Select
-          value={selectedConnectionId !== null ? String(selectedConnectionId) : 'new'}
-          onValueChange={handleConnectionChange}
-          onOpenChange={handleSelectOpenChange}
-          disabled={connectionsLoading}
-        >
-          <SelectTrigger id="connection-select" className="text-left">
-            <SelectValue placeholder="Select a profile" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="new">New Connection Profile</SelectItem>
-            {connections.map((connection) => (
-              <SelectItem key={connection.id} value={String(connection.id)}>
-                <div className="flex items-center justify-between w-full gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{connection.profileName}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {connection.bucket ? `${connection.bucket} @ ${connection.endpoint || 'AWS'}` : (connection.endpoint || 'AWS')}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0"
-                    onClick={(e) => handleDeleteConnection(e, connection.id, connection.profileName)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+        {searchMode ? (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search by name or endpoint..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Close search"
+                onClick={exitSearchMode}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="awsOnlyFilter"
+                checked={awsOnly}
+                onCheckedChange={(checked) => setAwsOnly(checked === true)}
+              />
+              <Label htmlFor="awsOnlyFilter" className="cursor-pointer text-sm">
+                AWS only
+              </Label>
+            </div>
+            <div className="max-h-48 overflow-y-auto rounded-md border">
+              {filteredConnections.length === 0 ? (
+                <div className="p-3 text-sm text-muted-foreground text-center">
+                  No matching connections
                 </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              ) : (
+                filteredConnections.map((connection) => (
+                  <div
+                    key={connection.id}
+                    role="button"
+                    tabIndex={0}
+                    className="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-accent"
+                    onClick={() => {
+                      handleConnectionChange(String(connection.id));
+                      exitSearchMode();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleConnectionChange(String(connection.id));
+                        exitSearchMode();
+                      }
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-sm">{connection.profileName}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {connection.bucket ? `${connection.bucket} @ ${connection.endpoint || 'AWS'}` : (connection.endpoint || 'AWS')}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0"
+                      aria-label={`Delete connection ${connection.profileName}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleDeleteConnection(e, connection.id, connection.profileName);
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Select
+              value={selectedConnectionId !== null ? String(selectedConnectionId) : 'new'}
+              onValueChange={handleConnectionChange}
+              onOpenChange={handleSelectOpenChange}
+              disabled={connectionsLoading}
+            >
+              <SelectTrigger id="connection-select" className="text-left flex-1">
+                <SelectValue placeholder="Select a profile" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="new">New Connection Profile</SelectItem>
+                {sortedConnections.map((connection) => (
+                  <SelectItem
+                    key={connection.id}
+                    value={String(connection.id)}
+                    suffix={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        aria-label={`Delete connection ${connection.profileName}`}
+                        onClick={(e) => handleDeleteConnection(e, connection.id, connection.profileName)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    }
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{connection.profileName}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {connection.bucket ? `${connection.bucket} @ ${connection.endpoint || 'AWS'}` : (connection.endpoint || 'AWS')}
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setSearchMode(true)}
+              disabled={connectionsLoading}
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
