@@ -203,17 +203,19 @@ export function S3ConnectionForm({
     }
   }, []);
 
-  const filteredConnections = connections
-    .filter((c) => {
-      if (awsOnly && c.endpoint) return false;
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        c.profileName.toLowerCase().includes(q) ||
-        (c.endpoint || '').toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => a.profileName.localeCompare(b.profileName));
+  const sortedConnections = [...connections].sort((a, b) =>
+    a.profileName.localeCompare(b.profileName),
+  );
+
+  const filteredConnections = sortedConnections.filter((c) => {
+    if (awsOnly && c.endpoint) return false;
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      c.profileName.toLowerCase().includes(q) ||
+      (c.endpoint || '').toLowerCase().includes(q)
+    );
+  });
 
   const exitSearchMode = () => {
     setSearchMode(false);
@@ -293,6 +295,7 @@ export function S3ConnectionForm({
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label="Close search"
                 onClick={exitSearchMode}
               >
                 <X className="h-4 w-4" />
@@ -317,10 +320,19 @@ export function S3ConnectionForm({
                 filteredConnections.map((connection) => (
                   <div
                     key={connection.id}
+                    role="button"
+                    tabIndex={0}
                     className="flex items-center justify-between gap-2 px-3 py-2 cursor-pointer hover:bg-accent"
                     onClick={() => {
                       handleConnectionChange(String(connection.id));
                       exitSearchMode();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleConnectionChange(String(connection.id));
+                        exitSearchMode();
+                      }
                     }}
                   >
                     <div className="min-w-0 flex-1">
@@ -333,6 +345,7 @@ export function S3ConnectionForm({
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 shrink-0"
+                      aria-label={`Delete connection ${connection.profileName}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         void handleDeleteConnection(e, connection.id, connection.profileName);
@@ -358,7 +371,7 @@ export function S3ConnectionForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="new">New Connection Profile</SelectItem>
-                {[...connections].sort((a, b) => a.profileName.localeCompare(b.profileName)).map((connection) => (
+                {sortedConnections.map((connection) => (
                   <SelectItem
                     key={connection.id}
                     value={String(connection.id)}
@@ -367,6 +380,7 @@ export function S3ConnectionForm({
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6 shrink-0"
+                        aria-label={`Delete connection ${connection.profileName}`}
                         onClick={(e) => handleDeleteConnection(e, connection.id, connection.profileName)}
                       >
                         <Trash2 className="h-3 w-3" />
