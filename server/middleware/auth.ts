@@ -11,6 +11,8 @@ import {
 
 // Cache for bucket regions: Map<"connectionId:bucket", region>
 const bucketRegionCache = new Map<string, string>();
+// In-flight region detection promises to deduplicate concurrent requests
+const regionDetectionInFlight = new Map<string, Promise<string>>();
 
 export function clearBucketRegionCache(): void {
   bucketRegionCache.clear();
@@ -94,17 +96,32 @@ export async function createS3ClientFromConnection(
     if (cachedRegion) {
       region = cachedRegion;
     } else {
+      // Deduplicate concurrent region detection for the same bucket.
+      // When multiple requests arrive simultaneously (e.g. object listing,
+      // versioning probe, bucket info), only one GetBucketLocation call
+      // is made and the others await the same promise.
+      const existing = regionDetectionInFlight.get(cacheKey);
+      const detection = existing ?? getBucketRegion(
+        connection.access_key_id,
+        secretAccessKey,
+        effectiveBucket,
+        endpoint
+      );
+      if (!existing) {
+        regionDetectionInFlight.set(cacheKey, detection);
+      }
       try {
-        region = await getBucketRegion(
-          connection.access_key_id,
-          secretAccessKey,
-          effectiveBucket,
-          endpoint
-        );
+        region = await detection;
         bucketRegionCache.set(cacheKey, region);
       } catch (error) {
         // Fall back to connection region on error
         console.warn('Failed to auto-detect bucket region, using connection region:', error);
+      } finally {
+        // Only remove the in-flight entry if it still points to our promise,
+        // so a newer detection (after a cache clear) isn't accidentally removed.
+        if (!existing && regionDetectionInFlight.get(cacheKey) === detection) {
+          regionDetectionInFlight.delete(cacheKey);
+        }
       }
     }
   }
@@ -376,23 +393,20 @@ export function s3Middleware(
     }
 
     // Create S3 client from connection (may auto-detect bucket region)
-    void (async () => {
-      try {
-        const { client, credentials } = await createS3ClientFromConnection(connection, bucket);
-        req.connectionId = connectionId;
-        req.s3Connection = connection;
-        req.s3Client = client;
-        req.s3Credentials = credentials;
+    createS3ClientFromConnection(connection, bucket).then(({ client, credentials }) => {
+      req.connectionId = connectionId;
+      req.s3Connection = connection;
+      req.s3Client = client;
+      req.s3Credentials = credentials;
 
-        // Update last used timestamp
-        updateConnectionLastUsed(connectionId);
+      // Update last used timestamp
+      updateConnectionLastUsed(connectionId);
 
-        next();
-      } catch (error) {
-        console.error('Failed to create S3 client:', error);
-        res.status(500).json({ error: 'Failed to initialize S3 connection' });
-      }
-    })();
+      next();
+    }).catch((error) => {
+      console.error('Failed to create S3 client:', error);
+      res.status(500).json({ error: 'Failed to initialize S3 connection' });
+    });
   });
 }
 
