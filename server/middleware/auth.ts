@@ -96,28 +96,32 @@ export async function createS3ClientFromConnection(
     if (cachedRegion) {
       region = cachedRegion;
     } else {
+      // Deduplicate concurrent region detection for the same bucket.
+      // When multiple requests arrive simultaneously (e.g. object listing,
+      // versioning probe, bucket info), only one GetBucketLocation call
+      // is made and the others await the same promise.
+      const existing = regionDetectionInFlight.get(cacheKey);
+      const detection = existing ?? getBucketRegion(
+        connection.access_key_id,
+        secretAccessKey,
+        effectiveBucket,
+        endpoint
+      );
+      if (!existing) {
+        regionDetectionInFlight.set(cacheKey, detection);
+      }
       try {
-        // Deduplicate concurrent region detection for the same bucket.
-        // When multiple requests arrive simultaneously (e.g. object listing,
-        // versioning probe, bucket info), only one GetBucketLocation call
-        // is made and the others await the same promise.
-        let detection = regionDetectionInFlight.get(cacheKey);
-        if (!detection) {
-          detection = getBucketRegion(
-            connection.access_key_id,
-            secretAccessKey,
-            effectiveBucket,
-            endpoint
-          );
-          regionDetectionInFlight.set(cacheKey, detection);
-        }
         region = await detection;
         bucketRegionCache.set(cacheKey, region);
       } catch (error) {
         // Fall back to connection region on error
         console.warn('Failed to auto-detect bucket region, using connection region:', error);
       } finally {
-        regionDetectionInFlight.delete(cacheKey);
+        // Only remove the in-flight entry if it still points to our promise,
+        // so a newer detection (after a cache clear) isn't accidentally removed.
+        if (!existing && regionDetectionInFlight.get(cacheKey) === detection) {
+          regionDetectionInFlight.delete(cacheKey);
+        }
       }
     }
   }
