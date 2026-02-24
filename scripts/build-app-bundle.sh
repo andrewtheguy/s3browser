@@ -18,9 +18,9 @@ STANDALONE_BUILD=true bun run build:client
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR"
 
-# 2. Build the Swift tray binary
-echo "==> Compiling tray binary..."
-swiftc -framework Cocoa -framework WebKit -O -o "$MACOS_DIR/S3BrowserTray" "$ROOT_DIR/src/tray/tray.swift"
+# 2. Build the Swift app binary
+echo "==> Compiling app binary..."
+swiftc -framework Cocoa -framework WebKit -O -o "$MACOS_DIR/S3BrowserApp" "$ROOT_DIR/src/tray/tray.swift"
 
 # 3. Copy or compile the server binary
 if [ -n "${S3BROWSER_BIN:-}" ]; then
@@ -36,7 +36,7 @@ else
     --define "BUILD_VERSION='\"$VERSION\"'"
 fi
 
-chmod +x "$MACOS_DIR/S3BrowserTray" "$MACOS_DIR/s3browser"
+chmod +x "$MACOS_DIR/S3BrowserApp" "$MACOS_DIR/s3browser"
 
 # 4. Generate app icon from pre-rendered PNG (optional)
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
@@ -65,20 +65,14 @@ else
   echo "==> No logo found at $LOGO_PNG, skipping icon generation"
 fi
 
-# 5. Copy tray icon SVG
-TRAY_ICON_SVG="$ROOT_DIR/src/tray/tray-icon.svg"
-if [ -f "$TRAY_ICON_SVG" ]; then
-  cp "$TRAY_ICON_SVG" "$RESOURCES_DIR/tray-icon.svg"
-fi
-
-# 6. Write Info.plist
+# 5. Write Info.plist
 cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>S3BrowserTray</string>
+    <string>S3BrowserApp</string>
     <key>CFBundleIdentifier</key>
     <string>com.s3browser.app</string>
     <key>CFBundleName</key>
@@ -93,8 +87,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
-    <key>LSUIElement</key>
-    <false/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
 </dict>
 </plist>
 PLIST

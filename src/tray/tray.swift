@@ -2,8 +2,7 @@ import Cocoa
 import Foundation
 import WebKit
 
-class TrayDelegate: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem!
+class AppDelegate: NSObject, NSApplicationDelegate {
     private let serverProcess: Process
     private let url: URL
     private var window: NSWindow?
@@ -17,44 +16,25 @@ class TrayDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMainMenu()
-
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-
-        if let button = statusItem.button {
-            let trayBin = URL(fileURLWithPath: CommandLine.arguments[0])
-            let resourcesDir = trayBin.deletingLastPathComponent().deletingLastPathComponent()
-                .appendingPathComponent("Resources")
-            let svgPath = resourcesDir.appendingPathComponent("tray-icon.svg").path
-            if FileManager.default.fileExists(atPath: svgPath),
-               let svgData = FileManager.default.contents(atPath: svgPath),
-               let image = NSImage(data: svgData) {
-                image.isTemplate = true
-                image.size = NSSize(width: 18, height: 18)
-                button.image = image
-            } else if let image = NSImage(systemSymbolName: "externaldrive", accessibilityDescription: "S3 Browser") {
-                image.isTemplate = true
-                button.image = image
-            } else {
-                button.title = "S3"
-            }
-        }
-
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Open S3 Browser", action: #selector(openWebView), keyEquivalent: "o"))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
-        statusItem.menu = menu
+        openWindow()
     }
 
     private func setupMainMenu() {
         let mainMenu = NSMenu()
 
+        // App menu (Quit shortcut)
+        let appMenu = NSMenu()
+        appMenu.addItem(NSMenuItem(title: "Quit S3 Browser", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        let appMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        // Edit menu (clipboard shortcuts for WebView)
         let editMenu = NSMenu(title: "Edit")
         editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
         editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
         editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
         editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
-
         let editMenuItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
@@ -62,26 +42,7 @@ class TrayDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = mainMenu
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        return false
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        if serverProcess.isRunning {
-            serverProcess.terminate()
-        }
-    }
-
-    @objc func openWebView() {
-        // Show dock icon while the window is visible.
-        NSApp.setActivationPolicy(.regular)
-
-        if let existingWindow = window {
-            existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-
+    private func openWindow() {
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "javaScriptCanAccessClipboard")
         config.preferences.setValue(true, forKey: "DOMPasteAllowed")
@@ -98,7 +59,6 @@ class TrayDelegate: NSObject, NSApplicationDelegate {
         w.contentView = wv
         w.isReleasedWhenClosed = false
         w.center()
-        w.delegate = self
         w.makeKeyAndOrderFront(nil)
 
         NSApp.activate(ignoringOtherApps: true)
@@ -107,20 +67,14 @@ class TrayDelegate: NSObject, NSApplicationDelegate {
         self.webView = wv
     }
 
-    @objc func quitApp() {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
         if serverProcess.isRunning {
             serverProcess.terminate()
         }
-        NSApplication.shared.terminate(nil)
-    }
-}
-
-extension TrayDelegate: NSWindowDelegate {
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        sender.orderOut(nil)
-        // Hide dock icon when the window is closed, keep the tray app running.
-        NSApp.setActivationPolicy(.accessory)
-        return false
     }
 }
 
@@ -146,8 +100,8 @@ guard let url = URL(string: urlString) else {
 }
 
 // Find the server binary next to this executable in the app bundle
-let trayBin = URL(fileURLWithPath: CommandLine.arguments[0])
-let serverBin = trayBin.deletingLastPathComponent().appendingPathComponent("s3browser")
+let execBin = URL(fileURLWithPath: CommandLine.arguments[0])
+let serverBin = execBin.deletingLastPathComponent().appendingPathComponent("s3browser")
 
 guard FileManager.default.isExecutableFile(atPath: serverBin.path) else {
     fputs("Server binary not found at: \(serverBin.path)\n", stderr)
@@ -155,14 +109,14 @@ guard FileManager.default.isExecutableFile(atPath: serverBin.path) else {
 }
 
 // Build server arguments: bind to localhost only for security
-var serverArgs = ["-b", "127.0.0.1:\(port)"]
+let serverArgs = ["-b", "127.0.0.1:\(port)"]
 
 let serverProcess = Process()
 serverProcess.executableURL = serverBin
 serverProcess.arguments = serverArgs
 serverProcess.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
 
-// When the server dies, exit the tray app too
+// When the server dies, exit the app too
 serverProcess.terminationHandler = { _ in
     DispatchQueue.main.async {
         NSApplication.shared.terminate(nil)
@@ -177,7 +131,7 @@ do {
 }
 
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory) // No dock icon initially
-let delegate = TrayDelegate(serverProcess: serverProcess, url: url)
+app.setActivationPolicy(.regular)
+let delegate = AppDelegate(serverProcess: serverProcess, url: url)
 app.delegate = delegate
 app.run()

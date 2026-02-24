@@ -145,9 +145,9 @@ bun run build:app
 
 This creates `dist/S3Browser.app` which can be launched with `open dist/S3Browser.app` or dragged to `/Applications`. The app:
 
-- Shows a tray icon in the menu bar
 - Opens a native WebView window (no external browser needed)
 - Runs the server as a subprocess bound to `127.0.0.1` only
+- Quits cleanly when the window is closed (server process is terminated)
 - Uses credentials from `~/.s3browser/` (encryption key and login password)
 
 To use a pre-compiled server binary instead of compiling from source:
