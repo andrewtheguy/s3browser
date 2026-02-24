@@ -44,37 +44,23 @@ jobs:
         env:
           STANDALONE_BUILD: 'true'
 
-      - name: Determine version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Compile standalone binary
         run: |
-          bun build server/standalone.ts --compile --outfile ${{ matrix.artifact }} --target ${{ matrix.target }} --define "BUILD_VERSION='\"${{ steps.version.outputs.version }}\"'"
-
-      - name: Build app bundle (macOS only)
-        if: runner.os == 'macOS' && matrix.target == 'bun-darwin-arm64'
-        run: |
-          S3BROWSER_BIN=${{ matrix.artifact }} VERSION=${{ steps.version.outputs.version }} scripts/build-app-bundle.sh
-          tar -czf S3Browser-darwin-arm64.app.tar.gz -C dist S3Browser.app
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="${{ github.sha }}"
+          fi
+          bun build server/standalone.ts --compile --outfile ${{ matrix.artifact }} --target ${{ matrix.target }} --define "BUILD_VERSION='\"$VERSION\"'"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: |
-            ${{ matrix.artifact }}
-            S3Browser-darwin-arm64.app.tar.gz
+          path: ${{ matrix.artifact }}
 
       - name: Upload to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            ${{ matrix.artifact }}
-            S3Browser-darwin-arm64.app.tar.gz
+          files: ${{ matrix.artifact }}

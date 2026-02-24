@@ -135,9 +135,12 @@ This creates an `s3browser` executable that can be run from anywhere without dep
 
 Run `./s3browser --help` for all options.
 
-### macOS App Bundle
+### macOS App Bundle (Experimental)
 
-Build a native macOS app with a menu bar tray icon and WebView window:
+> [!WARNING]
+> The macOS app bundle is experimental and may have stability issues. Some features (e.g. batch download) are not supported in the native WebView. Use the standalone binary with a browser for the full experience.
+
+Build a native macOS app with a WebView window:
 
 ```bash
 bun run build:macapp
