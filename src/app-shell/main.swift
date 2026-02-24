@@ -2,8 +2,9 @@ import Cocoa
 import Foundation
 import WebKit
 import UniformTypeIdentifiers
+import UserNotifications
 
-class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDelegate, UNUserNotificationCenterDelegate {
     private let serverProcess: Process
     private let url: URL
     private var window: NSWindow?
@@ -16,8 +17,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
         setupMainMenu()
         openWindow()
+    }
+
+    // Show notifications even when app is in foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
     }
 
     private func setupMainMenu() {
@@ -159,7 +170,33 @@ extension AppDelegate: WKDownloadDelegate {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = suggestedFilename
         panel.begin { result in
-            completionHandler(result == .OK ? panel.url : nil)
+            guard result == .OK, let dest = panel.url else {
+                completionHandler(nil)
+                return
+            }
+            // WKDownload fails if the file already exists; remove it first
+            // (NSSavePanel already confirmed overwrite with the user)
+            try? FileManager.default.removeItem(at: dest)
+            completionHandler(dest)
+        }
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {
+        let filename = download.originalRequest?.url?.lastPathComponent ?? "File"
+        let content = UNMutableNotificationContent()
+        content.title = "Download Complete"
+        content.body = filename
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Download Failed"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
         }
     }
 }
