@@ -20,7 +20,7 @@ mkdir -p "$MACOS_DIR"
 
 # 2. Build the Swift app binary
 echo "==> Compiling app binary..."
-swiftc -framework Cocoa -framework WebKit -O -o "$MACOS_DIR/S3BrowserApp" "$ROOT_DIR/src/tray/tray.swift"
+swiftc -framework Cocoa -framework WebKit -O -o "$MACOS_DIR/S3BrowserApp" "$ROOT_DIR/src/app-shell/main.swift"
 
 # 3. Copy or compile the server binary
 if [ -n "${S3BROWSER_BIN:-}" ]; then

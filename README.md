@@ -140,7 +140,7 @@ Run `./s3browser --help` for all options.
 Build a native macOS app with a menu bar tray icon and WebView window:
 
 ```bash
-bun run build:app
+bun run build:macapp
 ```
 
 This creates `dist/S3Browser.app` which can be launched with `open dist/S3Browser.app` or dragged to `/Applications`. The app:
@@ -153,7 +153,7 @@ This creates `dist/S3Browser.app` which can be launched with `open dist/S3Browse
 To use a pre-compiled server binary instead of compiling from source:
 
 ```bash
-S3BROWSER_BIN=./s3browser bun run build:app
+S3BROWSER_BIN=./s3browser bun run build:macapp
 ```
 
 ## Usage
