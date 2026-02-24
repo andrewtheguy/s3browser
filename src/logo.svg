@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#141E45"/>
+      <stop offset="55%" stop-color="#0D406B"/>
+      <stop offset="100%" stop-color="#146185"/>
+    </linearGradient>
+    <linearGradient id="bucket" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#F29926"/>
+      <stop offset="50%" stop-color="#E67316"/>
+      <stop offset="100%" stop-color="#BF5A0D"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#FFB84D"/>
+      <stop offset="100%" stop-color="#F29926"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded rectangle -->
+  <rect width="1024" height="1024" rx="225" ry="225" fill="url(#bg)"/>
+
+  <!-- Bucket body -->
+  <path d="
+    M 205,350
+    L 275,780
+    Q 280,810 310,810
+    L 714,810
+    Q 744,810 749,780
+    L 819,350
+    Z
+  " fill="url(#bucket)"/>
+
+  <!-- Band across middle of bucket -->
+  <path d="
+    M 240,555
+    L 248,580
+    L 776,580
+    L 784,555
+    Z
+  " fill="#FFB84D" opacity="0.4"/>
+
+  <!-- Rim ellipse -->
+  <ellipse cx="512" cy="350" rx="307" ry="70" fill="url(#rim)"/>
+
+  <!-- Inner rim shadow for depth -->
+  <ellipse cx="512" cy="350" rx="245" ry="48" fill="#0D406B" opacity="0.3"/>
+
+  <!-- Subtle border glow -->
+  <rect width="1024" height="1024" rx="225" ry="225" fill="none" stroke="white" stroke-opacity="0.08" stroke-width="10"/>
+</svg>

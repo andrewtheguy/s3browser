@@ -135,6 +135,30 @@ This creates an `s3browser` executable that can be run from anywhere without dep
 
 Run `./s3browser --help` for all options.
 
+### macOS App Bundle (Experimental)
+
+> [!WARNING]
+> The macOS app bundle is experimental and may have stability issues. Some features (e.g. batch download) are not supported in the native WebView. Use the standalone binary with a browser for the full experience.
+
+Build a native macOS app with a WebView window:
+
+```bash
+bun run build:macapp
+```
+
+This creates `dist/S3Browser.app` which can be launched with `open dist/S3Browser.app` or dragged to `/Applications`. The app:
+
+- Opens a native WebView window (no external browser needed)
+- Runs the server as a subprocess bound to `127.0.0.1` only
+- Quits cleanly when the window is closed (server process is terminated)
+- Uses credentials from `~/.s3browser/` (encryption key and login password)
+
+To use a pre-compiled server binary instead of compiling from source:
+
+```bash
+S3BROWSER_BIN=./s3browser bun run build:macapp
+```
+
 ## Usage
 
 ### Login Flow

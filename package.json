@@ -13,7 +13,8 @@
     "start": "bun dist-server/index.js",
     "lint": "eslint .",
     "preview": "vite preview",
-    "build:standalone": "bun run scripts/build-standalone.ts"
+    "build:standalone": "bun run scripts/build-standalone.ts",
+    "build:macapp": "scripts/build-app-bundle.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.978.0",
