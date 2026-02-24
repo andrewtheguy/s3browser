@@ -65,7 +65,13 @@ else
   echo "==> No logo found at $LOGO_PNG, skipping icon generation"
 fi
 
-# 5. Write Info.plist
+# 5. Copy tray icon SVG
+TRAY_ICON_SVG="$ROOT_DIR/src/tray/tray-icon.svg"
+if [ -f "$TRAY_ICON_SVG" ]; then
+  cp "$TRAY_ICON_SVG" "$RESOURCES_DIR/tray-icon.svg"
+fi
+
+# 6. Write Info.plist
 cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <mask id="bucket-mask">
+      <!-- Full white = visible -->
+      <rect width="32" height="32" fill="white"/>
+      <!-- Inner rim cutout — black = transparent -->
+      <ellipse cx="16" cy="8.9" rx="8.7" ry="2.1" fill="black"/>
+      <!-- Band cutout -->
+      <rect x="6" y="15.0" width="20" height="1.0" fill="black"/>
+    </mask>
+  </defs>
+
+  <g mask="url(#bucket-mask)">
+    <!-- Bucket body -->
+    <path d="
+      M 5.1,8.9
+      L 7.3,26.4
+      Q 7.4,27.3 8.3,27.3
+      L 23.7,27.3
+      Q 24.6,27.3 24.7,26.4
+      L 26.9,8.9
+      Z
+    " fill="black"/>
+    <!-- Rim ellipse -->
+    <ellipse cx="16" cy="8.9" rx="10.9" ry="3.0" fill="black"/>
+  </g>
+</svg>

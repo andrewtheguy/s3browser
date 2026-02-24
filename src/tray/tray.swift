@@ -21,7 +21,17 @@ class TrayDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
-            if let image = NSImage(systemSymbolName: "externaldrive", accessibilityDescription: "S3 Browser") {
+            let trayBin = URL(fileURLWithPath: CommandLine.arguments[0])
+            let resourcesDir = trayBin.deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("Resources")
+            let svgPath = resourcesDir.appendingPathComponent("tray-icon.svg").path
+            if FileManager.default.fileExists(atPath: svgPath),
+               let svgData = FileManager.default.contents(atPath: svgPath),
+               let image = NSImage(data: svgData) {
+                image.isTemplate = true
+                image.size = NSSize(width: 18, height: 18)
+                button.image = image
+            } else if let image = NSImage(systemSymbolName: "externaldrive", accessibilityDescription: "S3 Browser") {
                 image.isTemplate = true
                 button.image = image
             } else {
