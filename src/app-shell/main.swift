@@ -1,8 +1,9 @@
 import Cocoa
 import Foundation
 import WebKit
+import UniformTypeIdentifiers
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDelegate {
     private let serverProcess: Process
     private let url: URL
     private var window: NSWindow?
@@ -46,7 +47,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "javaScriptCanAccessClipboard")
         config.preferences.setValue(true, forKey: "DOMPasteAllowed")
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+
         let wv = WKWebView(frame: .zero, configuration: config)
+        wv.uiDelegate = self
+        wv.navigationDelegate = self
         wv.load(URLRequest(url: url))
 
         let w = NSWindow(
@@ -74,6 +79,87 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         if serverProcess.isRunning {
             serverProcess.terminate()
+        }
+    }
+
+    // MARK: - WKUIDelegate
+
+    // Handle <input type="file"> — opens a native file picker panel
+    func webView(_ webView: WKWebView,
+                 runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.begin { result in
+            completionHandler(result == .OK ? panel.urls : nil)
+        }
+    }
+
+    // Handle window.open() / target="_blank" links — open in the same WebView
+    func webView(_ webView: WKWebView,
+                 createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction,
+                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if navigationAction.targetFrame == nil {
+            webView.load(navigationAction.request)
+        }
+        return nil
+    }
+
+    // MARK: - WKNavigationDelegate
+
+    // Handle blob: and data: URL downloads, and links with download attribute
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 preferences: WKWebpagePreferences,
+                 decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        if navigationAction.shouldPerformDownload {
+            decisionHandler(.download, preferences)
+        } else {
+            decisionHandler(.allow, preferences)
+        }
+    }
+
+    // If a navigation response cannot be shown, convert to download
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if navigationResponse.canShowMIMEType {
+            decisionHandler(.allow)
+        } else {
+            decisionHandler(.download)
+        }
+    }
+
+    // Navigation-initiated download
+    func webView(_ webView: WKWebView,
+                 navigationAction: WKNavigationAction,
+                 didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    // Response-initiated download
+    func webView(_ webView: WKWebView,
+                 navigationResponse: WKNavigationResponse,
+                 didBecome download: WKDownload) {
+        download.delegate = self
+    }
+}
+
+// MARK: - WKDownloadDelegate
+
+extension AppDelegate: WKDownloadDelegate {
+    func download(_ download: WKDownload,
+                  decideDestinationUsing response: URLResponse,
+                  suggestedFilename: String,
+                  completionHandler: @escaping (URL?) -> Void) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedFilename
+        panel.begin { result in
+            completionHandler(result == .OK ? panel.url : nil)
         }
     }
 }
