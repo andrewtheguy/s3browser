@@ -9,6 +9,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
     private let url: URL
     private var window: NSWindow?
     private var webView: WKWebView?
+    private var loadRetryCount = 0
+    private let maxLoadRetries = 10
 
     init(serverProcess: Process, url: URL) {
         self.serverProcess = serverProcess
@@ -77,7 +79,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
         w.center()
         w.makeKeyAndOrderFront(nil)
 
-        NSApp.activate(ignoringOtherApps: true)
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
 
         self.window = w
         self.webView = wv
@@ -88,8 +94,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if serverProcess.isRunning {
-            serverProcess.terminate()
+        let pid = serverProcess.processIdentifier
+        if pid > 0 {
+            kill(pid, SIGTERM)
         }
     }
 
@@ -157,6 +164,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKUIDelegate, WKNavigationDe
                  navigationResponse: WKNavigationResponse,
                  didBecome download: WKDownload) {
         download.delegate = self
+    }
+
+    // Retry loading if the server isn't ready yet
+    func webView(_ webView: WKWebView,
+                 didFailProvisionalNavigation navigation: WKNavigation!,
+                 withError error: Error) {
+        guard loadRetryCount < maxLoadRetries else { return }
+        loadRetryCount += 1
+        let delay = min(0.5 * pow(1.5, Double(loadRetryCount - 1)), 5.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self = self else { return }
+            webView.load(URLRequest(url: self.url))
+        }
+    }
+
+    // Reset retry counter on successful load
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        loadRetryCount = 0
     }
 }
 

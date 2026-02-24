@@ -44,7 +44,9 @@ mkdir -p "$RESOURCES_DIR"
 LOGO_PNG="$ROOT_DIR/src/logo-1024.png"
 
 if [ -f "$LOGO_PNG" ]; then
-  ICONSET_DIR=$(mktemp -d)/AppIcon.iconset
+  ICONSET_TMPDIR=$(mktemp -d)
+  trap 'rm -rf "$ICONSET_TMPDIR"' EXIT
+  ICONSET_DIR="$ICONSET_TMPDIR/AppIcon.iconset"
   mkdir -p "$ICONSET_DIR"
 
   echo "==> Generating app icon..."
@@ -60,7 +62,6 @@ if [ -f "$LOGO_PNG" ]; then
   cp "$LOGO_PNG"                      "$ICONSET_DIR/icon_512x512@2x.png"
 
   iconutil -c icns -o "$RESOURCES_DIR/AppIcon.icns" "$ICONSET_DIR"
-  rm -rf "$(dirname "$ICONSET_DIR")"
 else
   echo "==> No logo found at $LOGO_PNG, skipping icon generation"
 fi
