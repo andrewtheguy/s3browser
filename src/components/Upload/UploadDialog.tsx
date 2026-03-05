@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Upload, Trash2 } from 'lucide-react';
 import {
   Dialog,
@@ -56,6 +56,18 @@ export function UploadDialog({
     isUploading,
     isUploadBlocked,
   } = useUpload();
+
+  // Filter out resumable uploads that are already active in the uploads list
+  const filteredResumable = useMemo(() => {
+    if (pendingResumable.length === 0) return pendingResumable;
+    const activePersistenceIds = new Set(
+      uploads
+        .filter((u) => u.persistenceId)
+        .map((u) => u.persistenceId)
+    );
+    if (activePersistenceIds.size === 0) return pendingResumable;
+    return pendingResumable.filter((p) => !activePersistenceIds.has(p.id));
+  }, [pendingResumable, uploads]);
 
   const handleFilesSelected = useCallback(
     async (files: UploadCandidate[]) => {
@@ -133,10 +145,10 @@ export function UploadDialog({
               <Accordion type="single" collapsible>
                 <AccordionItem value="pending-uploads">
                   <AccordionTrigger className="text-sm font-medium text-yellow-700">
-                    Resumable Uploads ({pendingResumable.length})
+                    Resumable Uploads ({filteredResumable.length})
                   </AccordionTrigger>
                   <AccordionContent>
-                    {pendingResumable.length === 0 ? (
+                    {filteredResumable.length === 0 ? (
                       <p className="text-xs text-muted-foreground">
                         No resumable uploads in this session.
                       </p>
@@ -147,7 +159,7 @@ export function UploadDialog({
                         </p>
                         <ScrollArea className="max-h-[200px] rounded-md border border-yellow-200 bg-yellow-50/50">
                           <ul className="p-2 space-y-2">
-                            {pendingResumable.map((pending) => (
+                            {filteredResumable.map((pending) => (
                               <li
                                 key={pending.id}
                                 className="flex items-center justify-between gap-2 bg-background rounded p-2"

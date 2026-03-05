@@ -1,6 +1,24 @@
 import { apiPost } from './client';
 import { UPLOAD_CONFIG } from '../../config/upload';
 
+/**
+ * Compose two AbortSignals into one that aborts when either fires.
+ */
+function composeAbortSignals(signal1: AbortSignal, signal2: AbortSignal): AbortSignal {
+  if (signal1.aborted) return signal1;
+  if (signal2.aborted) return signal2;
+  const controller = new AbortController();
+  const abort1 = () => { controller.abort(); cleanup(); };
+  const abort2 = () => { controller.abort(); cleanup(); };
+  const cleanup = () => {
+    signal1.removeEventListener('abort', abort1);
+    signal2.removeEventListener('abort', abort2);
+  };
+  signal1.addEventListener('abort', abort1);
+  signal2.addEventListener('abort', abort2);
+  return controller.signal;
+}
+
 function validateUploadContext(connectionId: number, bucket: string): string {
   if (!Number.isInteger(connectionId) || connectionId <= 0) {
     throw new Error('connectionId must be a positive integer');
@@ -301,6 +319,19 @@ export async function abortUpload(
 }
 
 /**
+ * Check if an error is non-retryable (e.g. proxy body size limit, auth errors)
+ */
+function isNonRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message;
+  // HTTP 413 (Payload Too Large) - proxy or server body size limit
+  // HTTP 401/403 - auth errors
+  // HTTP 404 - upload not found
+  if (/status\s+(413|401|403|404)\b/.test(msg)) return true;
+  return false;
+}
+
+/**
  * Upload a part with retry logic
  */
 async function uploadPartWithRetry(
@@ -328,6 +359,11 @@ async function uploadPartWithRetry(
     } catch (error) {
       // Don't retry abort errors
       if (error instanceof DOMException && error.name === 'AbortError') {
+        throw error;
+      }
+
+      // Don't retry non-retryable errors (413, 401, 403, 404)
+      if (isNonRetryableError(error)) {
         throw error;
       }
 
@@ -515,11 +551,16 @@ export async function uploadFileMultipart({
   const concurrency = UPLOAD_CONFIG.CONCURRENCY;
   let index = 0;
   const errors: Array<{ partNumber: number; error: Error }> = [];
+  // Abort controller for non-retryable errors - stops all workers immediately
+  const internalAbort = new AbortController();
+  const effectiveSignal = abortSignal
+    ? composeAbortSignals(abortSignal, internalAbort.signal)
+    : internalAbort.signal;
 
   const uploadNext = async (): Promise<void> => {
     while (index < pendingParts.length) {
-      // Check for abort
-      if (abortSignal?.aborted) {
+      // Check for abort (user or internal)
+      if (effectiveSignal.aborted) {
         clearPendingProgress();
         return;
       }
@@ -546,7 +587,7 @@ export async function uploadFileMultipart({
               total: end - start,
             });
           },
-          abortSignal
+          effectiveSignal
         );
 
         // Mark part as complete
@@ -578,6 +619,12 @@ export async function uploadFileMultipart({
           partNumber,
           error: error instanceof Error ? error : new Error(String(error)),
         });
+        // On non-retryable errors, abort all other workers immediately
+        if (isNonRetryableError(error)) {
+          internalAbort.abort();
+          clearPendingProgress();
+          return;
+        }
       }
     }
   };
@@ -589,7 +636,7 @@ export async function uploadFileMultipart({
 
   await Promise.all(workers);
 
-  // Check if aborted
+  // Check if aborted by user
   if (abortSignal?.aborted) {
     clearPendingProgress();
     throw new DOMException('Upload aborted', 'AbortError');
@@ -597,6 +644,11 @@ export async function uploadFileMultipart({
 
   // Check for errors
   if (errors.length > 0) {
+    // Use the first error message for non-retryable errors (they're all the same)
+    const firstError = errors[0].error;
+    if (isNonRetryableError(firstError)) {
+      throw firstError;
+    }
     const failedParts = errors.map((e) => `part ${e.partNumber}: ${e.error.message}`);
     throw new Error(
       `Failed to upload ${errors.length} part(s):\n${failedParts.join('\n')}`
