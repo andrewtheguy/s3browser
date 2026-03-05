@@ -5,17 +5,23 @@ import { UPLOAD_CONFIG } from '../../config/upload';
  * Compose two AbortSignals into one that aborts when either fires.
  */
 function composeAbortSignals(signal1: AbortSignal, signal2: AbortSignal): AbortSignal {
-  if (signal1.aborted) return signal1;
-  if (signal2.aborted) return signal2;
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([signal1, signal2]);
+  }
   const controller = new AbortController();
-  const abort1 = () => { controller.abort(); cleanup(); };
-  const abort2 = () => { controller.abort(); cleanup(); };
   const cleanup = () => {
     signal1.removeEventListener('abort', abort1);
     signal2.removeEventListener('abort', abort2);
   };
+  const abort1 = () => { controller.abort(); cleanup(); };
+  const abort2 = () => { controller.abort(); cleanup(); };
   signal1.addEventListener('abort', abort1);
   signal2.addEventListener('abort', abort2);
+  // Re-check after attaching listeners to close the TOCTOU window
+  if (signal1.aborted || signal2.aborted) {
+    controller.abort();
+    cleanup();
+  }
   return controller.signal;
 }
 
@@ -115,6 +121,15 @@ interface XhrUploadOptions {
   timeoutMs?: number;
 }
 
+class HttpUploadError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`Upload failed with status ${status}`);
+    this.name = 'HttpUploadError';
+    this.status = status;
+  }
+}
+
 const DEFAULT_UPLOAD_TIMEOUT = 300000; // 5 minutes
 const PROGRESS_EMIT_INTERVAL_MS = 100;
 
@@ -168,7 +183,7 @@ function performXhrUpload({
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(xhr.responseText);
       } else {
-        reject(new Error(`Upload failed with status ${xhr.status}`));
+        reject(new HttpUploadError(xhr.status));
       }
     });
 
@@ -318,17 +333,13 @@ export async function abortUpload(
   return response;
 }
 
+const NON_RETRYABLE_STATUSES = new Set([413, 401, 403, 404]);
+
 /**
  * Check if an error is non-retryable (e.g. proxy body size limit, auth errors)
  */
 function isNonRetryableError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const msg = error.message;
-  // HTTP 413 (Payload Too Large) - proxy or server body size limit
-  // HTTP 401/403 - auth errors
-  // HTTP 404 - upload not found
-  if (/status\s+(413|401|403|404)\b/.test(msg)) return true;
-  return false;
+  return error instanceof HttpUploadError && NON_RETRYABLE_STATUSES.has(error.status);
 }
 
 /**

@@ -60,10 +60,10 @@ export function UploadDialog({
   // Filter out resumable uploads that are already active in the uploads list
   const filteredResumable = useMemo(() => {
     if (pendingResumable.length === 0) return pendingResumable;
-    const activePersistenceIds = new Set(
+    const activePersistenceIds = new Set<string>(
       uploads
-        .filter((u) => u.persistenceId)
         .map((u) => u.persistenceId)
+        .filter((id): id is string => id != null)
     );
     if (activePersistenceIds.size === 0) return pendingResumable;
     return pendingResumable.filter((p) => !activePersistenceIds.has(p.id));
