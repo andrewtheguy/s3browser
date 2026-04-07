@@ -189,7 +189,7 @@ export function FileListItem({
             <TooltipTrigger asChild>
               <span
                 className={cn(
-                  "block truncate max-w-[clamp(140px,35vw,320px)]",
+                  "block truncate max-w-[clamp(140px,35vw,70vw)]",
                   item.isFolder && isInteractive ? "font-medium hover:underline" : ""
                 )}
               >
