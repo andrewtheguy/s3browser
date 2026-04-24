@@ -10,6 +10,10 @@ export function SelectBucketPage() {
   const connectionId = !isNaN(parsedId) && parsedId > 0 ? parsedId : null;
 
   useEffect(() => {
+    document.title = 'Select Bucket - s3browser';
+  }, []);
+
+  useEffect(() => {
     if (!connectionId) {
       console.error('Invalid URL: missing or invalid connection ID');
       void navigate('/', { replace: true });

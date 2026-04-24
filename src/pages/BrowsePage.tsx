@@ -25,6 +25,14 @@ export function BrowsePage() {
     [splatPath]
   );
 
+  useEffect(() => {
+    if (!bucket) return;
+    const decodedPath = decodeUrlToS3Path(splatPath || '');
+    document.title = decodedPath
+      ? `${bucket}/${decodedPath} - s3browser`
+      : `${bucket} - s3browser`;
+  }, [bucket, splatPath]);
+
   // Memoize buildUrl to prevent unnecessary re-renders in BrowserProvider
   const buildUrl = useCallback(
     (path: string) => (connectionId && bucket ? buildBrowseUrl(connectionId, bucket, path) : '/'),
