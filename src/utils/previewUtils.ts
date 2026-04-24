@@ -4,7 +4,7 @@ export type EmbedType = 'text' | 'pdf' | 'image' | 'video' | 'audio' | 'unsuppor
 
 export const TEXT_EXTENSIONS = new Set([
   // Code files
-  'js', 'ts', 'tsx', 'jsx', 'html', 'htm', 'css', 'scss', 'less', 'json', 'xml',
+  'js', 'ts', 'tsx', 'jsx', 'html', 'htm', 'css', 'scss', 'less', 'json', 'jsonl', 'xml',
   'yaml', 'yml', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs',
   'rb', 'php', 'sh', 'bash', 'sql', 'vue', 'svelte',
   // Text/config files
@@ -62,6 +62,7 @@ const MIME_TYPES: Record<string, string> = {
   // Force CSV previews to render inline as plain text to avoid browser download behavior.
   csv: 'text/plain;charset=utf-8',
   json: 'application/json',
+  jsonl: 'text/plain;charset=utf-8',
   // Force XML previews to render as plain text to avoid inline rendering in the preview dialog.
   xml: 'text/plain;charset=utf-8',
   // Force HTML previews to render as plain text to avoid executing markup in the preview dialog.
