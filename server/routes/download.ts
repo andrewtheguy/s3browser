@@ -141,23 +141,35 @@ function validateContentType(contentType: string | undefined): string | undefine
   return contentType;
 }
 
-// Sanitize filename for Content-Disposition header
+// Build an ASCII-only fallback for the legacy `filename=` parameter.
+// Strips control chars, quotes, semicolons, and replaces non-ASCII with '_'
+// since HTTP header values must be ISO-8859-1 (RFC 7230) and Node rejects
+// non-ASCII bytes outright.
 function sanitizeFilename(filename: string): string {
-  // Remove control characters, double quotes, and semicolons; normalize whitespace
   let result = '';
   for (let i = 0; i < filename.length; i++) {
     const code = filename.charCodeAt(i);
-    // Skip control characters (0x00-0x1f, 0x7f) and unsafe header chars (", ;)
     if (code <= 0x1f || code === 0x7f || filename[i] === '"' || filename[i] === ';') {
+      continue;
+    }
+    if (code > 0x7f) {
+      result += '_';
       continue;
     }
     result += filename[i];
   }
-  // Collapse whitespace to single spaces and trim
   const sanitized = result.replace(/\s+/g, ' ').trim();
-
-  // Fall back to default if result is empty
   return sanitized || 'download';
+}
+
+// Build a Content-Disposition value that handles non-ASCII filenames per RFC 5987.
+function buildContentDisposition(
+  disposition: 'attachment' | 'inline',
+  rawFilename: string,
+): string {
+  const ascii = sanitizeFilename(rawFilename);
+  const encoded = encodeURIComponent(rawFilename);
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
 function validateKey(key: unknown): { valid: false; error: string } | { valid: true; validatedKey: string } {
@@ -273,7 +285,6 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
   // Parse disposition parameter for Content-Disposition header
   const disposition = req.query.disposition as string | undefined;
   const rawFilename = keyValidation.validatedKey.split('/').pop() || 'download';
-  const filename = sanitizeFilename(rawFilename);
 
   // Parse and validate contentType parameter for overriding S3 Content-Type
   const contentType = validateContentType(req.query.contentType as string | undefined);
@@ -284,7 +295,7 @@ router.get('/:connectionId/:bucket/url', s3Middleware, requireBucket, async (req
     ...(versionId && { VersionId: versionId }),
     ...(disposition === 'inline' && { ResponseContentDisposition: 'inline' }),
     ...(disposition === 'attachment' && {
-      ResponseContentDisposition: `attachment; filename="${filename}"`,
+      ResponseContentDisposition: buildContentDisposition('attachment', rawFilename),
     }),
     ...(contentType && { ResponseContentType: contentType }),
   });
@@ -342,9 +353,8 @@ router.get('/:connectionId/:bucket/object', s3Middleware, requireBucket, async (
     }
 
     const rawFilename = keyValidation.validatedKey.split('/').pop() || 'download';
-    const filename = sanitizeFilename(rawFilename);
 
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', buildContentDisposition('attachment', rawFilename));
     if (response.ContentType) {
       res.setHeader('Content-Type', response.ContentType);
     } else {
