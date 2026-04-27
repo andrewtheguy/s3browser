@@ -1,4 +1,4 @@
-import { apiGet } from './client';
+import { apiGet, apiGetText } from './client';
 
 interface DownloadUrlResponse {
   url: string;
@@ -87,6 +87,27 @@ export async function getPresignedUrl(
   const response = await apiGet<DownloadUrlResponse>(url, signal);
 
   return validateDownloadUrlResponse(response, 'Failed to get presigned URL');
+}
+
+export async function getObjectText(
+  connectionId: number,
+  bucket: string,
+  key: string,
+  options?: { signal?: AbortSignal; versionId?: string }
+): Promise<string> {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+
+  const params = new URLSearchParams();
+  params.append('key', key);
+  if (options?.versionId) {
+    params.append('versionId', options.versionId);
+  }
+
+  const endpoint = `/download/${connectionId}/${encodeURIComponent(bucket)}/object?${params.toString()}`;
+  const text = await apiGetText(endpoint, options?.signal);
+  return text ?? '';
 }
 
 export async function downloadFile(
