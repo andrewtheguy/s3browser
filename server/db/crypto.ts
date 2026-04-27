@@ -184,6 +184,10 @@ export function getPasswordFilePath(): string {
   return PASSWORD_FILE_PATH;
 }
 
+export function validateLoginPassword(): void {
+  getLoginPassword();
+}
+
 export function timingSafeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);

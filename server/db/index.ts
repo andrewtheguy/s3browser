@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
-import { validateEncryptionKey, encrypt, decrypt, setSalt, generateSalt, getSaltLength } from './crypto.js';
+import { validateEncryptionKey, validateLoginPassword, encrypt, decrypt, setSalt, generateSalt, getSaltLength } from './crypto.js';
 
 // Database directory and file path
 const DB_DIR = join(homedir(), '.s3browser');
@@ -123,6 +123,10 @@ function initializeDatabase(): Database {
 
   // Now validate encryption key (which requires salt to be set)
   validateEncryptionKey();
+
+  // Fail fast at startup if the login password is missing/too short, rather than
+  // letting the server boot and only error on the first login attempt.
+  validateLoginPassword();
 
   // Create tables
   database.exec(`

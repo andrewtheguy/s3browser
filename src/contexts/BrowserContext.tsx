@@ -13,7 +13,6 @@ import type { S3Object, BrowserContextValue } from '../types';
 import { useS3ClientContext } from './useS3ClientContext';
 import { listObjects, ApiHttpError, getBucketInfo, listLiveFolders } from '../services/api';
 import { getPathSegments, sortObjects } from '../utils/formatters';
-import { decodeUrlToS3Path } from '../utils/urlEncoding';
 import { BROWSE_WINDOW_LIMIT } from '../config/browse';
 
 interface BrowserState {
@@ -138,13 +137,13 @@ async function markDeletedFolders(
 
 interface BrowserProviderProps {
   children: ReactNode;
-  initialPath?: string;
+  currentPath: string;
   buildUrl: (path: string) => string;
 }
 
 export function BrowserProvider({
   children,
-  initialPath = '',
+  currentPath,
   buildUrl,
 }: BrowserProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -154,7 +153,7 @@ export function BrowserProvider({
   const [bucketVersioningStatus, setBucketVersioningStatus] = useState<'enabled' | 'suspended' | 'disabled' | null>(null);
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const navigate = useNavigate();
-  const { '*': splatPath, bucket: urlBucket } = useParams<{ '*': string; bucket: string }>();
+  const { bucket: urlBucket } = useParams<{ bucket: string }>();
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFetchedPathRef = useRef<string | null>(null);
@@ -163,12 +162,6 @@ export function BrowserProvider({
 
   // Get bucket from URL params or credentials
   const bucket = urlBucket || credentials?.bucket;
-
-  // Current path derived from URL (or initial path on first render)
-  // Use trailing slash for folder-style S3 prefixes
-  const currentPath = splatPath !== undefined
-    ? decodeUrlToS3Path(splatPath, true)
-    : initialPath;
 
   const buildLimitMessage = useCallback((windowStart: number, count: number) => {
     if (count === 0) {

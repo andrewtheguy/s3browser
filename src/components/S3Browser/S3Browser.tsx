@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import {
   Upload,
   FolderPlus,
@@ -28,11 +29,11 @@ import { FileList } from '../FileList';
 import { UploadDialog } from '../Upload';
 import { DeleteDialog } from '../DeleteDialog';
 import { BatchDownloadDialog } from '../BatchDownloadDialog';
-import { PreviewDialog } from '../PreviewDialog';
+import { PreviewPanel } from '../PreviewDialog';
 import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDialog';
 import { CopyMoveDialog } from '../CopyMoveDialog';
 import { BucketInfoDialog } from '../BucketInfoDialog';
-import { useBrowserContext } from '../../contexts';
+import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import {
   useDelete,
   useUpload,
@@ -48,6 +49,7 @@ import { FEATURES } from '../../config';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
 import { getObjectSelectionId } from '../../utils/formatters';
+import { buildBrowseUrl, buildPreviewUrl } from '../../utils/urlEncoding';
 
 const DELETE_PREVIEW_LIMIT = 100;
 const DELETE_CONTINUATION_START_AT = 500;
@@ -56,7 +58,11 @@ const DOWNLOAD_PREVIEW_LIMIT = 100;
 const DOWNLOAD_CONTINUATION_START_AT = 500;
 const DOWNLOAD_CONTINUATION_EVERY = 10_000;
 
-export function S3Browser() {
+interface S3BrowserProps {
+  previewKey?: string | null;
+}
+
+export function S3Browser({ previewKey = null }: S3BrowserProps) {
   const {
     refresh,
     currentPath,
@@ -66,6 +72,10 @@ export function S3Browser() {
     versioningSupported,
     bucketVersioningStatus,
   } = useBrowserContext();
+  const navigate = useNavigate();
+  const { bucket: urlBucket } = useParams<{ bucket: string }>();
+  const { activeConnectionId, credentials } = useS3ClientContext();
+  const bucket = urlBucket || credentials?.bucket;
   const { remove, removeMany, resolveObjectPlan: resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
@@ -808,13 +818,48 @@ export function S3Browser() {
     }
   }, [copyS3Uri]);
 
-  const { openPreview } = preview;
+  const { openPreview, closePreview } = preview;
   const handlePreview = useCallback((item: S3Object) => {
     if (item.isDeleteMarker) {
       return;
     }
+    if (!activeConnectionId || !bucket) {
+      return;
+    }
+    void navigate(buildPreviewUrl(activeConnectionId, bucket, item.key));
+  }, [activeConnectionId, bucket, navigate]);
+
+  const handleClosePreview = useCallback(() => {
+    if (!activeConnectionId || !bucket) {
+      return;
+    }
+    void navigate(buildBrowseUrl(activeConnectionId, bucket, currentPath));
+  }, [activeConnectionId, bucket, currentPath, navigate]);
+
+  // Drive preview state from the URL: open when previewKey changes, close when it clears.
+  // For deep links arriving before the parent listing has loaded, open with a synthetic
+  // S3Object so content fetching can start immediately.
+  const lastOpenedPreviewKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!previewKey) {
+      if (lastOpenedPreviewKeyRef.current !== null) {
+        closePreview();
+        lastOpenedPreviewKeyRef.current = null;
+      }
+      return;
+    }
+    if (lastOpenedPreviewKeyRef.current === previewKey) {
+      return;
+    }
+    const existing = objects.find((obj) => !obj.isFolder && obj.key === previewKey);
+    const item: S3Object = existing ?? {
+      key: previewKey,
+      name: previewKey.split('/').pop() || previewKey,
+      isFolder: false,
+    };
+    lastOpenedPreviewKeyRef.current = previewKey;
     void openPreview(item);
-  }, [openPreview]);
+  }, [previewKey, objects, openPreview, closePreview]);
 
   const handlePreviewDownload = useCallback(async (key: string, versionId?: string) => {
     try {
@@ -998,9 +1043,14 @@ export function S3Browser() {
     setCopyMoveNewName('');
   }, []);
 
+  const previewFileName = useMemo(() => {
+    if (!previewKey) return '';
+    return preview.item?.name || previewKey.split('/').pop() || previewKey;
+  }, [previewKey, preview.item]);
+
   return (
     <div className="h-screen flex flex-col bg-background">
-      <div className="flex-1 flex flex-col m-4 bg-card rounded-lg border shadow-sm overflow-hidden">
+      <div className="flex-1 flex flex-col mx-0 my-4 sm:m-4 bg-card rounded-lg border shadow-sm overflow-hidden">
         <Toolbar
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}
@@ -1020,21 +1070,38 @@ export function S3Browser() {
           isSeedingTestItems={seedTestItemsEnabled ? isSeedingTestItems : undefined}
         />
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-            <FileList
-              onDeleteRequest={handleDeleteRequest}
-              onCopyRequest={handleCopyRequest}
-              onMoveRequest={handleMoveRequest}
-              onCopyUrl={handleCopyUrl}
-              onCopyS3Uri={handleCopyS3Uri}
-              onPreview={handlePreview}
-              onBatchDownload={batchDownloadEnabled ? handleBatchDownloadItem : undefined}
-              selectedIds={selectedIds}
-              onSelectItem={handleSelectItem}
-              onSelectAll={handleSelectAll}
-              selectionMode={selectionMode}
-            />
-          </div>
+          {previewKey ? (
+            <div className="flex-1 min-h-0">
+              <PreviewPanel
+                isLoading={preview.isLoading}
+                error={preview.error}
+                signedUrl={preview.signedUrl}
+                textContent={preview.textContent}
+                embedType={preview.embedType}
+                item={preview.item}
+                cannotPreviewReason={preview.cannotPreviewReason}
+                fileName={previewFileName}
+                onBack={handleClosePreview}
+                onDownload={handlePreviewDownload}
+              />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+              <FileList
+                onDeleteRequest={handleDeleteRequest}
+                onCopyRequest={handleCopyRequest}
+                onMoveRequest={handleMoveRequest}
+                onCopyUrl={handleCopyUrl}
+                onCopyS3Uri={handleCopyS3Uri}
+                onPreview={handlePreview}
+                onBatchDownload={batchDownloadEnabled ? handleBatchDownloadItem : undefined}
+                selectedIds={selectedIds}
+                onSelectItem={handleSelectItem}
+                onSelectAll={handleSelectAll}
+                selectionMode={selectionMode}
+              />
+            </div>
+          )}
           <TooltipProvider>
             <div className="flex sm:hidden items-center justify-between p-2 border-t bg-card">
               <div className="flex flex-wrap gap-2">
@@ -1162,19 +1229,6 @@ export function S3Browser() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <PreviewDialog
-        open={preview.isOpen}
-        isLoading={preview.isLoading}
-        error={preview.error}
-        signedUrl={preview.signedUrl}
-        textContent={preview.textContent}
-        embedType={preview.embedType}
-        item={preview.item}
-        cannotPreviewReason={preview.cannotPreviewReason}
-        onClose={preview.closePreview}
-        onDownload={handlePreviewDownload}
-      />
 
       <FolderPickerDialog
         open={folderPickerOpen}

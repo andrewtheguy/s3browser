@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ExternalLink, File } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
@@ -68,8 +62,7 @@ const buildMediaSrcdoc = (
   return new XMLSerializer().serializeToString(doc);
 };
 
-interface PreviewDialogProps {
-  open: boolean;
+export interface PreviewBodyProps {
   isLoading: boolean;
   error: string | null;
   signedUrl: string | null;
@@ -77,12 +70,10 @@ interface PreviewDialogProps {
   embedType: EmbedType;
   item: S3Object | null;
   cannotPreviewReason: string | null;
-  onClose: () => void;
   onDownload: (key: string, versionId?: string) => void;
 }
 
-export function PreviewDialog({
-  open,
+export function PreviewBody({
   isLoading,
   error,
   signedUrl,
@@ -90,9 +81,8 @@ export function PreviewDialog({
   embedType,
   item,
   cannotPreviewReason,
-  onClose,
   onDownload,
-}: PreviewDialogProps) {
+}: PreviewBodyProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [prettyJson, setPrettyJson] = useState(false);
   const [prevItemId, setPrevItemId] = useState<string | undefined>(
@@ -105,10 +95,10 @@ export function PreviewDialog({
   }
 
   useEffect(() => {
-    if (!open || !signedUrl) {
+    if (!signedUrl) {
       cleanupIframe(iframeRef.current);
     }
-  }, [open, signedUrl]);
+  }, [signedUrl]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -253,41 +243,22 @@ export function PreviewDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-[calc(100vw-64px)] max-h-[calc(100vh-64px)] w-[calc(100vw-64px)] h-[calc(100vh-64px)] flex flex-col p-0">
-        <DialogHeader className="px-6 py-4 border-b shrink-0">
-          <DialogTitle className="truncate pr-8">
-            {item?.name || 'Preview'}
-          </DialogTitle>
-        </DialogHeader>
-
-        {showJsonToggle && (
-          <div className="flex items-center gap-2 px-6 py-2 border-b shrink-0">
-            <Checkbox
-              id="preview-pretty-json"
-              checked={prettyJson}
-              onCheckedChange={(checked) => setPrettyJson(checked === true)}
-            />
-            <Label htmlFor="preview-pretty-json" className="cursor-pointer text-sm font-normal">
-              Pretty format
-            </Label>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-auto min-h-0">
-          {renderContent()}
+    <>
+      {showJsonToggle && (
+        <div className="flex items-center gap-2 px-4 sm:px-6 py-2 border-b shrink-0">
+          <Checkbox
+            id="preview-pretty-json"
+            checked={prettyJson}
+            onCheckedChange={(checked) => setPrettyJson(checked === true)}
+          />
+          <Label htmlFor="preview-pretty-json" className="cursor-pointer text-sm font-normal">
+            Pretty format
+          </Label>
         </div>
-
-        <div className="flex justify-end gap-2 px-6 py-4 border-t shrink-0">
-          {!cannotPreviewReason && (
-            <Button variant="outline" onClick={handleDownload} disabled={!item}>
-              <Download className="h-4 w-4 mr-2" />
-              Download
-            </Button>
-          )}
-          <Button onClick={onClose}>Close</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      )}
+      <div className="flex-1 overflow-auto min-h-0">
+        {renderContent()}
+      </div>
+    </>
   );
 }

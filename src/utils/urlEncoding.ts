@@ -45,6 +45,15 @@ export function buildBrowseUrl(connectionId: number, bucket: string, path: strin
 }
 
 /**
+ * Build an inline preview URL for a given connection, bucket and object key.
+ * No trailing slash — the /preview/ route segment distinguishes file URLs from folder browse URLs.
+ */
+export function buildPreviewUrl(connectionId: number, bucket: string, key: string): string {
+  const encodedKey = encodeS3PathForUrl(key);
+  return `/connection/${connectionId}/preview/${encodeURIComponent(bucket)}/${encodedKey}`;
+}
+
+/**
  * Build a select-bucket URL for a given connection
  */
 export function buildSelectBucketUrl(connectionId: number): string {
