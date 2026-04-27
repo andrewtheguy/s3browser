@@ -17,9 +17,6 @@ jobs:
           - os: macos-latest
             target: bun-darwin-arm64
             artifact: s3browser-darwin-arm64
-          - os: macos-latest
-            target: bun-darwin-x64
-            artifact: s3browser-darwin-x64
           - os: ubuntu-latest
             target: bun-linux-x64
             artifact: s3browser-linux-x64
