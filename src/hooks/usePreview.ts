@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
-import { getPresignedUrl } from '../services/api';
+import { getPresignedUrl, getObjectText } from '../services/api';
 import { isPreviewableFile, getMimeType, type EmbedType } from '../utils/previewUtils';
 import { formatFileSize } from '../utils/formatters';
 import type { S3Object } from '../types';
@@ -110,6 +110,26 @@ export function usePreview() {
       });
 
       try {
+        if (isTextPreview) {
+          const textContent = await getObjectText(
+            activeConnectionId,
+            bucket,
+            item.key,
+            { signal: abortController.signal, versionId: item.versionId }
+          );
+
+          if (currentRequestId !== requestIdRef.current) {
+            return;
+          }
+
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            textContent,
+          }));
+          return;
+        }
+
         const mimeType = getMimeType(item.name);
         const signedUrl = await getPresignedUrl(
           activeConnectionId,
@@ -124,28 +144,7 @@ export function usePreview() {
           }
         );
 
-        // Verify this request is still the active one before updating state
         if (currentRequestId !== requestIdRef.current) {
-          return;
-        }
-
-        if (isTextPreview) {
-          const res = await fetch(signedUrl, { signal: abortController.signal });
-          if (!res.ok) {
-            throw new Error(`Failed to load file (${res.status})`);
-          }
-          const textContent = await res.text();
-
-          if (currentRequestId !== requestIdRef.current) {
-            return;
-          }
-
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-            signedUrl,
-            textContent,
-          }));
           return;
         }
 
