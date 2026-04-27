@@ -15,6 +15,7 @@ interface PreviewState {
   isLoading: boolean;
   error: string | null;
   signedUrl: string | null;
+  textContent: string | null;
   embedType: EmbedType;
   item: S3Object | null;
   cannotPreviewReason: string | null;
@@ -30,6 +31,7 @@ export function usePreview() {
     isLoading: false,
     error: null,
     signedUrl: null,
+    textContent: null,
     embedType: 'unsupported',
     item: null,
     cannotPreviewReason: null,
@@ -67,6 +69,7 @@ export function usePreview() {
           isLoading: false,
           error: null,
           signedUrl: null,
+          textContent: null,
           embedType: previewability.embedType,
           item,
           cannotPreviewReason: previewability.reason || 'Cannot preview this file',
@@ -82,6 +85,7 @@ export function usePreview() {
           isLoading: false,
           error: null,
           signedUrl: null,
+          textContent: null,
           embedType: previewability.embedType,
           item,
           cannotPreviewReason: `Text previews are limited to ${formatFileSize(TEXT_PREVIEW_LIMIT_BYTES)}. Download the file to view it.`,
@@ -99,6 +103,7 @@ export function usePreview() {
         isLoading: true,
         error: null,
         signedUrl: null,
+        textContent: null,
         embedType: previewability.embedType,
         item,
         cannotPreviewReason: null,
@@ -121,6 +126,26 @@ export function usePreview() {
 
         // Verify this request is still the active one before updating state
         if (currentRequestId !== requestIdRef.current) {
+          return;
+        }
+
+        if (isTextPreview) {
+          const res = await fetch(signedUrl, { signal: abortController.signal });
+          if (!res.ok) {
+            throw new Error(`Failed to load file (${res.status})`);
+          }
+          const textContent = await res.text();
+
+          if (currentRequestId !== requestIdRef.current) {
+            return;
+          }
+
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            signedUrl,
+            textContent,
+          }));
           return;
         }
 
@@ -166,6 +191,7 @@ export function usePreview() {
       isLoading: false,
       error: null,
       signedUrl: null,
+      textContent: null,
       embedType: 'unsupported',
       item: null,
       cannotPreviewReason: null,

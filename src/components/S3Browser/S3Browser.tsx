@@ -1168,6 +1168,7 @@ export function S3Browser() {
         isLoading={preview.isLoading}
         error={preview.error}
         signedUrl={preview.signedUrl}
+        textContent={preview.textContent}
         embedType={preview.embedType}
         item={preview.item}
         cannotPreviewReason={preview.cannotPreviewReason}
