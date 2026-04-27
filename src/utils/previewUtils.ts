@@ -126,3 +126,50 @@ export function isPreviewableFile(filename: string): PreviewabilityResult {
 
   return { canPreview: true, embedType };
 }
+
+const HIGHLIGHT_LANGUAGES: Record<string, string> = {
+  js: 'javascript',
+  jsx: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  ts: 'typescript',
+  tsx: 'typescript',
+  json: 'json',
+  jsonl: 'json',
+  py: 'python',
+  yaml: 'yaml',
+  yml: 'yaml',
+  xml: 'xml',
+  html: 'xml',
+  htm: 'xml',
+  svg: 'xml',
+  vue: 'xml',
+  svelte: 'xml',
+  css: 'css',
+  scss: 'css',
+  less: 'css',
+  sql: 'sql',
+  sh: 'bash',
+  bash: 'bash',
+  md: 'markdown',
+  markdown: 'markdown',
+  dockerfile: 'dockerfile',
+};
+
+const HIGHLIGHT_FILENAMES: Record<string, string> = {
+  Dockerfile: 'dockerfile',
+  dockerfile: 'dockerfile',
+};
+
+export function getHighlightLanguage(filename: string): string | undefined {
+  const basename = filename.split('/').pop() || filename;
+  if (HIGHLIGHT_FILENAMES[basename]) {
+    return HIGHLIGHT_FILENAMES[basename];
+  }
+  const ext = getFileExtension(filename);
+  return HIGHLIGHT_LANGUAGES[ext];
+}
+
+export function isJsonFile(filename: string): boolean {
+  return getFileExtension(filename) === 'json';
+}

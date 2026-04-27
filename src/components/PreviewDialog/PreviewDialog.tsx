@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, ExternalLink, File } from 'lucide-react';
 import {
   Dialog,
@@ -9,8 +9,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import type { S3Object } from '../../types';
-import type { EmbedType } from '../../utils/previewUtils';
+import {
+  getHighlightLanguage,
+  isJsonFile,
+  type EmbedType,
+} from '../../utils/previewUtils';
+import { TextPreview } from './TextPreview';
 
 const cleanupIframe = (iframe: HTMLIFrameElement | null) => {
   if (!iframe) return;
@@ -66,6 +73,7 @@ interface PreviewDialogProps {
   isLoading: boolean;
   error: string | null;
   signedUrl: string | null;
+  textContent: string | null;
   embedType: EmbedType;
   item: S3Object | null;
   cannotPreviewReason: string | null;
@@ -78,6 +86,7 @@ export function PreviewDialog({
   isLoading,
   error,
   signedUrl,
+  textContent,
   embedType,
   item,
   cannotPreviewReason,
@@ -85,6 +94,15 @@ export function PreviewDialog({
   onDownload,
 }: PreviewDialogProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [prettyJson, setPrettyJson] = useState(false);
+  const [prevItemId, setPrevItemId] = useState<string | undefined>(
+    item ? `${item.key}::${item.versionId ?? ''}` : undefined
+  );
+  const itemId = item ? `${item.key}::${item.versionId ?? ''}` : undefined;
+  if (itemId !== prevItemId) {
+    setPrevItemId(itemId);
+    setPrettyJson(false);
+  }
 
   useEffect(() => {
     if (!open || !signedUrl) {
@@ -96,6 +114,29 @@ export function PreviewDialog({
     const iframe = iframeRef.current;
     return () => cleanupIframe(iframe);
   }, []);
+
+  const showJsonToggle =
+    embedType === 'text' &&
+    item != null &&
+    isJsonFile(item.name) &&
+    textContent !== null;
+
+  const { displayedText, jsonError } = useMemo(() => {
+    if (textContent === null) {
+      return { displayedText: null, jsonError: false };
+    }
+    if (!prettyJson || !item || !isJsonFile(item.name)) {
+      return { displayedText: textContent, jsonError: false };
+    }
+    try {
+      return {
+        displayedText: JSON.stringify(JSON.parse(textContent), null, 2),
+        jsonError: false,
+      };
+    } catch {
+      return { displayedText: textContent, jsonError: true };
+    }
+  }, [textContent, prettyJson, item]);
 
   const handleDownload = () => {
     if (item) {
@@ -142,6 +183,29 @@ export function PreviewDialog({
       );
     }
 
+    if (embedType === 'text') {
+      if (displayedText === null) {
+        return (
+          <div className="flex items-center justify-center h-full">
+            <Spinner size="lg" />
+          </div>
+        );
+      }
+      const language = item ? getHighlightLanguage(item.name) : undefined;
+      return (
+        <div className="flex h-full flex-col">
+          {jsonError && (
+            <div className="px-4 py-2 text-xs text-muted-foreground border-b shrink-0">
+              Invalid JSON — showing raw content.
+            </div>
+          )}
+          <div className="flex-1 min-h-0">
+            <TextPreview content={displayedText} language={language} />
+          </div>
+        </div>
+      );
+    }
+
     if (signedUrl !== null) {
       const title = item?.name || 'Preview';
 
@@ -183,18 +247,6 @@ export function PreviewDialog({
           />
         );
       }
-
-      // Text: load directly via src in sandboxed iframe
-      return (
-        <iframe
-          ref={iframeRef}
-          sandbox=""
-          src={signedUrl}
-          referrerPolicy="no-referrer"
-          title={title}
-          className="w-full h-full border-none"
-        />
-      );
     }
 
     return null;
@@ -208,6 +260,19 @@ export function PreviewDialog({
             {item?.name || 'Preview'}
           </DialogTitle>
         </DialogHeader>
+
+        {showJsonToggle && (
+          <div className="flex items-center gap-2 px-6 py-2 border-b shrink-0">
+            <Checkbox
+              id="preview-pretty-json"
+              checked={prettyJson}
+              onCheckedChange={(checked) => setPrettyJson(checked === true)}
+            />
+            <Label htmlFor="preview-pretty-json" className="cursor-pointer text-sm font-normal">
+              Pretty format
+            </Label>
+          </div>
+        )}
 
         <div className="flex-1 overflow-auto min-h-0">
           {renderContent()}
