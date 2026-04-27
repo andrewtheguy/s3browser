@@ -64,6 +64,8 @@ interface ToolbarProps {
   bucketVersioningStatus?: 'enabled' | 'suspended' | 'disabled' | null;
   onSeedTestItems?: () => void;
   isSeedingTestItems?: boolean;
+  /** When set, the breadcrumb appends this as a non-clickable leaf so all folder segments stay clickable in preview mode. */
+  previewFileName?: string | null;
 }
 
 export function Toolbar({
@@ -83,6 +85,7 @@ export function Toolbar({
   bucketVersioningStatus = null,
   onSeedTestItems,
   isSeedingTestItems = false,
+  previewFileName = null,
 }: ToolbarProps) {
   const navigate = useNavigate();
   const { connectionId } = useParams<{ connectionId?: string }>();
@@ -439,7 +442,8 @@ export function Toolbar({
             </BreadcrumbItem>
 
             {pathSegments.map((segment, index) => {
-              const isLast = index === pathSegments.length - 1;
+              // In preview mode the file name is the leaf, so every folder segment is clickable.
+              const isLast = index === pathSegments.length - 1 && !previewFileName;
 
               return (
                 <BreadcrumbItem key={index}>
@@ -459,6 +463,15 @@ export function Toolbar({
                 </BreadcrumbItem>
               );
             })}
+
+            {previewFileName && (
+              <BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbPage className="font-medium">
+                  {previewFileName}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            )}
           </BreadcrumbList>
         </Breadcrumb>
       </div>

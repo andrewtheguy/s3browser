@@ -1068,6 +1068,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
           bucketVersioningStatus={bucketVersioningStatus}
           onSeedTestItems={seedTestItemsEnabled ? handleSeedTestItems : undefined}
           isSeedingTestItems={seedTestItemsEnabled ? isSeedingTestItems : undefined}
+          previewFileName={previewKey ? previewFileName : null}
         />
         <div className="flex-1 flex flex-col min-h-0">
           {previewKey ? (
