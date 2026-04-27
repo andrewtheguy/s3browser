@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useMatch } from 'react-router';
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
@@ -9,6 +9,8 @@ import { decodeUrlToS3Path, buildBrowseUrl } from '../utils/urlEncoding';
 
 export function BrowsePage() {
   const { connectionId: urlConnectionId, bucket, '*': splatPath } = useParams<{ connectionId: string; bucket: string; '*': string }>();
+  const previewMatch = useMatch('/connection/:connectionId/preview/:bucket/*');
+  const isPreviewMode = previewMatch !== null;
   const { isConnected, credentials, selectBucket, activeConnectionId } = useS3ClientContext();
   const navigate = useNavigate();
   const [isSelectingBucket, setIsSelectingBucket] = useState(false);
@@ -19,19 +21,36 @@ export function BrowsePage() {
   const parsedConnectionId = urlConnectionId ? parseInt(urlConnectionId, 10) : NaN;
   const connectionId = !isNaN(parsedConnectionId) && parsedConnectionId > 0 ? parsedConnectionId : null;
 
-  // Decode the URL path to S3 path (with trailing slash for folder-style prefix)
-  const initialPath = useMemo(
-    () => decodeUrlToS3Path(splatPath || '', true),
-    [splatPath]
-  );
+  // In preview mode the splat is the file's full key (no trailing slash). The folder
+  // listing the user is browsing is its parent prefix.
+  // In browse mode the splat is the folder prefix itself.
+  const previewKey = useMemo(() => {
+    if (!isPreviewMode || !splatPath) return null;
+    return decodeUrlToS3Path(splatPath, false);
+  }, [isPreviewMode, splatPath]);
+
+  const currentPath = useMemo(() => {
+    if (isPreviewMode) {
+      if (!splatPath) return '';
+      const decoded = decodeUrlToS3Path(splatPath, false);
+      const segments = decoded.split('/').filter(Boolean);
+      segments.pop();
+      return segments.length > 0 ? segments.join('/') + '/' : '';
+    }
+    return decodeUrlToS3Path(splatPath || '', true);
+  }, [isPreviewMode, splatPath]);
 
   useEffect(() => {
     if (!bucket) return;
-    const decodedPath = decodeUrlToS3Path(splatPath || '');
-    document.title = decodedPath
-      ? `${bucket}/${decodedPath} - s3browser`
-      : `${bucket} - s3browser`;
-  }, [bucket, splatPath]);
+    if (isPreviewMode && previewKey) {
+      const fileName = previewKey.split('/').pop() || previewKey;
+      document.title = `${fileName} - ${bucket} - s3browser`;
+    } else if (currentPath) {
+      document.title = `${bucket}/${currentPath} - s3browser`;
+    } else {
+      document.title = `${bucket} - s3browser`;
+    }
+  }, [bucket, currentPath, isPreviewMode, previewKey]);
 
   // Memoize buildUrl to prevent unnecessary re-renders in BrowserProvider
   const buildUrl = useCallback(
@@ -123,8 +142,8 @@ export function BrowsePage() {
   }
 
   return (
-    <BrowserProvider initialPath={initialPath} buildUrl={buildUrl}>
-      <S3Browser />
+    <BrowserProvider currentPath={currentPath} buildUrl={buildUrl}>
+      <S3Browser previewKey={previewKey} />
     </BrowserProvider>
   );
 }

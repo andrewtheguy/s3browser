@@ -30,6 +30,14 @@ export const router = createBrowserRouter([
           </AuthGuard>
         ),
       },
+      {
+        path: 'connection/:connectionId/preview/:bucket/*',
+        element: (
+          <AuthGuard>
+            <BrowsePage />
+          </AuthGuard>
+        ),
+      },
     ],
   },
 ]);
