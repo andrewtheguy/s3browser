@@ -60,6 +60,24 @@ export function normalizeEndpoint(endpoint?: string): string | undefined {
   return `https://${endpoint}`;
 }
 
+// Surface the underlying error code (e.g. Bun's `FailedToOpenSocket`,
+// Node's `ENOTFOUND`/`ECONNREFUSED`) alongside the message so users can
+// tell a connectivity failure from a credentials problem at a glance.
+export function formatErrorWithCode(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unknown error';
+  const e = error as Error & { code?: unknown; cause?: unknown };
+  let code: string | undefined;
+  if (typeof e.code === 'string') {
+    code = e.code;
+  } else if (e.cause && typeof e.cause === 'object') {
+    const c = e.cause as { code?: unknown };
+    if (typeof c.code === 'string') code = c.code;
+  }
+  const message = e.message || 'Unknown error';
+  if (!code || message.includes(code)) return message;
+  return `${code}: ${message}`;
+}
+
 // Create S3 client from credentials
 function createS3Client(credentials: S3Credentials): S3Client {
   const endpoint = normalizeEndpoint(credentials.endpoint);
@@ -201,9 +219,9 @@ export async function validateCredentials(credentials: S3Credentials): Promise<{
         return { valid: false, error: 'Invalid credentials' };
       }
       if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
-        return { valid: false, error: `Cannot connect to endpoint: ${error.message}` };
+        return { valid: false, error: `Cannot connect to endpoint: ${formatErrorWithCode(error)}` };
       }
-      return { valid: false, error: error.message };
+      return { valid: false, error: formatErrorWithCode(error) };
     }
     return { valid: false, error: 'Unknown error' };
   }
@@ -243,15 +261,15 @@ export async function validateCredentialsOnly(
           msg.includes('signature') ||
           msg.includes('credential');
         if (error.name === 'InvalidAccessKeyId' || isSignatureError) {
-          return { valid: false, error: error.message || 'Invalid credentials or signature' };
+          return { valid: false, error: formatErrorWithCode(error) || 'Invalid credentials or signature' };
         }
         if (error.name === 'AccessDenied' || error.name === 'Forbidden') {
           return { valid: true };
         }
         if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
-          return { valid: false, error: `Cannot connect to endpoint: ${error.message}` };
+          return { valid: false, error: `Cannot connect to endpoint: ${formatErrorWithCode(error)}` };
         }
-        return { valid: false, error: error.message };
+        return { valid: false, error: formatErrorWithCode(error) };
       }
       return { valid: false, error: 'Unknown error' };
     }
@@ -280,10 +298,10 @@ export async function validateCredentialsOnly(
         error.message.toLowerCase().includes('signature') ||
         error.message.toLowerCase().includes('credential');
       if (error.name === 'InvalidClientTokenId' || isSignatureError) {
-        return { valid: false, error: error.message || 'Invalid credentials or signature' };
+        return { valid: false, error: formatErrorWithCode(error) || 'Invalid credentials or signature' };
       }
       if (error.name === 'NetworkingError' || error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
-        return { valid: false, error: `Cannot connect to AWS: ${error.message}` };
+        return { valid: false, error: `Cannot connect to AWS: ${formatErrorWithCode(error)}` };
       }
 
       // STS might be blocked - fall back to S3 ListBuckets
@@ -309,18 +327,18 @@ export async function validateCredentialsOnly(
               s3Error.message.toLowerCase().includes('signature') ||
               s3Error.message.toLowerCase().includes('credential');
             if (s3Error.name === 'InvalidAccessKeyId' || isS3SignatureError) {
-              return { valid: false, error: s3Error.message || 'Invalid credentials or signature' };
+              return { valid: false, error: formatErrorWithCode(s3Error) || 'Invalid credentials or signature' };
             }
             if (s3Error.name === 'AccessDenied' || s3Error.name === 'Forbidden') {
               return { valid: true };
             }
           }
-          const s3ErrorMessage = s3Error instanceof Error ? s3Error.message : String(s3Error);
+          const s3ErrorMessage = s3Error instanceof Error ? formatErrorWithCode(s3Error) : String(s3Error);
           return { valid: false, error: `STS blocked by policy and S3 check failed: ${s3ErrorMessage}` };
         }
       }
 
-      return { valid: false, error: error.message };
+      return { valid: false, error: formatErrorWithCode(error) };
     }
     return { valid: false, error: 'Unknown error' };
   }
