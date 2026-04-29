@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { S3Object } from '../../types';
 import type { EmbedType } from '../../utils/previewUtils';
+import { usePresignedUrlTtlOptions } from '../../config';
 import { FileDetailsDialog } from '../FileList/FileDetailsDialog';
 import { PreviewBody } from './PreviewBody';
 
@@ -50,6 +51,7 @@ export function PreviewPanel({
   onCopyS3Uri,
 }: PreviewPanelProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const ttlOptions = usePresignedUrlTtlOptions();
 
   const handleDownload = () => {
     if (item) {
@@ -74,34 +76,22 @@ export function PreviewPanel({
           {showActions && (
             <>
               <div className="hidden sm:flex items-center gap-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 gap-1 px-2"
-                      onClick={() => onCopyUrl(item.key, 3600, versionIdForUrl)}
-                    >
-                      <Link className="h-4 w-4" />
-                      1h
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Copy presigned URL (1 hour)</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 gap-1 px-2"
-                      onClick={() => onCopyUrl(item.key, 86400, versionIdForUrl)}
-                    >
-                      <Link className="h-4 w-4" />
-                      1d
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Copy presigned URL (1 day)</TooltipContent>
-                </Tooltip>
+                {ttlOptions.map((option) => (
+                  <Tooltip key={option.shortLabel}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 gap-1 px-2"
+                        onClick={() => onCopyUrl(item.key, option.ttl, versionIdForUrl)}
+                      >
+                        <Link className="h-4 w-4" />
+                        {option.shortLabel}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Copy presigned URL ({option.longLabel})</TooltipContent>
+                  </Tooltip>
+                ))}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -134,16 +124,14 @@ export function PreviewPanel({
                   <TooltipContent>Copy URL</TooltipContent>
                 </Tooltip>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => onCopyUrl(item.key, 3600, versionIdForUrl)}
-                  >
-                    Presigned URL (1 hour)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => onCopyUrl(item.key, 86400, versionIdForUrl)}
-                  >
-                    Presigned URL (1 day)
-                  </DropdownMenuItem>
+                  {ttlOptions.map((option) => (
+                    <DropdownMenuItem
+                      key={option.shortLabel}
+                      onClick={() => onCopyUrl(item.key, option.ttl, versionIdForUrl)}
+                    >
+                      Presigned URL ({option.longLabel})
+                    </DropdownMenuItem>
+                  ))}
                   <DropdownMenuItem onClick={() => onCopyS3Uri(item.key)}>
                     S3 URI (s3://...)
                   </DropdownMenuItem>

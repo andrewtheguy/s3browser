@@ -7,6 +7,7 @@ import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
 import downloadRoutes from './routes/download.js';
 import bucketRoutes from './routes/bucket.js';
+import configRoutes from './routes/config.js';
 
 // Initialize database (validates encryption key and creates tables)
 try {
@@ -41,6 +42,7 @@ app.use('/api/objects', objectsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/download', downloadRoutes);
 app.use('/api/bucket', bucketRoutes);
+app.use('/api/config', configRoutes);
 
 // Serve static frontend assets (production build)
 const distPath = path.resolve(process.cwd(), 'dist');

@@ -8,6 +8,7 @@ import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
 import downloadRoutes from './routes/download.js';
 import bucketRoutes from './routes/bucket.js';
+import configRoutes from './routes/config.js';
 
 // Embedded frontend assets (Bun embeds these at compile time)
 import indexHtml from '../dist/index.html' with { type: 'text' };
@@ -132,6 +133,7 @@ app.use('/api/objects', objectsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/download', downloadRoutes);
 app.use('/api/bucket', bucketRoutes);
+app.use('/api/config', configRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
