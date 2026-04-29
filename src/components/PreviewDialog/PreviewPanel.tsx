@@ -1,7 +1,21 @@
-import { ChevronLeft, Download } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronLeft, Download, Link, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import type { S3Object } from '../../types';
 import type { EmbedType } from '../../utils/previewUtils';
+import { FileDetailsDialog } from '../FileList/FileDetailsDialog';
 import { PreviewBody } from './PreviewBody';
 
 interface PreviewPanelProps {
@@ -13,8 +27,11 @@ interface PreviewPanelProps {
   item: S3Object | null;
   cannotPreviewReason: string | null;
   fileName: string;
+  showVersions: boolean;
   onBack: () => void;
   onDownload: (key: string, versionId?: string) => void;
+  onCopyUrl: (key: string, ttl: number, versionId?: string) => void;
+  onCopyS3Uri: (key: string) => void;
 }
 
 export function PreviewPanel({
@@ -26,47 +43,108 @@ export function PreviewPanel({
   item,
   cannotPreviewReason,
   fileName,
+  showVersions,
   onBack,
   onDownload,
+  onCopyUrl,
+  onCopyS3Uri,
 }: PreviewPanelProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   const handleDownload = () => {
     if (item) {
       onDownload(item.key, item.versionId);
     }
   };
 
+  const versionIdForUrl = showVersions ? item?.versionId : undefined;
+  const showActions = item && !item.isFolder;
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 px-4 sm:px-6 py-3 border-b shrink-0">
-        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1 shrink-0">
-          <ChevronLeft className="h-4 w-4" />
-          Back
-        </Button>
-        <span className="flex-1 truncate text-sm font-medium" title={fileName}>
-          {fileName}
-        </span>
-        {!cannotPreviewReason && item && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDownload}
-            className="shrink-0"
-          >
-            <Download className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Download</span>
+    <TooltipProvider>
+      <div className="flex h-full flex-col">
+        <div className="flex items-center gap-1 sm:gap-2 px-4 sm:px-6 py-3 border-b shrink-0">
+          <Button variant="ghost" size="sm" onClick={onBack} className="gap-1 shrink-0">
+            <ChevronLeft className="h-4 w-4" />
+            Back
           </Button>
-        )}
+          <span className="flex-1 truncate text-sm font-medium" title={fileName}>
+            {fileName}
+          </span>
+          {showActions && (
+            <>
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                        <Link className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Copy URL</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => onCopyUrl(item.key, 3600, versionIdForUrl)}
+                  >
+                    Presigned URL (1 hour)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onCopyUrl(item.key, 86400, versionIdForUrl)}
+                  >
+                    Presigned URL (1 day)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onCopyS3Uri(item.key)}>
+                    S3 URI (s3://...)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => setDetailsOpen(true)}
+                  >
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Details</TooltipContent>
+              </Tooltip>
+
+              {!cannotPreviewReason && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownload}
+                  className="shrink-0"
+                >
+                  <Download className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Download</span>
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+        <PreviewBody
+          isLoading={isLoading}
+          error={error}
+          signedUrl={signedUrl}
+          textContent={textContent}
+          embedType={embedType}
+          item={item}
+          cannotPreviewReason={cannotPreviewReason}
+          onDownload={onDownload}
+        />
+        <FileDetailsDialog
+          open={detailsOpen}
+          item={item}
+          onClose={() => setDetailsOpen(false)}
+        />
       </div>
-      <PreviewBody
-        isLoading={isLoading}
-        error={error}
-        signedUrl={signedUrl}
-        textContent={textContent}
-        embedType={embedType}
-        item={item}
-        cannotPreviewReason={cannotPreviewReason}
-        onDownload={onDownload}
-      />
-    </div>
+    </TooltipProvider>
   );
 }
