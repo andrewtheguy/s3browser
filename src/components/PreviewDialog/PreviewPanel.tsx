@@ -73,11 +73,60 @@ export function PreviewPanel({
           </span>
           {showActions && (
             <>
+              <div className="hidden sm:flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 gap-1 px-2"
+                      onClick={() => onCopyUrl(item.key, 3600, versionIdForUrl)}
+                    >
+                      <Link className="h-4 w-4" />
+                      1h
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copy presigned URL (1 hour)</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 gap-1 px-2"
+                      onClick={() => onCopyUrl(item.key, 86400, versionIdForUrl)}
+                    >
+                      <Link className="h-4 w-4" />
+                      1d
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copy presigned URL (1 day)</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 gap-1 px-2"
+                      onClick={() => onCopyS3Uri(item.key)}
+                    >
+                      <Link className="h-4 w-4" />
+                      S3
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copy S3 URI (s3://...)</TooltipContent>
+                </Tooltip>
+              </div>
+
               <DropdownMenu>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 sm:hidden"
+                      >
                         <Link className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>

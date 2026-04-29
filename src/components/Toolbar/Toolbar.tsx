@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { Fragment, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   Home,
@@ -446,31 +446,35 @@ export function Toolbar({
               const isLast = index === pathSegments.length - 1 && !previewFileName;
 
               return (
-                <BreadcrumbItem key={index}>
+                <Fragment key={index}>
                   <BreadcrumbSeparator />
-                  {isLast ? (
-                    <BreadcrumbPage className="font-medium">
-                      {segment}
-                    </BreadcrumbPage>
-                  ) : (
-                    <BreadcrumbLink
-                      className="cursor-pointer"
-                      onClick={() => handleBreadcrumbClick(index)}
-                    >
-                      {segment}
-                    </BreadcrumbLink>
-                  )}
-                </BreadcrumbItem>
+                  <BreadcrumbItem>
+                    {isLast ? (
+                      <BreadcrumbPage className="font-medium">
+                        {segment}
+                      </BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink
+                        className="cursor-pointer"
+                        onClick={() => handleBreadcrumbClick(index)}
+                      >
+                        {segment}
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                </Fragment>
               );
             })}
 
             {previewFileName && (
-              <BreadcrumbItem>
+              <>
                 <BreadcrumbSeparator />
-                <BreadcrumbPage className="font-medium">
-                  {previewFileName}
-                </BreadcrumbPage>
-              </BreadcrumbItem>
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="font-medium">
+                    {previewFileName}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
             )}
           </BreadcrumbList>
         </Breadcrumb>
