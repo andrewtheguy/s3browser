@@ -1082,8 +1082,11 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
                 item={preview.item}
                 cannotPreviewReason={preview.cannotPreviewReason}
                 fileName={previewFileName}
+                showVersions={showVersions}
                 onBack={handleClosePreview}
                 onDownload={handlePreviewDownload}
+                onCopyUrl={handleCopyUrl}
+                onCopyS3Uri={handleCopyS3Uri}
               />
             </div>
           ) : (
