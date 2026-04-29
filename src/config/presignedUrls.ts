@@ -49,9 +49,6 @@ export function setPresignedUrlTtlOptions(options: readonly unknown[]): void {
     seen.add(opt.shortLabel);
     return true;
   });
-  if (unique.length === 0) {
-    return;
-  }
   currentOptions = Object.freeze(unique.map((opt) => Object.freeze({ ...opt })));
   listeners.forEach((listener) => listener());
 }

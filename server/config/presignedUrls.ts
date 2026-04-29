@@ -97,6 +97,11 @@ function parseTtls(raw: string | undefined): PresignedUrlTtlOption[] {
   if (options.length > 0) {
     return options;
   }
+  if (raw?.trim()) {
+    console.warn(
+      `presignedUrls: S3BROWSER_PRESIGNED_URL_TTLS="${raw}" yielded no valid entries; falling back to defaults "${DEFAULT_TTLS}"`,
+    );
+  }
   return parseRawTtls(DEFAULT_TTLS).options;
 }
 
