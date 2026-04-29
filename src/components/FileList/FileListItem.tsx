@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { usePresignedUrlTtlOptions } from '../../config';
 import type { S3Object } from '../../types';
 import { formatFileSize, formatDate } from '../../utils/formatters';
 import { getFileIconType, type FileIconType } from '../../utils/fileIcons';
@@ -114,6 +115,7 @@ export function FileListItem({
   const isSelectable = true;
 
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const ttlOptions = usePresignedUrlTtlOptions();
 
   const handleClick = () => {
     if (!isInteractive) {
@@ -247,16 +249,14 @@ export function FileListItem({
                     <TooltipContent>Copy URL</TooltipContent>
                   </Tooltip>
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuItem
-                      onClick={() => onCopyUrl(item.key, 3600, showVersions ? item.versionId : undefined)}
-                    >
-                      Presigned URL (1 hour)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => onCopyUrl(item.key, 86400, showVersions ? item.versionId : undefined)}
-                    >
-                      Presigned URL (1 day)
-                    </DropdownMenuItem>
+                    {ttlOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.shortLabel}
+                        onClick={() => onCopyUrl(item.key, option.ttl, showVersions ? item.versionId : undefined)}
+                      >
+                        Presigned URL ({option.longLabel})
+                      </DropdownMenuItem>
+                    ))}
                     <DropdownMenuItem onClick={() => onCopyS3Uri(item.key)}>
                       S3 URI (s3://...)
                     </DropdownMenuItem>

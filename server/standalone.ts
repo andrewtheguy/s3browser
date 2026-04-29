@@ -8,6 +8,8 @@ import objectsRoutes from './routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
 import downloadRoutes from './routes/download.js';
 import bucketRoutes from './routes/bucket.js';
+import configRoutes from './routes/config.js';
+import { getPresignedUrlTtlOptions } from './config/presignedUrls.js';
 
 // Embedded frontend assets (Bun embeds these at compile time)
 import indexHtml from '../dist/index.html' with { type: 'text' };
@@ -132,6 +134,7 @@ app.use('/api/objects', objectsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/download', downloadRoutes);
 app.use('/api/bucket', bucketRoutes);
+app.use('/api/config', configRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -171,6 +174,14 @@ app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
   }
   res.status(500).json({ error: 'Internal server error' });
 });
+
+// Validate presigned URL TTL config (fails fast on duplicates / invalid env)
+try {
+  getPresignedUrlTtlOptions();
+} catch (error) {
+  console.error('Failed to load presigned URL TTL config:', error instanceof Error ? error.message : error);
+  process.exit(1);
+}
 
 // Acquire instance lock to prevent multiple instances
 try {
