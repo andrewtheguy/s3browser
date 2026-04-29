@@ -11,10 +11,12 @@ A web-based file manager for AWS S3 and S3-compatible storage services (Backblaz
 ## Features
 
 - Browse S3 buckets with folder navigation
-- Upload files up to 5GB with multipart upload and resume support
-- Download files via presigned URLs
+- Upload files and folders up to 5GB per file with multipart upload and in-session retry/resume support
+- Download individual files via presigned URLs and folder contents through the authenticated server proxy
 - Create folders
 - Delete files
+- Copy and move files or folders
+- Preview common text, PDF, image, video, and audio files
 - Auto-detect bucket region or specify manually
 - Support for custom S3-compatible endpoints
 - Save and manage multiple S3 connection profiles
@@ -43,7 +45,7 @@ curl -sSL https://andrewtheguy.github.io/s3browser/install.sh | bash -s v0.0.1
 
 ## Tech Stack
 
-- **Frontend**: React, TypeScript, Material-UI
+- **Frontend**: React, TypeScript, Tailwind CSS, Radix UI primitives, lucide-react icons
 - **Backend**: Express, AWS SDK v3, SQLite (bun:sqlite)
 - **Build**: Vite (frontend bundler), Bun (runtime, package manager, standalone compiler)
 
@@ -110,6 +112,8 @@ To bind the dev backend to a different interface, set `HOST`. You can also set `
 HOST=0.0.0.0 PORT=3001 bun run dev:server
 ```
 
+The Vite dev proxy is configured for backend port `3001`; if you run the backend on a different port, update `vite.config.ts` or call the backend directly.
+
 ### Production Build
 
 ```bash
@@ -133,21 +137,21 @@ This creates an `s3browser` executable that can be run from anywhere without dep
 ./s3browser --bind [::1]:3000
 ```
 
-Run `./s3browser --help` for all options.
+By default, the standalone executable listens on all interfaces on port `8170`. Use `--bind 127.0.0.1:8170` for localhost-only access. Run `./s3browser --help` for all options.
 
 ## Usage
 
 ### Login Flow
 
 1. **Sign in** with your password (from `~/.s3browser/login.password` or environment variable)
-2. **Enter S3 credentials** (Access Key ID, Secret Access Key, endpoint)
+2. **Enter a profile name and S3 credentials** (Access Key ID, Secret Access Key, endpoint)
 3. **Select or enter a bucket** to browse
-4. Optionally **save the connection** with a name for quick access later
+4. The connection profile is saved or updated when you connect
 
 ### Connecting to AWS S3
 
 1. Sign in with your password
-2. Enter your AWS Access Key ID and Secret Access Key
+2. Enter a profile name, AWS Access Key ID, and Secret Access Key
 3. Enter the bucket name (or leave empty to list available buckets)
 4. Optionally check "Auto-detect region" or enter the region manually (e.g., `us-east-1`)
 
@@ -156,28 +160,31 @@ Run `./s3browser --help` for all options.
 For MinIO, DigitalOcean Spaces, or other S3-compatible services:
 
 1. Sign in with your password
-2. Enter your access credentials
+2. Enter a profile name and access credentials
 3. Enter the custom endpoint URL (e.g., `http://localhost:9000` for local MinIO)
 4. Enter the bucket name
 5. Enter the region if required by the service
 
 ### Saved Connections
 
-After successfully connecting, you can save the connection profile:
+Connections are saved as profiles when you connect:
 
-1. Enter a profile name (no spaces)
+1. Enter a profile name (1-64 characters; letters, numbers, dots, underscores, and hyphens only)
 2. All credentials are saved (secret access key encrypted with AES-256-GCM)
 3. Select a saved connection from the dropdown to quickly fill in credentials
+4. Existing saved connections keep the stored secret key unless you choose to change it
 
 ## Data Storage
 
-All data is stored in `~/.s3browser/`:
+Persistent app data is stored in `~/.s3browser/`:
 
 | File | Purpose |
 |------|---------|
 | `s3browser.db` | SQLite database (saved connections) |
 | `encryption.key` | Encryption key for S3 credentials |
 | `login.password` | Login password |
+
+SQLite may also create `s3browser.db-wal` and `s3browser.db-shm`. The standalone executable uses `s3browser.lock` while running to prevent multiple instances.
 
 ## Session Behavior
 
@@ -190,11 +197,11 @@ All data is stored in `~/.s3browser/`:
 
 | Action | Limit / behavior |
 | --- | --- |
-| Browse (list objects) | S3 lists keys with files and folders interleaved in lexicographic order. The UI then shows folders first and files second (each group alphabetized), but sorting is applied only within the current 5,000-item window (see examples below). |
-| Upload | No item-count cap; constrained by per-file size limits and concurrency. Max file size 5GB; files >= 10MB use multipart with 10MB parts (single uploads are for files < 10MB). |
-| Delete | No hard item cap overall; requests are batched in 1,000 objects (S3 DeleteObjects API limit). |
-| Copy / Move | No hard item cap overall; requests are batched in 1,000 operations per request. |
-| Download | Presigned URL TTL must be between 60 seconds (application-level validation) and 7 days (AWS S3 presigned URL limit) (default 1 hour if not provided). |
+| Browse (list objects) | S3 returns keys and common prefixes in lexicographic order. The UI shows folders first and files second; by default each group is sorted by name, and the file group can also be sorted by size or last-modified time. Sorting is applied only within the current 5,000-item browse window (see examples below). |
+| Upload | No item-count cap; constrained by browser file selection, per-file size limits, and concurrency. Max file size 5GB; files >= 10MB use multipart with 10MB parts (single uploads are for files < 10MB). Upload resume state is in memory and only works while the tab/session remains active. |
+| Delete | No hard item cap overall in the UI flow; requests are chunked to at most 1,000 objects and about 90KB per request body. Large folder deletes prompt every 10,000 discovered objects while gathering the plan. |
+| Copy / Move | No hard item cap overall in the UI flow; requests are chunked to at most 1,000 operations per request. Objects larger than 5GB are copied with multipart copy using 100MB parts. |
+| Download | Presigned URL TTL must be between 60 seconds (application-level validation) and 7 days (AWS S3 presigned URL limit) (default 1 hour if not provided). Batch folder download uses the authenticated server proxy and requires a browser with File System Access API support. |
 | Show Versions | Deleted folder detection (folders where all contents are deleted) only works accurately in the first 5,000-item window. Folders in subsequent windows may appear as live even if all their contents are deleted. |
 
 ### Browse window caveats (examples)
@@ -225,11 +232,13 @@ All data is stored in `~/.s3browser/`:
 - Configuration files should be secured with 0600 permissions
 
 **Data transmission**:
-- S3 secret keys are **never** transmitted from server to client
+- Saved S3 secret keys are not returned to the client during normal browsing or connection selection
 - Secret keys are only sent from client to server when creating a new connection or changing an existing key
 - When using a saved connection, the secret key does not need to be re-entered (stored securely on server)
 - To change a saved connection's secret key, enter a new value in the form
-- All S3 operations (list, upload, download, delete) are performed server-side
+- Exporting an AWS or rclone profile intentionally decrypts the saved secret key server-side and sends it to the browser as a downloaded config file; only do this on trusted devices
+- List, upload, delete, copy, move, metadata, and bucket-info operations are performed server-side
+- Individual file downloads and media/PDF previews use server-generated presigned URLs; text previews and batch folder downloads use authenticated server proxy routes
 
 **Not recommended for**:
 - Public internet deployment
