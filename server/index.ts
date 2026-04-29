@@ -8,6 +8,15 @@ import uploadRoutes, { cleanupUploadTracker } from './routes/upload.js';
 import downloadRoutes from './routes/download.js';
 import bucketRoutes from './routes/bucket.js';
 import configRoutes from './routes/config.js';
+import { getPresignedUrlTtlOptions } from './config/presignedUrls.js';
+
+// Validate presigned URL TTL config (fails fast on duplicates / invalid env)
+try {
+  getPresignedUrlTtlOptions();
+} catch (error) {
+  console.error('Failed to load presigned URL TTL config:', error instanceof Error ? error.message : error);
+  process.exit(1);
+}
 
 // Initialize database (validates encryption key and creates tables)
 try {

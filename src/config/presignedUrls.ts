@@ -6,6 +6,9 @@ export interface PresignedUrlTtlOption {
   longLabel: string;
 }
 
+// AWS S3 SigV4 caps presigned URL expiry at 7 days.
+const MAX_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 const DEFAULT_OPTIONS: readonly PresignedUrlTtlOption[] = Object.freeze([
   Object.freeze({ ttl: 3600, shortLabel: '1h', longLabel: '1 hour' }),
   Object.freeze({ ttl: 86400, shortLabel: '1d', longLabel: '1 day' }),
@@ -19,9 +22,15 @@ function isValidOption(value: unknown): value is PresignedUrlTtlOption {
     return false;
   }
   const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.ttl !== 'number' ||
+    !Number.isFinite(candidate.ttl) ||
+    candidate.ttl <= 0 ||
+    candidate.ttl > MAX_TTL_SECONDS
+  ) {
+    return false;
+  }
   return (
-    typeof candidate.ttl === 'number' &&
-    candidate.ttl > 0 &&
     typeof candidate.shortLabel === 'string' &&
     typeof candidate.longLabel === 'string'
   );
@@ -32,7 +41,18 @@ export function setPresignedUrlTtlOptions(options: readonly unknown[]): void {
   if (filtered.length === 0) {
     return;
   }
-  currentOptions = Object.freeze(filtered.map((opt) => Object.freeze({ ...opt })));
+  const seen = new Set<string>();
+  const unique = filtered.filter((opt) => {
+    if (seen.has(opt.shortLabel)) {
+      return false;
+    }
+    seen.add(opt.shortLabel);
+    return true;
+  });
+  if (unique.length === 0) {
+    return;
+  }
+  currentOptions = Object.freeze(unique.map((opt) => Object.freeze({ ...opt })));
   listeners.forEach((listener) => listener());
 }
 
