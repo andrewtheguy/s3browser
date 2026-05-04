@@ -32,6 +32,7 @@ const PORT = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3001;
 const HOST = process.env.HOST || 'localhost';
 // Middleware
 app.use(express.json({
+  limit: '10mb',
   type: (req) => {
     const rawUrl = typeof req.url === 'string' ? req.url : '';
     const path = rawUrl.split('?')[0] || '';
@@ -77,6 +78,11 @@ app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
   // If headers already sent, delegate to Express's default error handler
   if (res.headersSent) {
     return next(err);
+  }
+
+  if ((err as { type?: string }).type === 'entity.too.large') {
+    res.status(413).json({ error: 'Request body too large' });
+    return;
   }
 
   res.status(500).json({ error: 'Internal server error' });
