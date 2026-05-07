@@ -132,7 +132,12 @@ const SelectItem = React.forwardRef<
 
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     {suffix && (
-      <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+      <span
+        className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center"
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         {suffix}
       </span>
     )}
