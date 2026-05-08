@@ -100,7 +100,7 @@ function sanitizeFolderPath(path: string): { valid: true; path: string } | { val
   let sanitized = path.trim();
 
   // Check for path traversal
-  if (sanitized.includes('../')) {
+  if (sanitized.split('/').some((segment) => segment === '..')) {
     return { valid: false, error: 'Path traversal is not allowed' };
   }
 
@@ -549,7 +549,7 @@ function validateKey(key: string): { valid: true } | { valid: false; error: stri
   if (!key || typeof key !== 'string') {
     return { valid: false, error: 'Key must be a non-empty string' };
   }
-  if (key.includes('../') || key.startsWith('/')) {
+  if (key.startsWith('/') || key.split('/').some((segment) => segment === '..')) {
     return { valid: false, error: 'Invalid object key' };
   }
   if (Buffer.byteLength(key, 'utf8') > 1024) {
