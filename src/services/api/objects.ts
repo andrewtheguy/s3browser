@@ -286,6 +286,12 @@ export interface ObjectMetadata {
   cacheControl?: string;
   contentDisposition?: string;
   contentEncoding?: string;
+  checksumSHA256?: string;
+  checksumSHA1?: string;
+  checksumCRC32?: string;
+  checksumCRC32C?: string;
+  checksumCRC64NVME?: string;
+  checksumType?: string;
   userMetadata?: Record<string, string>;
 }
 

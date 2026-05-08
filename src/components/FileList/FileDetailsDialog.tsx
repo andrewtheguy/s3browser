@@ -233,6 +233,66 @@ export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProp
                         </TableCell>
                       </TableRow>
                     )}
+                    {metadata.checksumSHA256 && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          SHA256
+                        </TableCell>
+                        <TableCell className="break-all font-mono text-xs">
+                          {metadata.checksumSHA256}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.checksumSHA1 && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          SHA1
+                        </TableCell>
+                        <TableCell className="break-all font-mono text-xs">
+                          {metadata.checksumSHA1}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.checksumCRC32 && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          CRC32
+                        </TableCell>
+                        <TableCell className="break-all font-mono text-xs">
+                          {metadata.checksumCRC32}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.checksumCRC32C && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          CRC32C
+                        </TableCell>
+                        <TableCell className="break-all font-mono text-xs">
+                          {metadata.checksumCRC32C}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.checksumCRC64NVME && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          CRC64NVME
+                        </TableCell>
+                        <TableCell className="break-all font-mono text-xs">
+                          {metadata.checksumCRC64NVME}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {metadata.checksumType && (
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Checksum Type
+                        </TableCell>
+                        <TableCell>
+                          {metadata.checksumType}
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {metadata.userMetadata && Object.keys(metadata.userMetadata).length > 0 && (
                       <>
                         <TableRow>
