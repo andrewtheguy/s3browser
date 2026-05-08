@@ -970,6 +970,7 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
   const commandInput: HeadObjectCommandInput = {
     Bucket: bucket,
     Key: key,
+    ChecksumMode: 'ENABLED',
     ...(versionId ? { VersionId: versionId } : {}),
   };
   const command = new HeadObjectCommand(commandInput);
@@ -1001,6 +1002,12 @@ router.get('/:connectionId/:bucket/metadata', s3Middleware, requireBucket, async
     cacheControl: response.CacheControl,
     contentDisposition: response.ContentDisposition,
     contentEncoding: response.ContentEncoding,
+    checksumSHA256: response.ChecksumSHA256,
+    checksumSHA1: response.ChecksumSHA1,
+    checksumCRC32: response.ChecksumCRC32,
+    checksumCRC32C: response.ChecksumCRC32C,
+    checksumCRC64NVME: response.ChecksumCRC64NVME,
+    checksumType: response.ChecksumType,
     userMetadata: response.Metadata,
   });
 });
