@@ -84,14 +84,14 @@ export function PreviewBody({
   onDownload,
 }: PreviewBodyProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [prettyJson, setPrettyJson] = useState(false);
+  const [prettyJson, setPrettyJson] = useState(true);
   const [prevItemId, setPrevItemId] = useState<string | undefined>(
     item ? `${item.key}::${item.versionId ?? ''}` : undefined
   );
   const itemId = item ? `${item.key}::${item.versionId ?? ''}` : undefined;
   if (itemId !== prevItemId) {
     setPrevItemId(itemId);
-    setPrettyJson(false);
+    setPrettyJson(true);
   }
 
   useEffect(() => {
