@@ -201,7 +201,7 @@ export function PreviewBody({
           <div className="flex h-full items-center justify-center p-4">
             <audio
               controls
-              preload="auto"
+              preload="metadata"
               src={signedUrl}
               className="w-full max-w-md"
             >
@@ -216,7 +216,7 @@ export function PreviewBody({
           <div className="flex h-full items-center justify-center p-4">
             <video
               controls
-              preload="auto"
+              preload="metadata"
               src={signedUrl}
               className="max-w-full max-h-full"
             >
