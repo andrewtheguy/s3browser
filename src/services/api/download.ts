@@ -66,6 +66,28 @@ export async function getPresignedUrl(
   return validateDownloadUrlResponse(response, 'Failed to get presigned URL');
 }
 
+export function buildObjectUrl(
+  connectionId: number,
+  bucket: string,
+  key: string,
+  options?: {
+    disposition?: 'inline' | 'attachment';
+    contentType?: string;
+    versionId?: string;
+  }
+): string {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+  const { disposition, contentType, versionId } = options ?? {};
+  const params = new URLSearchParams();
+  params.append('key', key);
+  if (versionId) params.append('versionId', versionId);
+  if (disposition) params.append('disposition', disposition);
+  if (contentType) params.append('contentType', contentType);
+  return `/api/download/${connectionId}/${encodeURIComponent(bucket)}/object?${params.toString()}`;
+}
+
 export async function getObjectText(
   connectionId: number,
   bucket: string,

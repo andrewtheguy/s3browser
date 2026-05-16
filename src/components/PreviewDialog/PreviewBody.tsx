@@ -230,7 +230,7 @@ export function PreviewBody({
         return (
           <iframe
             ref={iframeRef}
-            sandbox=""
+            sandbox="allow-same-origin"
             srcDoc={buildImageSrcdoc(signedUrl, title)}
             referrerPolicy="no-referrer"
             title={title}
