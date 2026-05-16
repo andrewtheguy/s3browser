@@ -33,6 +33,7 @@ import { PreviewPanel } from '../PreviewDialog';
 import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDialog';
 import { CopyMoveDialog } from '../CopyMoveDialog';
 import { BucketInfoDialog } from '../BucketInfoDialog';
+import { ManualCopyDialog } from '../ManualCopyDialog/ManualCopyDialog';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
 import {
   useDelete,
@@ -144,6 +145,9 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
 
   // Bucket info state
   const [bucketInfoOpen, setBucketInfoOpen] = useState(false);
+
+  // Manual copy fallback (shown when navigator.clipboard is unavailable or rejects)
+  const [manualCopy, setManualCopy] = useState<{ url: string; title: string } | null>(null);
 
   const handleBucketInfoClick = useCallback(() => {
     setBucketInfoOpen(true);
@@ -804,6 +808,8 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     if (result.success) {
       const duration = formatTtlDuration(ttl);
       toast.success(`Presigned URL (${duration}) copied to clipboard`);
+    } else if (result.url) {
+      setManualCopy({ url: result.url, title: 'Copy presigned URL' });
     } else {
       toast.error('Failed to copy URL');
     }
@@ -813,6 +819,8 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     const result = await copyS3Uri(key);
     if (result.success) {
       toast.success('S3 URI copied to clipboard');
+    } else if (result.url) {
+      setManualCopy({ url: result.url, title: 'Copy S3 URI' });
     } else {
       toast.error('Failed to copy S3 URI');
     }
@@ -1296,6 +1304,13 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
       </Dialog>
 
       <BucketInfoDialog open={bucketInfoOpen} onClose={handleBucketInfoClose} />
+
+      <ManualCopyDialog
+        open={manualCopy !== null}
+        onOpenChange={(isOpen) => { if (!isOpen) setManualCopy(null); }}
+        url={manualCopy?.url ?? null}
+        title={manualCopy?.title ?? ''}
+      />
     </div>
   );
 }

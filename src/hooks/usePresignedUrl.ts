@@ -35,8 +35,13 @@ export function usePresignedUrl() {
 
       // Check if clipboard API is available (not available in SSR or insecure contexts)
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-        return { success: true, url };
+        try {
+          await navigator.clipboard.writeText(url);
+          return { success: true, url };
+        } catch (err) {
+          console.error('usePresignedUrl: clipboard write failed', err);
+          return { success: false, url };
+        }
       }
 
       // Clipboard unavailable - return URL for manual copy dialog
