@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
-import { downloadFile, getDownloadUrl } from '../services/api';
 
 export function useDownload() {
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
@@ -32,23 +31,21 @@ export function useDownload() {
     [ensureS3Connection]
   );
 
-  const getUrl = useCallback(
-    async (key: string, versionId?: string): Promise<string> => {
-      const { connectionId, bucket: resolvedBucket } = ensureS3Connection();
-
-      return getDownloadUrl(connectionId, resolvedBucket, key, versionId);
-    },
-    [ensureS3Connection]
-  );
-
   const download = useCallback(
-    async (key: string, versionId?: string): Promise<void> => {
-      const { connectionId, bucket: resolvedBucket } = ensureS3Connection();
+    (key: string, versionId?: string): void => {
+      const url = getProxyDownloadUrl(key, versionId);
+      const filename = key.split('/').pop() || 'download';
 
-      await downloadFile(connectionId, resolvedBucket, key, versionId);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     },
-    [ensureS3Connection]
+    [getProxyDownloadUrl]
   );
 
-  return { download, getDownloadUrl: getUrl, getProxyDownloadUrl };
+  return { download, getProxyDownloadUrl };
 }

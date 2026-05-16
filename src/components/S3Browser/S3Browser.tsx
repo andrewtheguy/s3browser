@@ -861,9 +861,9 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     void openPreview(item);
   }, [previewKey, objects, openPreview, closePreview]);
 
-  const handlePreviewDownload = useCallback(async (key: string, versionId?: string) => {
+  const handlePreviewDownload = useCallback((key: string, versionId?: string) => {
     try {
-      await download(key, versionId);
+      download(key, versionId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast.error(message || 'Download failed');
