@@ -1,20 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
-import { getPresignedUrl, getObjectText } from '../services/api';
+import { buildObjectUrl, getObjectText } from '../services/api';
 import { isPreviewableFile, getMimeType, type EmbedType } from '../utils/previewUtils';
 import { formatFileSize } from '../utils/formatters';
 import type { S3Object } from '../types';
 
-// TTL for preview signed URLs (1 hour)
-const PREVIEW_TTL_SECONDS = 3600;
 const TEXT_PREVIEW_LIMIT_BYTES = 2 * 1024 * 1024;
 
 interface PreviewState {
   isOpen: boolean;
   isLoading: boolean;
   error: string | null;
-  signedUrl: string | null;
+  proxyUrl: string | null;
   textContent: string | null;
   embedType: EmbedType;
   item: S3Object | null;
@@ -30,7 +28,7 @@ export function usePreview() {
     isOpen: false,
     isLoading: false,
     error: null,
-    signedUrl: null,
+    proxyUrl: null,
     textContent: null,
     embedType: 'unsupported',
     item: null,
@@ -68,7 +66,7 @@ export function usePreview() {
           isOpen: true,
           isLoading: false,
           error: null,
-          signedUrl: null,
+          proxyUrl: null,
           textContent: null,
           embedType: previewability.embedType,
           item,
@@ -84,7 +82,7 @@ export function usePreview() {
           isOpen: true,
           isLoading: false,
           error: null,
-          signedUrl: null,
+          proxyUrl: null,
           textContent: null,
           embedType: previewability.embedType,
           item,
@@ -102,7 +100,7 @@ export function usePreview() {
         isOpen: true,
         isLoading: true,
         error: null,
-        signedUrl: null,
+        proxyUrl: null,
         textContent: null,
         embedType: previewability.embedType,
         item,
@@ -131,15 +129,13 @@ export function usePreview() {
         }
 
         const mimeType = getMimeType(item.name);
-        const signedUrl = await getPresignedUrl(
+        const proxyUrl = buildObjectUrl(
           activeConnectionId,
           bucket,
           item.key,
-          PREVIEW_TTL_SECONDS,
           {
             disposition: 'inline',
             contentType: mimeType,
-            signal: abortController.signal,
             versionId: item.versionId,
           }
         );
@@ -151,7 +147,7 @@ export function usePreview() {
         setState((prev) => ({
           ...prev,
           isLoading: false,
-          signedUrl,
+          proxyUrl,
         }));
       } catch (err) {
         // Ignore aborted requests
@@ -189,7 +185,7 @@ export function usePreview() {
       isOpen: false,
       isLoading: false,
       error: null,
-      signedUrl: null,
+      proxyUrl: null,
       textContent: null,
       embedType: 'unsupported',
       item: null,

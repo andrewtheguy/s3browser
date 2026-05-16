@@ -338,10 +338,17 @@ router.get('/:connectionId/:bucket/object', s3Middleware, requireBucket, async (
     ? req.query.versionId
     : undefined;
 
+  const disposition = req.query.disposition === 'inline' ? 'inline' : 'attachment';
+  const contentTypeOverride = validateContentType(req.query.contentType as string | undefined);
+  const rangeHeader = typeof req.headers.range === 'string' && !hasUnsafeChars(req.headers.range)
+    ? req.headers.range
+    : undefined;
+
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: keyValidation.validatedKey,
     ...(versionId && { VersionId: versionId }),
+    ...(rangeHeader && { Range: rangeHeader }),
   });
 
   try {
@@ -354,14 +361,20 @@ router.get('/:connectionId/:bucket/object', s3Middleware, requireBucket, async (
 
     const rawFilename = keyValidation.validatedKey.split('/').pop() || 'download';
 
-    res.setHeader('Content-Disposition', buildContentDisposition('attachment', rawFilename));
-    if (response.ContentType) {
-      res.setHeader('Content-Type', response.ContentType);
+    if (disposition === 'inline') {
+      res.setHeader('Content-Disposition', 'inline');
     } else {
-      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', buildContentDisposition('attachment', rawFilename));
     }
+    const effectiveContentType = contentTypeOverride || response.ContentType || 'application/octet-stream';
+    res.setHeader('Content-Type', effectiveContentType);
     if (typeof response.ContentLength === 'number') {
       res.setHeader('Content-Length', response.ContentLength.toString());
+    }
+    res.setHeader('Accept-Ranges', response.AcceptRanges || 'bytes');
+    if (response.ContentRange) {
+      res.setHeader('Content-Range', response.ContentRange);
+      res.status(206);
     }
 
     if (isNodeReadableStream(body)) {

@@ -19,53 +19,24 @@ const cleanupIframe = (iframe: HTMLIFrameElement | null) => {
   iframe.removeAttribute('srcDoc');
 };
 
-const buildMediaSrcdoc = (
-  embedType: 'image' | 'video' | 'audio',
-  signedUrl: string,
-  alt: string,
-): string => {
+const buildImageSrcdoc = (proxyUrl: string, alt: string): string => {
   const doc = document.implementation.createHTMLDocument('');
-  const baseStyle =
-    'body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:transparent}';
   const style = doc.createElement('style');
-  let mediaElement: HTMLImageElement | HTMLVideoElement | HTMLAudioElement;
-
-  switch (embedType) {
-    case 'image': {
-      style.textContent = `${baseStyle}img{max-width:100%;max-height:100vh;object-fit:contain}`;
-      const image = doc.createElement('img');
-      image.src = signedUrl;
-      image.alt = alt;
-      mediaElement = image;
-      break;
-    }
-    case 'video': {
-      style.textContent = `${baseStyle}video{max-width:100%;max-height:100vh}`;
-      const video = doc.createElement('video');
-      video.controls = true;
-      video.src = signedUrl;
-      mediaElement = video;
-      break;
-    }
-    case 'audio': {
-      style.textContent = `${baseStyle}audio{width:100%;max-width:500px}`;
-      const audio = doc.createElement('audio');
-      audio.controls = true;
-      audio.src = signedUrl;
-      mediaElement = audio;
-      break;
-    }
-  }
-
+  style.textContent =
+    'body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:transparent}' +
+    'img{max-width:100%;max-height:100vh;object-fit:contain}';
+  const image = doc.createElement('img');
+  image.src = proxyUrl;
+  image.alt = alt;
   doc.head.append(style);
-  doc.body.append(mediaElement);
+  doc.body.append(image);
   return new XMLSerializer().serializeToString(doc);
 };
 
 export interface PreviewBodyProps {
   isLoading: boolean;
   error: string | null;
-  signedUrl: string | null;
+  proxyUrl: string | null;
   textContent: string | null;
   embedType: EmbedType;
   item: S3Object | null;
@@ -76,7 +47,7 @@ export interface PreviewBodyProps {
 export function PreviewBody({
   isLoading,
   error,
-  signedUrl,
+  proxyUrl,
   textContent,
   embedType,
   item,
@@ -95,10 +66,10 @@ export function PreviewBody({
   }
 
   useEffect(() => {
-    if (!signedUrl) {
+    if (!proxyUrl) {
       cleanupIframe(iframeRef.current);
     }
-  }, [signedUrl]);
+  }, [proxyUrl]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -196,7 +167,7 @@ export function PreviewBody({
       );
     }
 
-    if (signedUrl !== null) {
+    if (proxyUrl !== null) {
       const title = item?.name || 'Preview';
 
       if (embedType === 'pdf') {
@@ -212,7 +183,7 @@ export function PreviewBody({
               className="mt-6"
             >
               <a
-                href={signedUrl}
+                href={proxyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 referrerPolicy="no-referrer"
@@ -225,12 +196,42 @@ export function PreviewBody({
         );
       }
 
-      if (embedType === 'image' || embedType === 'video' || embedType === 'audio') {
+      if (embedType === 'audio') {
+        return (
+          <div className="flex h-full items-center justify-center p-4">
+            <audio
+              controls
+              preload="metadata"
+              src={proxyUrl}
+              className="w-full max-w-md"
+            >
+              <a href={proxyUrl}>Download audio</a>
+            </audio>
+          </div>
+        );
+      }
+
+      if (embedType === 'video') {
+        return (
+          <div className="flex h-full items-center justify-center p-4">
+            <video
+              controls
+              preload="metadata"
+              src={proxyUrl}
+              className="max-w-full max-h-full"
+            >
+              <a href={proxyUrl}>Download video</a>
+            </video>
+          </div>
+        );
+      }
+
+      if (embedType === 'image') {
         return (
           <iframe
             ref={iframeRef}
-            sandbox=""
-            srcDoc={buildMediaSrcdoc(embedType, signedUrl, title)}
+            sandbox="allow-same-origin"
+            srcDoc={buildImageSrcdoc(proxyUrl, title)}
             referrerPolicy="no-referrer"
             title={title}
             className="w-full h-full border-none"
