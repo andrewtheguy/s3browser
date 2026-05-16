@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 import { ArrowDown, ArrowUp, ArrowUpDown, FolderX } from 'lucide-react';
 import {
   Table,
@@ -231,7 +232,12 @@ export function FileList({
 
   const handleDownload = useCallback(
     (key: string, versionId?: string) => {
-      download(key, versionId);
+      try {
+        download(key, versionId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error(message || 'Download failed');
+      }
     },
     [download]
   );
