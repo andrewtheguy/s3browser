@@ -20,7 +20,7 @@ const cleanupIframe = (iframe: HTMLIFrameElement | null) => {
 };
 
 const buildMediaSrcdoc = (
-  embedType: 'image' | 'video' | 'audio',
+  embedType: 'image' | 'video',
   signedUrl: string,
   alt: string,
 ): string => {
@@ -28,7 +28,7 @@ const buildMediaSrcdoc = (
   const baseStyle =
     'body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:transparent}';
   const style = doc.createElement('style');
-  let mediaElement: HTMLImageElement | HTMLVideoElement | HTMLAudioElement;
+  let mediaElement: HTMLImageElement | HTMLVideoElement;
 
   switch (embedType) {
     case 'image': {
@@ -45,14 +45,6 @@ const buildMediaSrcdoc = (
       video.controls = true;
       video.src = signedUrl;
       mediaElement = video;
-      break;
-    }
-    case 'audio': {
-      style.textContent = `${baseStyle}audio{width:100%;max-width:500px}`;
-      const audio = doc.createElement('audio');
-      audio.controls = true;
-      audio.src = signedUrl;
-      mediaElement = audio;
       break;
     }
   }
@@ -225,7 +217,22 @@ export function PreviewBody({
         );
       }
 
-      if (embedType === 'image' || embedType === 'video' || embedType === 'audio') {
+      if (embedType === 'audio') {
+        return (
+          <div className="flex h-full items-center justify-center p-4">
+            <audio
+              controls
+              preload="auto"
+              src={signedUrl}
+              className="w-full max-w-md"
+            >
+              <a href={signedUrl}>Download audio</a>
+            </audio>
+          </div>
+        );
+      }
+
+      if (embedType === 'image' || embedType === 'video') {
         return (
           <iframe
             ref={iframeRef}
