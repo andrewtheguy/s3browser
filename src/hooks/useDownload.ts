@@ -20,7 +20,7 @@ export function useDownload() {
   const getProxyDownloadUrl = useCallback(
     (key: string, versionId?: string): string => {
       const { connectionId, bucket: resolvedBucket } = ensureS3Connection();
-      return buildObjectUrl(connectionId, resolvedBucket, key, { versionId });
+      return buildObjectUrl(connectionId, resolvedBucket, key, { versionId, disposition: 'attachment' });
     },
     [ensureS3Connection]
   );
