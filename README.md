@@ -12,7 +12,7 @@ A web-based file manager for AWS S3 and S3-compatible storage services (Backblaz
 
 - Browse S3 buckets with folder navigation
 - Upload files and folders up to 5GB per file with multipart upload and in-session retry/resume support
-- Download individual files via presigned URLs and folder contents through the authenticated server proxy
+- Download individual files and folder contents through the authenticated server proxy (no direct S3 URLs exposed to the browser)
 - Create folders
 - Delete files
 - Copy and move files or folders
@@ -201,7 +201,8 @@ SQLite may also create `s3browser.db-wal` and `s3browser.db-shm`. The standalone
 | Upload | No item-count cap; constrained by browser file selection, per-file size limits, and concurrency. Max file size 5GB; files >= 10MB use multipart with 10MB parts (single uploads are for files < 10MB). Upload resume state is in memory and only works while the tab/session remains active. |
 | Delete | No hard item cap overall in the UI flow; requests are chunked to at most 1,000 objects and about 90KB per request body. Large folder deletes prompt every 10,000 discovered objects while gathering the plan. |
 | Copy / Move | No hard item cap overall in the UI flow; requests are chunked to at most 1,000 operations per request. Objects larger than 5GB are copied with multipart copy using 100MB parts. |
-| Download | Presigned URL TTL must be between 60 seconds (application-level validation) and 7 days (AWS S3 presigned URL limit) (default 1 hour if not provided). Batch folder download uses the authenticated server proxy and requires a browser with File System Access API support. |
+| Download | All file downloads — single, batch, and every preview type — stream through the authenticated server proxy (`/api/download/:connectionId/:bucket/object`). The browser never receives a direct S3 URL through normal browse/preview/download flows. Batch folder download additionally requires a browser with File System Access API support. |
+| Copy Presigned URL | The "Copy Presigned URL" menu item is the one intentional exception to the proxy-only model: it returns an S3 presigned URL for the user to share. TTL must be between 60 seconds (application-level validation) and 7 days (AWS S3 presigned URL limit), default 1 hour if not provided. |
 | Show Versions | Deleted folder detection (folders where all contents are deleted) only works accurately in the first 5,000-item window. Folders in subsequent windows may appear as live even if all their contents are deleted. |
 
 ### Browse window caveats (examples)
@@ -238,7 +239,8 @@ SQLite may also create `s3browser.db-wal` and `s3browser.db-shm`. The standalone
 - To change a saved connection's secret key, enter a new value in the form
 - Exporting an AWS or rclone profile intentionally decrypts the saved secret key server-side and sends it to the browser as a downloaded config file; only do this on trusted devices
 - List, upload, delete, copy, move, metadata, and bucket-info operations are performed server-side
-- Individual file downloads and media/PDF previews use server-generated presigned URLs; text previews and batch folder downloads use authenticated server proxy routes
+- All object access from the browser — single and batch downloads, plus text, image, video, audio, and PDF previews — flows through the authenticated `/api/download/:connectionId/:bucket/object` proxy. The proxy is the single S3-facing surface, so the browser never receives a direct S3 URL through normal browse/preview/download flows.
+- The only intentional exception is the explicit "Copy Presigned URL" menu item, which returns a presigned URL for the user to share. Routing everything else through one proxy keeps every S3 request behind the same authentication, removes the need for any CORS configuration on the bucket, and prevents inconsistency where some UI affordances would expose S3 directly while others do not.
 
 **Not recommended for**:
 - Public internet deployment
