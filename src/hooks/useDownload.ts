@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useParams } from 'react-router';
 import { useS3ClientContext } from '../contexts';
+import { buildObjectUrl } from '../services/api';
 
 export function useDownload() {
   const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
@@ -19,14 +20,7 @@ export function useDownload() {
   const getProxyDownloadUrl = useCallback(
     (key: string, versionId?: string): string => {
       const { connectionId, bucket: resolvedBucket } = ensureS3Connection();
-
-      const params = new URLSearchParams();
-      params.append('key', key);
-      if (versionId) {
-        params.append('versionId', versionId);
-      }
-
-      return `/api/download/${connectionId}/${encodeURIComponent(resolvedBucket)}/object?${params.toString()}`;
+      return buildObjectUrl(connectionId, resolvedBucket, key, { versionId });
     },
     [ensureS3Connection]
   );

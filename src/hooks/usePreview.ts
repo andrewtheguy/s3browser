@@ -12,7 +12,7 @@ interface PreviewState {
   isOpen: boolean;
   isLoading: boolean;
   error: string | null;
-  signedUrl: string | null;
+  proxyUrl: string | null;
   textContent: string | null;
   embedType: EmbedType;
   item: S3Object | null;
@@ -28,7 +28,7 @@ export function usePreview() {
     isOpen: false,
     isLoading: false,
     error: null,
-    signedUrl: null,
+    proxyUrl: null,
     textContent: null,
     embedType: 'unsupported',
     item: null,
@@ -66,7 +66,7 @@ export function usePreview() {
           isOpen: true,
           isLoading: false,
           error: null,
-          signedUrl: null,
+          proxyUrl: null,
           textContent: null,
           embedType: previewability.embedType,
           item,
@@ -82,7 +82,7 @@ export function usePreview() {
           isOpen: true,
           isLoading: false,
           error: null,
-          signedUrl: null,
+          proxyUrl: null,
           textContent: null,
           embedType: previewability.embedType,
           item,
@@ -100,7 +100,7 @@ export function usePreview() {
         isOpen: true,
         isLoading: true,
         error: null,
-        signedUrl: null,
+        proxyUrl: null,
         textContent: null,
         embedType: previewability.embedType,
         item,
@@ -129,7 +129,7 @@ export function usePreview() {
         }
 
         const mimeType = getMimeType(item.name);
-        const signedUrl = buildObjectUrl(
+        const proxyUrl = buildObjectUrl(
           activeConnectionId,
           bucket,
           item.key,
@@ -147,7 +147,7 @@ export function usePreview() {
         setState((prev) => ({
           ...prev,
           isLoading: false,
-          signedUrl,
+          proxyUrl,
         }));
       } catch (err) {
         // Ignore aborted requests
@@ -185,7 +185,7 @@ export function usePreview() {
       isOpen: false,
       isLoading: false,
       error: null,
-      signedUrl: null,
+      proxyUrl: null,
       textContent: null,
       embedType: 'unsupported',
       item: null,

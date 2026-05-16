@@ -22,7 +22,7 @@ import { PreviewBody } from './PreviewBody';
 interface PreviewPanelProps {
   isLoading: boolean;
   error: string | null;
-  signedUrl: string | null;
+  proxyUrl: string | null;
   textContent: string | null;
   embedType: EmbedType;
   item: S3Object | null;
@@ -38,7 +38,7 @@ interface PreviewPanelProps {
 export function PreviewPanel({
   isLoading,
   error,
-  signedUrl,
+  proxyUrl,
   textContent,
   embedType,
   item,
@@ -169,7 +169,7 @@ export function PreviewPanel({
         <PreviewBody
           isLoading={isLoading}
           error={error}
-          signedUrl={signedUrl}
+          proxyUrl={proxyUrl}
           textContent={textContent}
           embedType={embedType}
           item={item}

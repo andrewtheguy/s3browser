@@ -1084,7 +1084,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
               <PreviewPanel
                 isLoading={preview.isLoading}
                 error={preview.error}
-                signedUrl={preview.signedUrl}
+                proxyUrl={preview.proxyUrl}
                 textContent={preview.textContent}
                 embedType={preview.embedType}
                 item={preview.item}

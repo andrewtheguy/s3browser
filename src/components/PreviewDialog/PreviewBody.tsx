@@ -19,14 +19,14 @@ const cleanupIframe = (iframe: HTMLIFrameElement | null) => {
   iframe.removeAttribute('srcDoc');
 };
 
-const buildImageSrcdoc = (signedUrl: string, alt: string): string => {
+const buildImageSrcdoc = (proxyUrl: string, alt: string): string => {
   const doc = document.implementation.createHTMLDocument('');
   const style = doc.createElement('style');
   style.textContent =
     'body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:transparent}' +
     'img{max-width:100%;max-height:100vh;object-fit:contain}';
   const image = doc.createElement('img');
-  image.src = signedUrl;
+  image.src = proxyUrl;
   image.alt = alt;
   doc.head.append(style);
   doc.body.append(image);
@@ -36,7 +36,7 @@ const buildImageSrcdoc = (signedUrl: string, alt: string): string => {
 export interface PreviewBodyProps {
   isLoading: boolean;
   error: string | null;
-  signedUrl: string | null;
+  proxyUrl: string | null;
   textContent: string | null;
   embedType: EmbedType;
   item: S3Object | null;
@@ -47,7 +47,7 @@ export interface PreviewBodyProps {
 export function PreviewBody({
   isLoading,
   error,
-  signedUrl,
+  proxyUrl,
   textContent,
   embedType,
   item,
@@ -66,10 +66,10 @@ export function PreviewBody({
   }
 
   useEffect(() => {
-    if (!signedUrl) {
+    if (!proxyUrl) {
       cleanupIframe(iframeRef.current);
     }
-  }, [signedUrl]);
+  }, [proxyUrl]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -167,7 +167,7 @@ export function PreviewBody({
       );
     }
 
-    if (signedUrl !== null) {
+    if (proxyUrl !== null) {
       const title = item?.name || 'Preview';
 
       if (embedType === 'pdf') {
@@ -183,7 +183,7 @@ export function PreviewBody({
               className="mt-6"
             >
               <a
-                href={signedUrl}
+                href={proxyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 referrerPolicy="no-referrer"
@@ -202,10 +202,10 @@ export function PreviewBody({
             <audio
               controls
               preload="metadata"
-              src={signedUrl}
+              src={proxyUrl}
               className="w-full max-w-md"
             >
-              <a href={signedUrl}>Download audio</a>
+              <a href={proxyUrl}>Download audio</a>
             </audio>
           </div>
         );
@@ -217,10 +217,10 @@ export function PreviewBody({
             <video
               controls
               preload="metadata"
-              src={signedUrl}
+              src={proxyUrl}
               className="max-w-full max-h-full"
             >
-              <a href={signedUrl}>Download video</a>
+              <a href={proxyUrl}>Download video</a>
             </video>
           </div>
         );
@@ -231,7 +231,7 @@ export function PreviewBody({
           <iframe
             ref={iframeRef}
             sandbox="allow-same-origin"
-            srcDoc={buildImageSrcdoc(signedUrl, title)}
+            srcDoc={buildImageSrcdoc(proxyUrl, title)}
             referrerPolicy="no-referrer"
             title={title}
             className="w-full h-full border-none"
