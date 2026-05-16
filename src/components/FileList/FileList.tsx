@@ -231,7 +231,7 @@ export function FileList({
 
   const handleDownload = useCallback(
     (key: string, versionId?: string) => {
-      void download(key, versionId);
+      download(key, versionId);
     },
     [download]
   );

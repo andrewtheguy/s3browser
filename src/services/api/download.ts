@@ -23,29 +23,6 @@ function validateDownloadUrlResponse(response: DownloadUrlResponse | null, error
   return url;
 }
 
-export async function getDownloadUrl(
-  connectionId: number,
-  bucket: string,
-  key: string,
-  versionId?: string
-): Promise<string> {
-  if (!Number.isInteger(connectionId) || connectionId < 1) {
-    throw new Error('Invalid connection ID');
-  }
-
-  const params = new URLSearchParams();
-  params.append('key', key);
-  if (versionId) {
-    params.append('versionId', versionId);
-  }
-  params.append('disposition', 'attachment');
-  const response = await apiGet<DownloadUrlResponse>(
-    `/download/${connectionId}/${encodeURIComponent(bucket)}/url?${params.toString()}`
-  );
-
-  return validateDownloadUrlResponse(response, 'Failed to get download URL');
-}
-
 export async function getPresignedUrl(
   connectionId: number,
   bucket: string,
@@ -108,25 +85,4 @@ export async function getObjectText(
   const endpoint = `/download/${connectionId}/${encodeURIComponent(bucket)}/object?${params.toString()}`;
   const text = await apiGetText(endpoint, options?.signal);
   return text ?? '';
-}
-
-export async function downloadFile(
-  connectionId: number,
-  bucket: string,
-  key: string,
-  versionId?: string
-): Promise<void> {
-  const url = await getDownloadUrl(connectionId, bucket, key, versionId);
-
-  // Extract filename from key
-  const filename = key.split('/').pop() || 'download';
-
-  // Create link and attach to DOM for Safari compatibility
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
 }
