@@ -54,7 +54,7 @@ export function ManualCopyDialog({ open, onOpenChange, url, title }: ManualCopyD
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            Automatic clipboard copy isn't available in this browser context. Select the text below and press Ctrl/Cmd+C to copy.
+            Automatic clipboard copy isn't available in this browser context. The text below has been pre-selected for you — just press Ctrl/Cmd+C to copy.
           </DialogDescription>
         </DialogHeader>
         <textarea
