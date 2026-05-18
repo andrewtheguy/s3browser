@@ -190,10 +190,30 @@ function initializeDatabase(): Database {
       size INTEGER,
       etag TEXT,
       seen_at INTEGER NOT NULL,                 -- unix epoch seconds; updated each indexer run
+      content TEXT,                             -- UTF-8 body for text-like objects (NULL if not indexed)
+      content_indexed_etag TEXT,                -- S3 etag captured when content was last fetched
       UNIQUE(indexed_bucket_id, key),
       FOREIGN KEY (indexed_bucket_id) REFERENCES s3_indexed_buckets(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_s3_object_index_bucket ON s3_object_index(indexed_bucket_id);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS s3_object_content_fts USING fts5(
+      content,
+      content='s3_object_index',
+      content_rowid='id',
+      tokenize='unicode61 remove_diacritics 2'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS s3_object_index_ai AFTER INSERT ON s3_object_index BEGIN
+      INSERT INTO s3_object_content_fts(rowid, content) VALUES (new.id, new.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS s3_object_index_ad AFTER DELETE ON s3_object_index BEGIN
+      INSERT INTO s3_object_content_fts(s3_object_content_fts, rowid, content) VALUES('delete', old.id, old.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS s3_object_index_au AFTER UPDATE ON s3_object_index BEGIN
+      INSERT INTO s3_object_content_fts(s3_object_content_fts, rowid, content) VALUES('delete', old.id, old.content);
+      INSERT INTO s3_object_content_fts(rowid, content) VALUES (new.id, new.content);
+    END;
   `);
 
   // Verify encryption key matches what was used to initialize the database
@@ -374,12 +394,52 @@ export interface ObjectIndexInput {
   lastModified: number;
   size: number | null;
   etag: string | null;
+  /** Decoded UTF-8 body (capped); null when the object is non-text or skipped. */
+  content: string | null;
+  /** S3 etag captured when content was fetched (null when no content). */
+  contentIndexedEtag: string | null;
 }
 
 export interface ObjectIndexUpsertResult {
   added: number;
   updated: number;
   touched: number;
+}
+
+/** Existing row lookup result. Exported so the indexer can decide whether to refetch bodies. */
+export interface ObjectIndexExistingRow {
+  id: number;
+  last_modified: number;
+  etag: string | null;
+  content_indexed_etag: string | null;
+}
+
+export function findObjectIndexRowsByKeys(
+  indexedBucketId: number,
+  keys: string[]
+): Map<string, ObjectIndexExistingRow> {
+  const result = new Map<string, ObjectIndexExistingRow>();
+  if (keys.length === 0) return result;
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT id, key, last_modified, etag, content_indexed_etag
+    FROM s3_object_index
+    WHERE indexed_bucket_id = ? AND key = ?
+  `);
+  for (const key of keys) {
+    const row = stmt.get(indexedBucketId, key) as
+      | (ObjectIndexExistingRow & { key: string })
+      | undefined;
+    if (row) {
+      result.set(row.key, {
+        id: row.id,
+        last_modified: row.last_modified,
+        etag: row.etag,
+        content_indexed_etag: row.content_indexed_etag,
+      });
+    }
+  }
+  return result;
 }
 
 /**
@@ -402,12 +462,12 @@ export function upsertObjectIndexBatch(
     WHERE indexed_bucket_id = ? AND key = ?
   `);
   const insertStmt = database.prepare(`
-    INSERT INTO s3_object_index (indexed_bucket_id, key, last_modified, size, etag, seen_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO s3_object_index (indexed_bucket_id, key, last_modified, size, etag, seen_at, content, content_indexed_etag)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const updateMetaStmt = database.prepare(`
     UPDATE s3_object_index
-    SET last_modified = ?, size = ?, etag = ?, seen_at = ?
+    SET last_modified = ?, size = ?, etag = ?, seen_at = ?, content = ?, content_indexed_etag = ?
     WHERE id = ?
   `);
   const touchStmt = database.prepare(`
@@ -422,13 +482,19 @@ export function upsertObjectIndexBatch(
         | { id: number; last_modified: number }
         | undefined;
       if (!existing) {
-        insertStmt.run(indexedBucketId, row.key, row.lastModified, row.size, row.etag, seenAt);
+        insertStmt.run(
+          indexedBucketId, row.key, row.lastModified, row.size, row.etag, seenAt,
+          row.content, row.contentIndexedEtag
+        );
         result.added += 1;
       } else if (existing.last_modified === row.lastModified) {
         touchStmt.run(seenAt, existing.id);
         result.touched += 1;
       } else {
-        updateMetaStmt.run(row.lastModified, row.size, row.etag, seenAt, existing.id);
+        updateMetaStmt.run(
+          row.lastModified, row.size, row.etag, seenAt,
+          row.content, row.contentIndexedEtag, existing.id
+        );
         result.updated += 1;
       }
     }
@@ -463,6 +529,14 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
 }
 
+/**
+ * Wrap a user-supplied search term as a single FTS5 phrase. Doubling internal
+ * double-quotes keeps FTS5 operators (NEAR/AND/OR/columnspec/wildcard) inert.
+ */
+function buildFtsQuery(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 export type ObjectIndexSortKey = 'key' | 'last_modified';
 export type ObjectIndexSortDir = 'asc' | 'desc';
 
@@ -481,13 +555,19 @@ export function searchObjectIndex(
 ): ObjectIndexSearchResult {
   const database = getDb();
 
+  // Match strategy: key substring (LIKE) OR full-text on content (FTS5 phrase).
+  // Both halves are OR'd so a hit in either column surfaces the row.
   const whereParts: string[] = [
     'indexed_bucket_id = ?',
-    "key LIKE ? ESCAPE '\\'",
+    `(
+      key LIKE ? ESCAPE '\\'
+      OR id IN (SELECT rowid FROM s3_object_content_fts WHERE s3_object_content_fts MATCH ?)
+    )`,
   ];
   const baseParams: (string | number)[] = [
     indexedBucketId,
     `%${escapeLikePattern(query)}%`,
+    buildFtsQuery(query),
   ];
 
   if (options.prefix) {
