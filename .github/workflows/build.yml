@@ -87,14 +87,15 @@ jobs:
 
       - name: Build frontend
         run: bun run build:client
-        env:
-          STANDALONE_BUILD: 'true'
+
+      - name: Generate embedded assets map
+        run: bun run scripts/generate-embedded-assets.ts
 
       - name: Compile standalone binary
         env:
           VERSION: ${{ needs.setup.outputs.release_tag }}
         run: |
-          bun build server/standalone.ts --compile --outfile ${{ matrix.artifact }} --target ${{ matrix.target }} --define "BUILD_VERSION='\"$VERSION\"'"
+          bun build server/cli.ts --compile --outfile ${{ matrix.artifact }} --target ${{ matrix.target }} --define "BUILD_VERSION='\"$VERSION\"'"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
