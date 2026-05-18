@@ -21,6 +21,8 @@ const BODY_FETCH_CONCURRENCY = 8;
 const DEFAULT_BATCH_SIZE = 1000;
 const PROGRESS_KEY_INTERVAL = 5000;
 const PROGRESS_HEARTBEAT_MS = 15_000;
+const HEAD_OBJECT_TIMEOUT_MS = 15_000;
+const GET_OBJECT_TIMEOUT_MS = 30_000;
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'rst', 'json', 'jsonc', 'jsonl', 'ndjson', 'csv', 'tsv', 'log',
@@ -68,9 +70,55 @@ function formatErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function formatTimeoutMs(ms: number): string {
+  return `${(ms / 1000).toFixed(0)}s`;
+}
+
+async function withS3RequestTimeout<T>(
+  operation: string,
+  key: string,
+  timeoutMs: number,
+  task: (abortSignal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  let timeoutError: Error | undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      timedOut = true;
+      timeoutError = new Error(`${operation} timed out after ${formatTimeoutMs(timeoutMs)} for key=${key}`);
+      reject(timeoutError);
+      controller.abort();
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      task(controller.signal),
+      timeoutPromise,
+    ]);
+  } catch (err) {
+    if (timedOut && timeoutError) {
+      throw timeoutError;
+    }
+    throw err;
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 async function headIsText(client: S3Client, bucket: string, key: string): Promise<boolean> {
   try {
-    const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    const head = await withS3RequestTimeout(
+      'HEAD object',
+      key,
+      HEAD_OBJECT_TIMEOUT_MS,
+      (abortSignal) => client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }), { abortSignal })
+    );
     return isTextContentType(head.ContentType);
   } catch (err) {
     throw new Error(`failed to probe content type for ${key}: ${formatErrorMessage(err)}`, { cause: err });
@@ -84,16 +132,18 @@ async function fetchTextBody(
   maxBytes: number
 ): Promise<string> {
   try {
-    const resp = await client.send(new GetObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Range: `bytes=0-${maxBytes - 1}`,
-    }));
-    if (!resp.Body) {
-      throw new Error('S3 returned no response body');
-    }
-    const bytes = await resp.Body.transformToByteArray();
-    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    return await withS3RequestTimeout('GET object body', key, GET_OBJECT_TIMEOUT_MS, async (abortSignal) => {
+      const resp = await client.send(new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Range: `bytes=0-${maxBytes - 1}`,
+      }), { abortSignal });
+      if (!resp.Body) {
+        throw new Error('S3 returned no response body');
+      }
+      const bytes = await resp.Body.transformToByteArray();
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    });
   } catch (err) {
     throw new Error(`failed to fetch body for ${key}: ${formatErrorMessage(err)}`, { cause: err });
   }
