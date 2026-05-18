@@ -210,7 +210,9 @@ function initializeDatabase(): Database {
     CREATE TRIGGER IF NOT EXISTS s3_object_index_ad AFTER DELETE ON s3_object_index BEGIN
       INSERT INTO s3_object_content_fts(s3_object_content_fts, rowid, content) VALUES('delete', old.id, old.content);
     END;
-    CREATE TRIGGER IF NOT EXISTS s3_object_index_au AFTER UPDATE ON s3_object_index BEGIN
+    CREATE TRIGGER IF NOT EXISTS s3_object_index_au AFTER UPDATE OF content ON s3_object_index
+    WHEN old.content IS NOT new.content
+    BEGIN
       INSERT INTO s3_object_content_fts(s3_object_content_fts, rowid, content) VALUES('delete', old.id, old.content);
       INSERT INTO s3_object_content_fts(rowid, content) VALUES (new.id, new.content);
     END;
