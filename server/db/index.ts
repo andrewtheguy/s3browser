@@ -1,14 +1,18 @@
 import { Database } from 'bun:sqlite';
 import { homedir } from 'os';
 import { join } from 'path';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, unlinkSync } from 'fs';
 import { validateEncryptionKey, validateLoginPassword, encrypt, decrypt, setSalt, generateSalt, getSaltLength } from './crypto.js';
 
-// Database directory and file path
+// Database directory and file paths. The connection/credentials DB is kept
+// separate from the search-index DB so the index can be wiped (--reset)
+// without touching saved connections.
 const DB_DIR = join(homedir(), '.s3browser');
 const DB_PATH = join(DB_DIR, 's3browser.db');
+const INDEX_DB_PATH = join(DB_DIR, 's3browser-index.db');
 
 let db: Database | null = null;
+let indexDb: Database | null = null;
 
 export interface DbS3Connection {
   id: number;
@@ -24,7 +28,7 @@ export interface DbS3Connection {
 
 export interface DbIndexedBucket {
   id: number;
-  connection_id: number;
+  endpoint_host: string;
   bucket: string;
   /** Unix epoch seconds when the most recent crawl finished; null until first completion. */
   last_completed_at: number | null;
@@ -38,7 +42,6 @@ export interface DbObjectIndexRow {
   /** Unix epoch seconds, from S3 LastModified. */
   last_modified: number;
   size: number | null;
-  etag: string | null;
   /** Unix epoch seconds; set to the run's start time each time the indexer touches this row. */
   seen_at: number;
 }
@@ -127,6 +130,52 @@ function initializeSalt(database: Database): void {
   }
 }
 
+function initializeObjectIndexSchema(database: Database): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS s3_indexed_buckets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      endpoint_host TEXT NOT NULL,              -- normalized endpoint host (getEffectiveEndpointHost)
+      bucket TEXT NOT NULL,
+      last_completed_at INTEGER,                -- unix epoch seconds; NULL until first crawl completes
+      object_count INTEGER,
+      UNIQUE(endpoint_host, bucket)
+    );
+
+    CREATE TABLE IF NOT EXISTS s3_object_index (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      indexed_bucket_id INTEGER NOT NULL,
+      key TEXT NOT NULL,
+      last_modified INTEGER NOT NULL,           -- unix epoch seconds, from S3 LastModified
+      size INTEGER,
+      seen_at INTEGER NOT NULL,                 -- unix epoch seconds; updated each indexer run
+      content TEXT,                             -- UTF-8 body for text-like objects (NULL if not indexed)
+      UNIQUE(indexed_bucket_id, key),
+      FOREIGN KEY (indexed_bucket_id) REFERENCES s3_indexed_buckets(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_s3_object_index_bucket ON s3_object_index(indexed_bucket_id);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS s3_object_content_fts USING fts5(
+      content,
+      content='s3_object_index',
+      content_rowid='id',
+      tokenize='unicode61 remove_diacritics 2'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS s3_object_index_ai AFTER INSERT ON s3_object_index BEGIN
+      INSERT INTO s3_object_content_fts(rowid, content) VALUES (new.id, new.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS s3_object_index_ad AFTER DELETE ON s3_object_index BEGIN
+      INSERT INTO s3_object_content_fts(s3_object_content_fts, rowid, content) VALUES('delete', old.id, old.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS s3_object_index_au AFTER UPDATE OF content ON s3_object_index
+    WHEN old.content IS NOT new.content
+    BEGIN
+      INSERT INTO s3_object_content_fts(s3_object_content_fts, rowid, content) VALUES('delete', old.id, old.content);
+      INSERT INTO s3_object_content_fts(rowid, content) VALUES (new.id, new.content);
+    END;
+  `);
+}
+
 function initializeDatabase(): Database {
   // Ensure the database directory exists
   if (!existsSync(DB_DIR)) {
@@ -165,43 +214,26 @@ function initializeDatabase(): Database {
     );
   `);
 
-  // S3 object index: per-(connection, bucket) flat index of keys for search.
-  // Parent table records when the last full crawl completed; child table
-  // holds one row per object key with last_modified for incremental updates.
-  //
-  // All timestamp columns (last_completed_at, last_modified, seen_at) are
-  // unix epoch SECONDS (matching SQLite's unixepoch() function).
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS s3_indexed_buckets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      connection_id INTEGER NOT NULL,
-      bucket TEXT NOT NULL,
-      last_completed_at INTEGER,                -- unix epoch seconds; NULL until first crawl completes
-      object_count INTEGER,
-      UNIQUE(connection_id, bucket),
-      FOREIGN KEY (connection_id) REFERENCES s3_connections(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS s3_object_index (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      indexed_bucket_id INTEGER NOT NULL,
-      key TEXT NOT NULL,
-      last_modified INTEGER NOT NULL,           -- unix epoch seconds, from S3 LastModified
-      size INTEGER,
-      etag TEXT,
-      seen_at INTEGER NOT NULL,                 -- unix epoch seconds; updated each indexer run
-      UNIQUE(indexed_bucket_id, key),
-      FOREIGN KEY (indexed_bucket_id) REFERENCES s3_indexed_buckets(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_s3_object_index_bucket ON s3_object_index(indexed_bucket_id);
-  `);
-
   // Verify encryption key matches what was used to initialize the database
   verifyEncryptionKey(database);
 
   return database;
 }
 
+// The search-index tables live in their own SQLite file so they can be
+// wiped wholesale (--reset) without affecting saved connections, and so
+// the FTS5 virtual table doesn't share a page cache with credential data.
+// All timestamp columns (last_completed_at, last_modified, seen_at) are
+// unix epoch SECONDS (matching SQLite's unixepoch() function).
+function initializeIndexDatabase(): Database {
+  if (!existsSync(DB_DIR)) {
+    mkdirSync(DB_DIR, { recursive: true });
+  }
+  const database = new Database(INDEX_DB_PATH);
+  database.exec('PRAGMA journal_mode = WAL');
+  initializeObjectIndexSchema(database);
+  return database;
+}
 
 export function getDb(): Database {
   if (!db) {
@@ -210,10 +242,21 @@ export function getDb(): Database {
   return db;
 }
 
+export function getIndexDb(): Database {
+  if (!indexDb) {
+    indexDb = initializeIndexDatabase();
+  }
+  return indexDb;
+}
+
 export function closeDb(): void {
   if (db) {
     db.close();
     db = null;
+  }
+  if (indexDb) {
+    indexDb.close();
+    indexDb = null;
   }
 }
 
@@ -336,31 +379,45 @@ export { encrypt, decrypt } from './crypto.js';
 // S3 object index (per-bucket flat key index, used for search)
 // ---------------------------------------------------------------------------
 
-export function getOrCreateIndexedBucket(connectionId: number, bucket: string): number {
-  const database = getDb();
+export function deleteIndexDatabase(): void {
+  if (indexDb) {
+    indexDb.close();
+    indexDb = null;
+  }
+  for (const path of [INDEX_DB_PATH, `${INDEX_DB_PATH}-wal`, `${INDEX_DB_PATH}-shm`]) {
+    if (existsSync(path)) {
+      unlinkSync(path);
+    }
+  }
+  // Recreate immediately so the file exists with a fresh schema on return.
+  getIndexDb();
+}
+
+export function getOrCreateIndexedBucket(endpointHost: string, bucket: string): number {
+  const database = getIndexDb();
   database.prepare(`
-    INSERT INTO s3_indexed_buckets (connection_id, bucket)
+    INSERT INTO s3_indexed_buckets (endpoint_host, bucket)
     VALUES (?, ?)
-    ON CONFLICT(connection_id, bucket) DO NOTHING
-  `).run(connectionId, bucket);
+    ON CONFLICT(endpoint_host, bucket) DO NOTHING
+  `).run(endpointHost, bucket);
   const row = database.prepare(`
-    SELECT id FROM s3_indexed_buckets WHERE connection_id = ? AND bucket = ?
-  `).get(connectionId, bucket) as { id: number } | undefined;
+    SELECT id FROM s3_indexed_buckets WHERE endpoint_host = ? AND bucket = ?
+  `).get(endpointHost, bucket) as { id: number } | undefined;
   if (!row) {
     throw new Error('Failed to create indexed bucket row');
   }
   return row.id;
 }
 
-export function getIndexStatus(connectionId: number, bucket: string): DbIndexedBucket | undefined {
-  const database = getDb();
+export function getIndexStatus(endpointHost: string, bucket: string): DbIndexedBucket | undefined {
+  const database = getIndexDb();
   return database.prepare(`
-    SELECT * FROM s3_indexed_buckets WHERE connection_id = ? AND bucket = ?
-  `).get(connectionId, bucket) as DbIndexedBucket | undefined;
+    SELECT * FROM s3_indexed_buckets WHERE endpoint_host = ? AND bucket = ?
+  `).get(endpointHost, bucket) as DbIndexedBucket | undefined;
 }
 
 export function markIndexCompleted(indexedBucketId: number, objectCount: number): void {
-  const database = getDb();
+  const database = getIndexDb();
   database.prepare(`
     UPDATE s3_indexed_buckets
     SET last_completed_at = unixepoch(), object_count = ?
@@ -373,13 +430,44 @@ export interface ObjectIndexInput {
   /** Unix epoch seconds. */
   lastModified: number;
   size: number | null;
-  etag: string | null;
+  /** Decoded UTF-8 body (capped); null when the object is non-text or skipped. */
+  content: string | null;
 }
 
 export interface ObjectIndexUpsertResult {
   added: number;
   updated: number;
   touched: number;
+}
+
+/** Existing row lookup result. Exported so the indexer can decide whether to refetch bodies. */
+export interface ObjectIndexExistingRow {
+  last_modified: number;
+}
+
+export function findObjectIndexRowsByKeys(
+  indexedBucketId: number,
+  keys: string[]
+): Map<string, ObjectIndexExistingRow> {
+  const result = new Map<string, ObjectIndexExistingRow>();
+  if (keys.length === 0) return result;
+  const database = getIndexDb();
+  const stmt = database.prepare(`
+    SELECT key, last_modified
+    FROM s3_object_index
+    WHERE indexed_bucket_id = ? AND key = ?
+  `);
+  for (const key of keys) {
+    const row = stmt.get(indexedBucketId, key) as
+      | (ObjectIndexExistingRow & { key: string })
+      | undefined;
+    if (row) {
+      result.set(row.key, {
+        last_modified: row.last_modified,
+      });
+    }
+  }
+  return result;
 }
 
 /**
@@ -396,18 +484,18 @@ export function upsertObjectIndexBatch(
   seenAt: number,
   rows: ObjectIndexInput[]
 ): ObjectIndexUpsertResult {
-  const database = getDb();
+  const database = getIndexDb();
   const findStmt = database.prepare(`
     SELECT id, last_modified FROM s3_object_index
     WHERE indexed_bucket_id = ? AND key = ?
   `);
   const insertStmt = database.prepare(`
-    INSERT INTO s3_object_index (indexed_bucket_id, key, last_modified, size, etag, seen_at)
+    INSERT INTO s3_object_index (indexed_bucket_id, key, last_modified, size, seen_at, content)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   const updateMetaStmt = database.prepare(`
     UPDATE s3_object_index
-    SET last_modified = ?, size = ?, etag = ?, seen_at = ?
+    SET last_modified = ?, size = ?, seen_at = ?, content = ?
     WHERE id = ?
   `);
   const touchStmt = database.prepare(`
@@ -422,13 +510,19 @@ export function upsertObjectIndexBatch(
         | { id: number; last_modified: number }
         | undefined;
       if (!existing) {
-        insertStmt.run(indexedBucketId, row.key, row.lastModified, row.size, row.etag, seenAt);
+        insertStmt.run(
+          indexedBucketId, row.key, row.lastModified, row.size, seenAt,
+          row.content
+        );
         result.added += 1;
       } else if (existing.last_modified === row.lastModified) {
         touchStmt.run(seenAt, existing.id);
         result.touched += 1;
       } else {
-        updateMetaStmt.run(row.lastModified, row.size, row.etag, seenAt, existing.id);
+        updateMetaStmt.run(
+          row.lastModified, row.size, seenAt,
+          row.content, existing.id
+        );
         result.updated += 1;
       }
     }
@@ -439,7 +533,7 @@ export function upsertObjectIndexBatch(
 }
 
 export function sweepStaleObjects(indexedBucketId: number, runStartedAt: number): number {
-  const database = getDb();
+  const database = getIndexDb();
   const result = database.prepare(`
     DELETE FROM s3_object_index WHERE indexed_bucket_id = ? AND seen_at < ?
   `).run(indexedBucketId, runStartedAt);
@@ -451,7 +545,6 @@ export interface ObjectIndexSearchHit {
   /** Unix epoch seconds. */
   last_modified: number;
   size: number | null;
-  etag: string | null;
 }
 
 export interface ObjectIndexSearchResult {
@@ -461,6 +554,14 @@ export interface ObjectIndexSearchResult {
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
+}
+
+/**
+ * Wrap a user-supplied search term as a single FTS5 phrase. Doubling internal
+ * double-quotes keeps FTS5 operators (NEAR/AND/OR/columnspec/wildcard) inert.
+ */
+function buildFtsQuery(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 export type ObjectIndexSortKey = 'key' | 'last_modified';
@@ -479,15 +580,21 @@ export function searchObjectIndex(
   query: string,
   options: SearchObjectIndexOptions
 ): ObjectIndexSearchResult {
-  const database = getDb();
+  const database = getIndexDb();
 
+  // Match strategy: key substring (LIKE) OR full-text on content (FTS5 phrase).
+  // Both halves are OR'd so a hit in either column surfaces the row.
   const whereParts: string[] = [
     'indexed_bucket_id = ?',
-    "key LIKE ? ESCAPE '\\'",
+    `(
+      key LIKE ? ESCAPE '\\'
+      OR id IN (SELECT rowid FROM s3_object_content_fts WHERE s3_object_content_fts MATCH ?)
+    )`,
   ];
   const baseParams: (string | number)[] = [
     indexedBucketId,
     `%${escapeLikePattern(query)}%`,
+    buildFtsQuery(query),
   ];
 
   if (options.prefix) {
@@ -504,7 +611,7 @@ export function searchObjectIndex(
     : `key ${sortDir}`;
 
   const sql =  `
-    SELECT key, last_modified, size, etag
+    SELECT key, last_modified, size
     FROM s3_object_index
     WHERE ${whereSql}
     ORDER BY ${orderSql}

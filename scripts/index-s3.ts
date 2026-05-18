@@ -1,30 +1,20 @@
-import { ListObjectsV2Command } from '@aws-sdk/client-s3';
-import {
-  getConnectionById,
-  getOrCreateIndexedBucket,
-  upsertObjectIndexBatch,
-  sweepStaleObjects,
-  markIndexCompleted,
-  type ObjectIndexInput,
-} from '../server/db/index.js';
-import { createS3ClientFromConnection } from '../server/middleware/auth.js';
-import {
-  getEffectiveEndpointHost,
-  getSearchWhitelistHosts,
-  SEARCH_WHITELIST_ENV_VAR,
-} from '../server/config/searchWhitelist.js';
+import { indexS3Bucket, resetIndex } from '../server/indexing.js';
 
 type Args = {
   connection?: number;
   bucket?: string;
   batchSize: number;
-  dryRun: boolean;
+  reset: boolean;
   help: boolean;
   error?: string;
 };
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { batchSize: 1000, dryRun: false, help: false };
+  const args: Args = {
+    batchSize: 1000,
+    reset: false,
+    help: false,
+  };
   const readValue = (flag: string, value: string | undefined): string | undefined => {
     if (!value || value.startsWith('-')) {
       args.error = `${flag} requires a value`;
@@ -57,8 +47,8 @@ function parseArgs(argv: string[]): Args {
         i += 1;
         break;
       }
-      case '--dry-run':
-        args.dryRun = true;
+      case '--reset':
+        args.reset = true;
         break;
       case '--help':
       case '-h':
@@ -75,21 +65,24 @@ function printHelp(): void {
   console.log(`Usage: bun run index -- --connection <id> [--bucket <name>]
 
 Crawls every object in an S3 bucket via ListObjectsV2 and stores
-(key, last_modified, size, etag) rows in ~/.s3browser/s3browser.db.
+(key, last_modified, size, content) rows in ~/.s3browser/s3browser.db.
+
+For text-like objects, the body (up to 2 MB) is downloaded and stored so
+the search endpoint can match against file contents via SQLite FTS5.
+Eligibility is determined by extension allowlist; if the extension is
+unknown, a HEAD request checks for a text/* Content-Type.
 
 The crawl is incremental: rows with the same last_modified are touched
 without re-indexing; rows no longer present in the bucket are deleted at
-the end of the run. A "last completed" timestamp is recorded on success.
-
-Note: keys are stored unencrypted in the local SQLite DB. The trust
-boundary matches the existing object-listing endpoint.
+the end of the run. Body fetches are skipped for rows with the same
+last_modified timestamp.
 
 Options:
-  --connection <id>     Required. ID of the saved s3 connection (DB primary key).
-  --bucket <name>       Bucket to index. Defaults to the connection's saved bucket.
-  --batch-size <n>      Objects processed per DB transaction. Default 1000.
-  --dry-run             Crawl and count only; do not write to the index.
-  -h, --help            Show this help.
+  --connection <id>          Required (unless --reset). ID of the saved s3 connection (DB primary key).
+  --bucket <name>            Bucket to index. Defaults to the connection's saved bucket.
+  --batch-size <n>           Objects processed per DB transaction. Default 1000.
+  --reset                    Delete the search index database and exit (no crawl).
+  -h, --help                 Show this help.
 `);
 }
 
@@ -107,6 +100,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (args.reset) {
+    resetIndex();
+    return;
+  }
+
   if (!args.connection || !Number.isFinite(args.connection) || args.connection <= 0) {
     console.error('Missing or invalid --connection <id>');
     printHelp();
@@ -118,107 +116,23 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const connection = getConnectionById(args.connection);
-  if (!connection) {
-    console.error(`Connection ${args.connection} not found in DB`);
-    process.exit(1);
-  }
-
-  const endpointHost = getEffectiveEndpointHost(connection.endpoint);
-  if (!endpointHost || !getSearchWhitelistHosts().has(endpointHost)) {
-    if (!endpointHost) {
-      console.error(
-        `Refusing to index: connection ${connection.id} has no explicit endpoint set. ` +
-          `Set the endpoint URL on the connection and add its host to ${SEARCH_WHITELIST_ENV_VAR}.`
-      );
-    } else {
-      console.error(
-        `Refusing to index: connection ${connection.id} endpoint host "${endpointHost}" is not in ${SEARCH_WHITELIST_ENV_VAR}.`
-      );
-      console.error('Add it to the comma-separated list and retry, e.g.:');
-      console.error(`  ${SEARCH_WHITELIST_ENV_VAR}="${endpointHost}" bun run index -- --connection ${connection.id}`);
-    }
-    process.exit(1);
-  }
-
-  const bucket = args.bucket ?? connection.bucket ?? undefined;
-  if (!bucket) {
-    console.error('No bucket specified and connection has no default bucket');
-    process.exit(1);
-  }
-
-  console.log(`Indexing s3://${bucket} for connection ${connection.id} (${connection.profile_name})${args.dryRun ? ' [dry-run]' : ''}`);
-
-  const { client } = await createS3ClientFromConnection(connection, bucket);
-
-  const indexedBucketId = args.dryRun ? -1 : getOrCreateIndexedBucket(connection.id, bucket);
-  const runStartedAt = Math.floor(Date.now() / 1000);
-  const startMs = Date.now();
-  const totals = { added: 0, updated: 0, touched: 0, removed: 0, seen: 0 };
-
-  let continuationToken: string | undefined;
-  let pageNumber = 0;
-  let lastProgressLog = 0;
-
-  do {
-    const response = await client.send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        MaxKeys: args.batchSize,
-        ContinuationToken: continuationToken,
-      })
-    );
-
-    pageNumber += 1;
-    const contents = response.Contents ?? [];
-
-    if (contents.length > 0) {
-      const rows: ObjectIndexInput[] = contents.map((item) => {
-        const key = item.Key ?? '';
-        if (!key) {
-          throw new Error('S3 ListObjectsV2 returned a Contents row without a Key');
-        }
-        if (!item.LastModified) {
-          throw new Error(`S3 ListObjectsV2 returned no LastModified for key=${key}`);
-        }
-        return {
-          key,
-          lastModified: Math.floor(item.LastModified.getTime() / 1000),
-          size: item.Size ?? null,
-          etag: item.ETag ?? null,
-        };
-      });
-
-      totals.seen += rows.length;
-
-      if (!args.dryRun) {
-        const result = upsertObjectIndexBatch(indexedBucketId, runStartedAt, rows);
-        totals.added += result.added;
-        totals.updated += result.updated;
-        totals.touched += result.touched;
-      }
-    }
-
-    if (totals.seen - lastProgressLog >= 5000) {
-      lastProgressLog = totals.seen;
-      console.log(`Indexed ${totals.seen} keys (page ${pageNumber})...`);
-    }
-
-    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
-  } while (continuationToken);
-
-  if (!args.dryRun) {
-    totals.removed = sweepStaleObjects(indexedBucketId, runStartedAt);
-    markIndexCompleted(indexedBucketId, totals.seen);
-  }
-
-  const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-  console.log(
-    `Done. Indexed ${totals.seen} keys (added=${totals.added}, updated=${totals.updated}, touched=${totals.touched}, removed=${totals.removed}) in ${elapsed}s`
-  );
+  await indexS3Bucket({
+    connectionId: args.connection,
+    bucket: args.bucket,
+    batchSize: args.batchSize,
+  });
 }
 
+process.on('unhandledRejection', (reason) => {
+  console.error('Indexing failed (unhandled promise rejection):', reason);
+  process.exit(1);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Indexing failed (uncaught exception):', err);
+  process.exit(1);
+});
+
 main().catch((error) => {
-  console.error('Indexing failed:', error);
+  console.error('Indexing failed:', error instanceof Error ? error.message : error);
   process.exit(1);
 });

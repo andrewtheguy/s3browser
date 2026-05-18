@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import { parseArgs } from 'util';
-import { getDb, closeDb } from './db/index.js';
+import { getDb, getIndexDb, closeDb } from './db/index.js';
 import { acquireLock, releaseLock } from './lock.js';
 import authRoutes from './routes/auth.js';
 import objectsRoutes from './routes/objects.js';
@@ -196,9 +196,10 @@ try {
   process.exit(1);
 }
 
-// Initialize database (validates encryption key and creates tables)
+// Initialize databases (validates encryption key and creates tables)
 try {
   getDb();
+  getIndexDb();
   console.log('Database initialized successfully');
 } catch (error) {
   console.error('Failed to initialize database:', error instanceof Error ? error.message : error);
