@@ -412,6 +412,15 @@ async function main(): Promise<void> {
   }
 }
 
+process.on('unhandledRejection', (reason) => {
+  console.error('Indexing failed (unhandled promise rejection):', reason);
+  process.exit(1);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Indexing failed (uncaught exception):', err);
+  process.exit(1);
+});
+
 main().catch((error) => {
   console.error('Indexing failed:', error);
   process.exit(1);
