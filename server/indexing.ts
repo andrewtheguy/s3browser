@@ -62,12 +62,16 @@ function isTextContentType(ct: string | undefined): boolean {
   return TEXT_APP_TYPES.some((t) => lower.startsWith(t));
 }
 
+function formatErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 async function headIsText(client: S3Client, bucket: string, key: string): Promise<boolean> {
   try {
     const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
     return isTextContentType(head.ContentType);
-  } catch {
-    return false;
+  } catch (err) {
+    throw new Error(`failed to probe content type for ${key}: ${formatErrorMessage(err)}`, { cause: err });
   }
 }
 
@@ -76,19 +80,20 @@ async function fetchTextBody(
   bucket: string,
   key: string,
   maxBytes: number
-): Promise<string | null> {
+): Promise<string> {
   try {
     const resp = await client.send(new GetObjectCommand({
       Bucket: bucket,
       Key: key,
       Range: `bytes=0-${maxBytes - 1}`,
     }));
-    if (!resp.Body) return null;
+    if (!resp.Body) {
+      throw new Error('S3 returned no response body');
+    }
     const bytes = await resp.Body.transformToByteArray();
     return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
   } catch (err) {
-    console.warn(`  warn: failed to fetch body for ${key}:`, err instanceof Error ? err.message : err);
-    return null;
+    throw new Error(`failed to fetch body for ${key}: ${formatErrorMessage(err)}`, { cause: err });
   }
 }
 
@@ -97,14 +102,33 @@ async function runWithConcurrency<T>(
   concurrency: number,
   worker: (item: T, index: number) => Promise<void>
 ): Promise<void> {
+  const runnerCount = Math.min(concurrency, items.length);
+  if (runnerCount <= 0) return;
+
   let next = 0;
-  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+  let failed = false;
+  let firstError: unknown;
+
+  const runners = Array.from({ length: runnerCount }, async () => {
     while (next < items.length) {
+      if (failed) return;
       const i = next++;
-      await worker(items[i], i);
+      try {
+        await worker(items[i], i);
+      } catch (err) {
+        if (!failed) {
+          failed = true;
+          firstError = err;
+        }
+        return;
+      }
     }
   });
+
   await Promise.all(runners);
+  if (failed) {
+    throw firstError;
+  }
 }
 
 interface PendingRow {
@@ -263,10 +287,8 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
       const bodyTargets = pending.filter((p) => p.needsBodyFetch);
       await runWithConcurrency(bodyTargets, BODY_FETCH_CONCURRENCY, async (row) => {
         const text = await fetchTextBody(client, bucket, row.input.key, MAX_CONTENT_BYTES);
-        if (text !== null) {
-          row.input.content = text;
-          totals.bodyFetched += 1;
-        }
+        row.input.content = text;
+        totals.bodyFetched += 1;
       });
 
       const rows = pending.map((p) => p.input);
