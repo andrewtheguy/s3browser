@@ -1,7 +1,7 @@
 {
   "name": "s3browser",
   "private": true,
-  "version": "0.0.65",
+  "version": "0.0.66",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
@@ -13,7 +13,8 @@
     "start": "bun dist-server/index.js",
     "lint": "eslint .",
     "preview": "vite preview",
-    "build:standalone": "bun run scripts/build-standalone.ts"
+    "build:standalone": "bun run scripts/build-standalone.ts",
+    "index": "bun run scripts/index-s3.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.978.0",

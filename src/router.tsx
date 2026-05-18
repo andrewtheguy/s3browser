@@ -3,6 +3,7 @@ import { RootLayout } from './layouts/RootLayout';
 import { HomePage } from './pages/HomePage';
 import { SelectBucketPage } from './pages/SelectBucketPage';
 import { BrowsePage } from './pages/BrowsePage';
+import { SearchPage } from './pages/SearchPage';
 import { AuthGuard } from './components/AuthGuard';
 
 export const router = createBrowserRouter([
@@ -35,6 +36,14 @@ export const router = createBrowserRouter([
         element: (
           <AuthGuard>
             <BrowsePage />
+          </AuthGuard>
+        ),
+      },
+      {
+        path: 'connection/:connectionId/search/:bucket',
+        element: (
+          <AuthGuard>
+            <SearchPage />
           </AuthGuard>
         ),
       },

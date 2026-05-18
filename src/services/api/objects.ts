@@ -57,6 +57,94 @@ export async function listObjects(
   };
 }
 
+export interface SearchObjectsResponse {
+  objects: S3Object[];
+  total: number;
+  lastIndexedAt: string;
+  objectCount: number | null;
+}
+
+export interface IndexStatusResponse {
+  lastIndexedAt: string | null;
+  objectCount: number | null;
+}
+
+interface RawSearchObjectsResponse {
+  objects: ListObjectsResponse['objects'];
+  total: number;
+  lastIndexedAt: string;
+  objectCount: number | null;
+}
+
+export type SearchSortKey = 'key' | 'last_modified';
+export type SearchSortDir = 'asc' | 'desc';
+
+export async function searchObjects(
+  connectionId: number,
+  bucket: string,
+  query: string,
+  options: {
+    limit?: number;
+    offset?: number;
+    sort?: SearchSortKey;
+    dir?: SearchSortDir;
+    signal?: AbortSignal;
+  } = {}
+): Promise<SearchObjectsResponse> {
+  const params = new URLSearchParams();
+  params.set('q', query);
+  if (typeof options.limit === 'number') {
+    params.set('limit', String(options.limit));
+  }
+  if (typeof options.offset === 'number') {
+    params.set('offset', String(options.offset));
+  }
+  if (options.sort) {
+    params.set('sort', options.sort);
+  }
+  if (options.dir) {
+    params.set('dir', options.dir);
+  }
+
+  const response = await apiGet<RawSearchObjectsResponse>(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/search?${params.toString()}`,
+    options.signal
+  );
+
+  if (!response || !Array.isArray(response.objects)) {
+    throw new Error('Failed to search objects: missing or invalid response');
+  }
+
+  const objects: S3Object[] = response.objects.map((obj) => ({
+    ...obj,
+    lastModified: obj.lastModified ? new Date(obj.lastModified) : undefined,
+  }));
+
+  return {
+    objects,
+    total: response.total,
+    lastIndexedAt: response.lastIndexedAt,
+    objectCount: response.objectCount,
+  };
+}
+
+export async function getIndexStatus(
+  connectionId: number,
+  bucket: string,
+  signal?: AbortSignal
+): Promise<IndexStatusResponse> {
+  const response = await apiGet<IndexStatusResponse>(
+    `/objects/${connectionId}/${encodeURIComponent(bucket)}/index-status`,
+    signal
+  );
+
+  if (!response) {
+    throw new Error('Failed to fetch index status: missing response');
+  }
+
+  return response;
+}
+
 export interface SeedTestItemsResponse {
   created: number;
   prefix: string;

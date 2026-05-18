@@ -13,6 +13,7 @@ import {
   FlaskConical,
   History,
   MoreVertical,
+  Search,
 } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
-import { buildSelectBucketUrl } from '../../utils/urlEncoding';
+import { buildSelectBucketUrl, buildSearchUrl } from '../../utils/urlEncoding';
 
 const SEED_TEST_ITEM_COUNT = 10005;
 const seedEnv = import.meta.env as { MODE?: string; VITE_FEATURE_SEED_TEST_ITEMS?: string };
@@ -89,7 +90,7 @@ export function Toolbar({
 }: ToolbarProps) {
   const navigate = useNavigate();
   const { connectionId } = useParams<{ connectionId?: string }>();
-  const { credentials, disconnect, activeConnectionId, activeProfileName } = useS3ClientContext();
+  const { credentials, disconnect, activeConnectionId, activeProfileName, activeSearchEnabled } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
 
   const versionsButtonLabel = useMemo(() => {
@@ -131,6 +132,26 @@ export function Toolbar({
   const handleChooseConnection = useCallback(() => {
     void navigate('/');
   }, [navigate]);
+
+  const handleSearch = useCallback(() => {
+    const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
+    const connId = !isNaN(parsedId) && parsedId > 0 ? parsedId : activeConnectionId;
+
+    if (!connId || connId <= 0) {
+      console.error('Cannot search: no valid connection ID available');
+      void navigate('/');
+      return;
+    }
+
+    const bucket = credentials?.bucket;
+    if (!bucket) {
+      console.error('Cannot search: no bucket selected');
+      void navigate('/');
+      return;
+    }
+
+    void navigate(buildSearchUrl(connId, bucket));
+  }, [connectionId, activeConnectionId, credentials?.bucket, navigate]);
 
   const handleChangeBucket = useCallback(() => {
     const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
@@ -249,6 +270,11 @@ export function Toolbar({
                   Refresh
                 </DropdownMenuItem>
 
+                <DropdownMenuItem onClick={handleSearch} disabled={!activeSearchEnabled}>
+                  <Search className="h-4 w-4" />
+                  Search
+                </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem onClick={onCreateFolderClick}>
@@ -303,6 +329,22 @@ export function Toolbar({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Refresh</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={activeSearchEnabled ? undefined : 0}>
+                  <Button variant="outline" onClick={handleSearch} disabled={!activeSearchEnabled}>
+                    <Search className="h-4 w-4 mr-2 sm:mr-1" />
+                    <span className="hidden sm:inline">Search</span>
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {activeSearchEnabled
+                  ? 'Search indexed keys in this bucket'
+                  : "Search disabled: this connection's endpoint host is not in S3BROWSER_SEARCH_WHITELIST_HOSTS"}
+              </TooltipContent>
             </Tooltip>
 
             {onToggleSelection && (

@@ -45,6 +45,14 @@ export function buildBrowseUrl(connectionId: number, bucket: string, path: strin
 }
 
 /**
+ * Build a search URL for a given connection and bucket. Search is always
+ * bucket-wide; folder scoping is intentionally not supported.
+ */
+export function buildSearchUrl(connectionId: number, bucket: string): string {
+  return `/connection/${connectionId}/search/${encodeURIComponent(bucket)}`;
+}
+
+/**
  * Build an inline preview URL for a given connection, bucket and object key.
  * No trailing slash — the /preview/ route segment distinguishes file URLs from folder browse URLs.
  */
