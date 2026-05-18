@@ -152,7 +152,7 @@ The binary is a multi-command CLI:
 ./s3browser server --bind [::1]:3000        # IPv6 localhost
 ./s3browser index --connection 1            # crawl + index a saved S3 connection
 ./s3browser index --connection 1 --bucket my-bucket --batch-size 500
-./s3browser index reset                     # delete the search index DB
+./s3browser index --reset                   # delete the search index DB
 ./s3browser --help                          # top-level help
 ./s3browser --version                       # version info
 ```
@@ -166,7 +166,7 @@ During development, run the same subcommands without compiling via:
 ```bash
 bun run cli server -b :3001
 bun run cli index --connection 1
-bun run cli index reset
+bun run cli index --reset
 ```
 
 ## Usage

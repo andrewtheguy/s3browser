@@ -10,6 +10,8 @@ import { validateEncryptionKey, validateLoginPassword, encrypt, decrypt, setSalt
 const DB_DIR = join(homedir(), '.s3browser');
 const DB_PATH = join(DB_DIR, 's3browser.db');
 const INDEX_DB_PATH = join(DB_DIR, 's3browser-index.db');
+const DEFAULT_DB_BUSY_TIMEOUT_MS = 5000;
+const INDEX_DB_BUSY_TIMEOUT_MS = 30000;
 
 let db: Database | null = null;
 let indexDb: Database | null = null;
@@ -184,6 +186,7 @@ function initializeDatabase(): Database {
 
   // Open database
   const database = new Database(DB_PATH);
+  database.exec(`PRAGMA busy_timeout = ${DEFAULT_DB_BUSY_TIMEOUT_MS}`);
 
   // Enable WAL mode for better concurrency
   database.exec('PRAGMA journal_mode = WAL');
@@ -230,6 +233,7 @@ function initializeIndexDatabase(): Database {
     mkdirSync(DB_DIR, { recursive: true });
   }
   const database = new Database(INDEX_DB_PATH);
+  database.exec(`PRAGMA busy_timeout = ${INDEX_DB_BUSY_TIMEOUT_MS}`);
   database.exec('PRAGMA journal_mode = WAL');
   initializeObjectIndexSchema(database);
   return database;
