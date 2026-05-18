@@ -16,7 +16,7 @@ import {
   SEARCH_WHITELIST_ENV_VAR,
 } from '../server/config/searchWhitelist.js';
 
-const DEFAULT_MAX_CONTENT_BYTES = 1 * 1024 * 1024;
+const DEFAULT_MAX_CONTENT_BYTES = 2 * 1024 * 1024;
 const BODY_FETCH_CONCURRENCY = 8;
 
 const TEXT_EXTENSIONS = new Set([
@@ -192,7 +192,7 @@ function printHelp(): void {
 Crawls every object in an S3 bucket via ListObjectsV2 and stores
 (key, last_modified, size, content) rows in ~/.s3browser/s3browser.db.
 
-For text-like objects, the body (up to 1 MB by default) is downloaded and
+For text-like objects, the body (up to 2 MB by default) is downloaded and
 stored so the search endpoint can match against file contents via SQLite
 FTS5. Eligibility is determined by extension allowlist; if the extension
 is unknown, a HEAD request checks for a text/* Content-Type.
