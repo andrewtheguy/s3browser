@@ -14,6 +14,7 @@ import {
   AbortMultipartUploadCommand,
 } from '@aws-sdk/client-s3';
 import { s3Middleware, requireBucket, AuthenticatedRequest, detectS3Vendor } from '../middleware/auth.js';
+import { getIndexStatus, searchObjectIndex } from '../db/index.js';
 
 const router = Router();
 
@@ -361,6 +362,73 @@ router.get('/:connectionId/:bucket', s3Middleware, requireBucket, async (req: Au
     objects,
     continuationToken: nextContinuationToken,
     isTruncated,
+  });
+});
+
+function parseLimitOffset(query: Record<string, unknown>): { limit: number; offset: number } {
+  const rawLimit = typeof query.limit === 'string' ? parseInt(query.limit, 10) : NaN;
+  const rawOffset = typeof query.offset === 'string' ? parseInt(query.offset, 10) : NaN;
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : 100;
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+  return { limit, offset };
+}
+
+// GET /api/objects/:connectionId/:bucket/index-status
+router.get('/:connectionId/:bucket/index-status', s3Middleware, requireBucket, (req: AuthenticatedRequest, res: Response): void => {
+  const connectionId = req.connectionId!;
+  const bucket = req.s3Credentials!.bucket!;
+  const status = getIndexStatus(connectionId, bucket);
+  if (!status || status.last_completed_at === null) {
+    res.json({ lastIndexedAt: null, objectCount: null });
+    return;
+  }
+  res.json({
+    lastIndexedAt: new Date(status.last_completed_at * 1000).toISOString(),
+    objectCount: status.object_count,
+  });
+});
+
+// GET /api/objects/:connectionId/:bucket/search?q=&prefix=&limit=&offset=
+router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: AuthenticatedRequest, res: Response): void => {
+  const connectionId = req.connectionId!;
+  const bucket = req.s3Credentials!.bucket!;
+
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const prefix = typeof req.query.prefix === 'string' ? req.query.prefix : undefined;
+  const { limit, offset } = parseLimitOffset(req.query as Record<string, unknown>);
+
+  if (!q) {
+    res.status(400).json({ error: 'Search query is required' });
+    return;
+  }
+
+  const status = getIndexStatus(connectionId, bucket);
+  if (!status || status.last_completed_at === null) {
+    res.status(404).json({
+      error: `Index not built. Run: bun run index:keys -- --connection ${connectionId} --bucket ${bucket}`,
+      code: 'IndexNotBuilt',
+    });
+    return;
+  }
+
+  const result = searchObjectIndex(status.id, q, { prefix, limit, offset });
+
+  const objects: S3Object[] = result.hits.map((hit) => ({
+    key: hit.key,
+    name: extractFileName(hit.key),
+    size: hit.size ?? undefined,
+    lastModified: hit.last_modified !== null
+      ? new Date(hit.last_modified * 1000).toISOString()
+      : undefined,
+    isFolder: hit.key.endsWith('/'),
+    etag: hit.etag ?? undefined,
+  }));
+
+  res.json({
+    objects,
+    total: result.total,
+    lastIndexedAt: new Date(status.last_completed_at * 1000).toISOString(),
+    objectCount: status.object_count,
   });
 });
 
