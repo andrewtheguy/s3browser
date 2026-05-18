@@ -27,10 +27,9 @@ export function getSearchWhitelistHosts(): ReadonlySet<string> {
 // who want search on AWS must set the explicit AWS S3 endpoint URL on the
 // connection rather than relying on an implicit default.
 export function getEffectiveEndpointHost(endpoint: string | null | undefined): string | null {
-  const trimmed = endpoint?.trim();
-  if (!trimmed) return null;
-  const normalized = normalizeEndpoint(trimmed);
+  const normalized = normalizeEndpoint(endpoint?.trim());
   if (!normalized) return null;
+
   try {
     return new URL(normalized).hostname.toLowerCase();
   } catch {
@@ -40,8 +39,6 @@ export function getEffectiveEndpointHost(endpoint: string | null | undefined): s
 
 export function isEndpointWhitelisted(endpoint: string | null | undefined): boolean {
   const hosts = getSearchWhitelistHosts();
-  if (hosts.size === 0) return false;
   const host = getEffectiveEndpointHost(endpoint);
-  if (!host) return false;
-  return hosts.has(host);
+  return host !== null && hosts.has(host);
 }
