@@ -11,7 +11,7 @@ S3BROWSER_SEARCH_WHITELIST_HOSTS=<comma-separated hostnames>
 ```
 
 - Compared exactly (case-insensitive) against the hostname of each connection's saved endpoint URL.
-- Connections with no explicit endpoint (AWS) match the literal `s3.amazonaws.com`.
+- Connections with **no explicit endpoint set** are never allowlisted. To enable search on AWS, set the AWS S3 endpoint URL on the connection (e.g. `https://s3.amazonaws.com` or a regional variant) and add that hostname to the env var.
 - Unset or empty → search and indexing are disabled for every connection. This is the default.
 - Read once at server startup; restart to pick up changes.
 

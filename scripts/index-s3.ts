@@ -101,14 +101,19 @@ async function main(): Promise<void> {
   }
 
   if (!isEndpointWhitelisted(connection.endpoint)) {
-    const host = getEffectiveEndpointHost(connection.endpoint) ?? '(unparseable endpoint)';
-    console.error(
-      `Refusing to index: connection ${connection.id} endpoint host "${host}" is not in ${SEARCH_WHITELIST_ENV_VAR}.`
-    );
-    console.error(
-      `Add it to the comma-separated list and retry, e.g.:`
-    );
-    console.error(`  ${SEARCH_WHITELIST_ENV_VAR}="${host}" bun run index -- --connection ${connection.id}`);
+    const host = getEffectiveEndpointHost(connection.endpoint);
+    if (!host) {
+      console.error(
+        `Refusing to index: connection ${connection.id} has no explicit endpoint set. ` +
+          `Set the endpoint URL on the connection and add its host to ${SEARCH_WHITELIST_ENV_VAR}.`
+      );
+    } else {
+      console.error(
+        `Refusing to index: connection ${connection.id} endpoint host "${host}" is not in ${SEARCH_WHITELIST_ENV_VAR}.`
+      );
+      console.error('Add it to the comma-separated list and retry, e.g.:');
+      console.error(`  ${SEARCH_WHITELIST_ENV_VAR}="${host}" bun run index -- --connection ${connection.id}`);
+    }
     process.exit(1);
   }
 
