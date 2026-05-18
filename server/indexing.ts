@@ -19,6 +19,8 @@ import {
 const MAX_CONTENT_BYTES = 2 * 1024 * 1024;
 const BODY_FETCH_CONCURRENCY = 8;
 const DEFAULT_BATCH_SIZE = 1000;
+const PROGRESS_KEY_INTERVAL = 5000;
+const PROGRESS_HEARTBEAT_MS = 15_000;
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'rst', 'json', 'jsonc', 'jsonl', 'ndjson', 'csv', 'tsv', 'log',
@@ -131,6 +133,18 @@ async function runWithConcurrency<T>(
   }
 }
 
+async function withIntervalHeartbeat<T>(
+  heartbeat: () => void,
+  task: () => Promise<T>
+): Promise<T> {
+  const interval = setInterval(heartbeat, PROGRESS_HEARTBEAT_MS);
+  try {
+    return await task();
+  } finally {
+    clearInterval(interval);
+  }
+}
+
 interface PendingRow {
   input: ObjectIndexInput;
   needsBodyFetch: boolean;
@@ -205,15 +219,40 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
 
   let continuationToken: string | undefined;
   let pageNumber = 0;
-  let lastProgressLog = 0;
+  let lastProgressSeen = 0;
+  let lastProgressMs = startMs;
+
+  const logProgress = (phase?: string): void => {
+    lastProgressSeen = totals.seen;
+    lastProgressMs = Date.now();
+    const elapsed = ((lastProgressMs - startMs) / 1000).toFixed(1);
+    const pageText = pageNumber > 0 ? `page ${pageNumber}` : 'before first page';
+    const phaseText = phase ? `, ${phase}` : '';
+    console.log(
+      `Indexing progress: ${totals.seen} keys seen (${pageText}, bodies fetched ${totals.bodyFetched}${phaseText}, elapsed ${elapsed}s)...`
+    );
+  };
+
+  const maybeLogProgress = (phase?: string): void => {
+    const now = Date.now();
+    if (
+      totals.seen - lastProgressSeen >= PROGRESS_KEY_INTERVAL ||
+      now - lastProgressMs >= PROGRESS_HEARTBEAT_MS
+    ) {
+      logProgress(phase);
+    }
+  };
 
   do {
-    const response = await client.send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        MaxKeys: batchSize,
-        ContinuationToken: continuationToken,
-      })
+    const response = await withIntervalHeartbeat(
+      () => maybeLogProgress(`listing page ${pageNumber + 1}`),
+      () => client.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          MaxKeys: batchSize,
+          ContinuationToken: continuationToken,
+        })
+      )
     );
 
     pageNumber += 1;
@@ -273,39 +312,50 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
 
       // HEAD probes for unknown extensions
       const headTargets = pending.filter((p) => p.needsHeadCheck);
-      await runWithConcurrency(headTargets, BODY_FETCH_CONCURRENCY, async (row) => {
-        const isText = await headIsText(client, bucket, row.input.key);
-        if (isText) {
-          row.needsBodyFetch = true;
-        } else {
-          totals.bodySkippedNonText += 1;
-        }
-        row.needsHeadCheck = false;
-      });
+      let headChecked = 0;
+      await withIntervalHeartbeat(
+        () => maybeLogProgress(`checking content types ${headChecked}/${headTargets.length}`),
+        () => runWithConcurrency(headTargets, BODY_FETCH_CONCURRENCY, async (row) => {
+          const isText = await headIsText(client, bucket, row.input.key);
+          if (isText) {
+            row.needsBodyFetch = true;
+          } else {
+            totals.bodySkippedNonText += 1;
+          }
+          row.needsHeadCheck = false;
+          headChecked += 1;
+          maybeLogProgress(`checking content types ${headChecked}/${headTargets.length}`);
+        })
+      );
 
       // Fetch text bodies in parallel.
       const bodyTargets = pending.filter((p) => p.needsBodyFetch);
-      await runWithConcurrency(bodyTargets, BODY_FETCH_CONCURRENCY, async (row) => {
-        const text = await fetchTextBody(client, bucket, row.input.key, MAX_CONTENT_BYTES);
-        row.input.content = text;
-        totals.bodyFetched += 1;
-      });
+      let bodiesFetchedThisPage = 0;
+      await withIntervalHeartbeat(
+        () => maybeLogProgress(`fetching bodies ${bodiesFetchedThisPage}/${bodyTargets.length}`),
+        () => runWithConcurrency(bodyTargets, BODY_FETCH_CONCURRENCY, async (row) => {
+          const text = await fetchTextBody(client, bucket, row.input.key, MAX_CONTENT_BYTES);
+          row.input.content = text;
+          totals.bodyFetched += 1;
+          bodiesFetchedThisPage += 1;
+          maybeLogProgress(`fetching bodies ${bodiesFetchedThisPage}/${bodyTargets.length}`);
+        })
+      );
 
       const rows = pending.map((p) => p.input);
+      maybeLogProgress(`writing page ${pageNumber}`);
       const result = upsertObjectIndexBatch(indexedBucketId, runStartedAt, rows);
       totals.added += result.added;
       totals.updated += result.updated;
       totals.touched += result.touched;
     }
 
-    if (totals.seen - lastProgressLog >= 5000) {
-      lastProgressLog = totals.seen;
-      console.log(`Indexed ${totals.seen} keys (page ${pageNumber}, bodies fetched ${totals.bodyFetched})...`);
-    }
+    maybeLogProgress(`page ${pageNumber} complete`);
 
     continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
   } while (continuationToken);
 
+  console.log(`Sweeping stale index rows after ${totals.seen} indexed keys...`);
   totals.removed = sweepStaleObjects(indexedBucketId, runStartedAt);
   markIndexCompleted(indexedBucketId, totals.seen);
   totals.elapsedMs = Date.now() - startMs;
