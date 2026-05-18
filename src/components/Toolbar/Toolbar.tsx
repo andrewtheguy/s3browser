@@ -150,8 +150,9 @@ export function Toolbar({
       return;
     }
 
-    void navigate(buildSearchUrl(connId, bucket));
-  }, [connectionId, activeConnectionId, credentials?.bucket, navigate]);
+    const currentPrefix = pathSegments.length > 0 ? pathSegments.join('/') + '/' : '';
+    void navigate(buildSearchUrl(connId, bucket, currentPrefix));
+  }, [connectionId, activeConnectionId, credentials?.bucket, navigate, pathSegments]);
 
   const handleChangeBucket = useCallback(() => {
     const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;

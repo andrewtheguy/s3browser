@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,6 +97,7 @@ export function SearchPage() {
   }, [bucket]);
 
   const queryFromUrl = searchParams.get('q') ?? '';
+  const prefixFromUrl = searchParams.get('prefix') ?? '';
   const [inputValue, setInputValue] = useState(queryFromUrl);
 
   // Keep the input in sync if the URL changes externally (back/forward).
@@ -163,6 +164,7 @@ export function SearchPage() {
       offset,
       sort: sortKey,
       dir: sortDir,
+      prefix: prefixFromUrl,
       signal: controller.signal,
     })
       .then((response: SearchObjectsResponse) => {
@@ -189,7 +191,19 @@ export function SearchPage() {
       });
 
     return () => controller.abort();
-  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, offset, sortKey, sortDir, activeSearchEnabled]);
+  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, prefixFromUrl, offset, sortKey, sortDir, activeSearchEnabled]);
+
+  // Reset to page 1 whenever the prefix scope changes so we don't strand
+  // the user on a now-out-of-range page.
+  useEffect(() => {
+    setOffset(0);
+  }, [prefixFromUrl]);
+
+  const clearPrefix = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('prefix');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const submitSearch = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -245,13 +259,28 @@ export function SearchPage() {
     <div className="container mx-auto p-4 max-w-6xl">
       <div className="mb-4 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">
-            Search <span className="text-muted-foreground">in {bucket}</span>
+          <h1 className="text-xl font-semibold flex flex-wrap items-center gap-2">
+            <span>
+              Search <span className="text-muted-foreground">in {bucket}</span>
+            </span>
+            {prefixFromUrl && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono font-normal text-muted-foreground">
+                <span>in {prefixFromUrl}</span>
+                <button
+                  type="button"
+                  onClick={clearPrefix}
+                  className="hover:text-foreground"
+                  aria-label="Clear prefix scope"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
           </h1>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void navigate(buildBrowseUrl(connectionId, bucket, ''))}
+            onClick={() => void navigate(buildBrowseUrl(connectionId, bucket, prefixFromUrl))}
           >
             Back to browse
           </Button>

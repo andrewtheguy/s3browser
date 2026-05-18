@@ -45,11 +45,13 @@ export function buildBrowseUrl(connectionId: number, bucket: string, path: strin
 }
 
 /**
- * Build a search URL for a given connection and bucket. Search is always
- * bucket-wide; folder scoping is intentionally not supported.
+ * Build a search URL for a given connection and bucket. When a non-empty
+ * prefix is provided, the search is scoped to that prefix via ?prefix=...
  */
-export function buildSearchUrl(connectionId: number, bucket: string): string {
-  return `/connection/${connectionId}/search/${encodeURIComponent(bucket)}`;
+export function buildSearchUrl(connectionId: number, bucket: string, prefix: string = ''): string {
+  const base = `/connection/${connectionId}/search/${encodeURIComponent(bucket)}`;
+  if (!prefix) return base;
+  return `${base}?prefix=${encodeURIComponent(prefix)}`;
 }
 
 /**
