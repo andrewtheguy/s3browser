@@ -8,6 +8,11 @@ import {
   type ObjectIndexInput,
 } from '../server/db/index.js';
 import { createS3ClientFromConnection } from '../server/middleware/auth.js';
+import {
+  isEndpointWhitelisted,
+  getEffectiveEndpointHost,
+  SEARCH_WHITELIST_ENV_VAR,
+} from '../server/config/searchWhitelist.js';
 
 type Args = {
   connection?: number;
@@ -92,6 +97,18 @@ async function main(): Promise<void> {
   const connection = getConnectionById(args.connection);
   if (!connection) {
     console.error(`Connection ${args.connection} not found in DB`);
+    process.exit(1);
+  }
+
+  if (!isEndpointWhitelisted(connection.endpoint)) {
+    const host = getEffectiveEndpointHost(connection.endpoint) ?? '(unparseable endpoint)';
+    console.error(
+      `Refusing to index: connection ${connection.id} endpoint host "${host}" is not in ${SEARCH_WHITELIST_ENV_VAR}.`
+    );
+    console.error(
+      `Add it to the comma-separated list and retry, e.g.:`
+    );
+    console.error(`  ${SEARCH_WHITELIST_ENV_VAR}="${host}" bun run index:keys -- --connection ${connection.id}`);
     process.exit(1);
   }
 

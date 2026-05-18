@@ -23,6 +23,7 @@ import {
 } from '../db/index.js';
 import { getLoginPassword, timingSafeCompare } from '../db/crypto.js';
 import { createAuthToken, verifyAuthToken, AUTH_COOKIE_OPTIONS, AUTH_COOKIE_NAME } from '../auth/token.js';
+import { isEndpointWhitelisted } from '../config/searchWhitelist.js';
 
 interface LoginRequestBody {
   password?: string;
@@ -380,6 +381,7 @@ router.post('/connections', loginMiddleware, async (req: AuthenticatedRequest, r
     region: detectedRegion,
     bucket: bucket || null,
     endpoint: endpoint || null,
+    searchEnabled: isEndpointWhitelisted(endpoint || null),
   });
 });
 
@@ -402,6 +404,7 @@ router.get('/connections', loginMiddleware, (req: AuthenticatedRequest, res: Res
     region: conn.region,
     autoDetectRegion: conn.auto_detect_region === 1,
     lastUsedAt: conn.last_used_at * 1000, // Convert to ms
+    searchEnabled: isEndpointWhitelisted(conn.endpoint),
   }));
 
   res.json({ connections: sanitizedConnections });
@@ -432,6 +435,7 @@ router.get('/connections/:id', loginMiddleware, (req: AuthenticatedRequest, res:
     region: connection.region,
     autoDetectRegion: connection.auto_detect_region === 1,
     lastUsedAt: connection.last_used_at * 1000,
+    searchEnabled: isEndpointWhitelisted(connection.endpoint),
   });
 });
 

@@ -9,6 +9,7 @@ import downloadRoutes from './routes/download.js';
 import bucketRoutes from './routes/bucket.js';
 import configRoutes from './routes/config.js';
 import { getPresignedUrlTtlOptions } from './config/presignedUrls.js';
+import { getSearchWhitelistHosts, SEARCH_WHITELIST_ENV_VAR } from './config/searchWhitelist.js';
 
 // Validate presigned URL TTL config (fails fast on duplicates / invalid env)
 try {
@@ -25,6 +26,13 @@ try {
 } catch (error) {
   console.error('Failed to initialize database:', error instanceof Error ? error.message : error);
   process.exit(1);
+}
+
+const whitelistHostCount = getSearchWhitelistHosts().size;
+if (whitelistHostCount === 0) {
+  console.log(`${SEARCH_WHITELIST_ENV_VAR} is unset or empty: search and indexing are disabled for all connections`);
+} else {
+  console.log(`${SEARCH_WHITELIST_ENV_VAR}: ${whitelistHostCount} host(s) whitelisted for search/indexing`);
 }
 
 const app = express();

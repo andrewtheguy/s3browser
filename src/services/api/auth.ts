@@ -26,6 +26,7 @@ export interface SaveConnectionResponse {
   region: string;
   bucket: string | null;
   endpoint: string | null;
+  searchEnabled: boolean;
 }
 
 export interface AuthStatus {
@@ -51,6 +52,7 @@ export interface ServerSavedConnection {
   region: string | null;
   autoDetectRegion: boolean;
   lastUsedAt: number;
+  searchEnabled: boolean;
 }
 
 export interface ConnectionsResponse {

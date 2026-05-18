@@ -90,7 +90,7 @@ export function Toolbar({
 }: ToolbarProps) {
   const navigate = useNavigate();
   const { connectionId } = useParams<{ connectionId?: string }>();
-  const { credentials, disconnect, activeConnectionId, activeProfileName } = useS3ClientContext();
+  const { credentials, disconnect, activeConnectionId, activeProfileName, activeSearchEnabled } = useS3ClientContext();
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
 
   const versionsButtonLabel = useMemo(() => {
@@ -270,7 +270,7 @@ export function Toolbar({
                   Refresh
                 </DropdownMenuItem>
 
-                <DropdownMenuItem onClick={handleSearch}>
+                <DropdownMenuItem onClick={handleSearch} disabled={!activeSearchEnabled}>
                   <Search className="h-4 w-4" />
                   Search
                 </DropdownMenuItem>
@@ -333,12 +333,18 @@ export function Toolbar({
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" onClick={handleSearch}>
-                  <Search className="h-4 w-4 mr-2 sm:mr-1" />
-                  <span className="hidden sm:inline">Search</span>
-                </Button>
+                <span tabIndex={activeSearchEnabled ? undefined : 0}>
+                  <Button variant="outline" onClick={handleSearch} disabled={!activeSearchEnabled}>
+                    <Search className="h-4 w-4 mr-2 sm:mr-1" />
+                    <span className="hidden sm:inline">Search</span>
+                  </Button>
+                </span>
               </TooltipTrigger>
-              <TooltipContent>Search indexed keys in this bucket</TooltipContent>
+              <TooltipContent>
+                {activeSearchEnabled
+                  ? 'Search indexed keys in this bucket'
+                  : "Search disabled: this connection's endpoint host is not in S3BROWSER_SEARCH_WHITELIST_HOSTS"}
+              </TooltipContent>
             </Tooltip>
 
             {onToggleSelection && (

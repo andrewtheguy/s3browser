@@ -18,6 +18,29 @@ Search runs against a **local SQLite index** in `~/.s3browser/s3browser.db`, not
 
 Match is a case-sensitive **SQL `LIKE` substring** against the full S3 key — no full-text tokenization, no glob support. Results can be sorted by key or by S3 `LastModified`.
 
+## Endpoint host allowlist
+
+Both indexing and search call `ListObjectsV2`, which is the expensive operation on S3 (cost per request scales with object count). To keep this opt-in per endpoint, search/indexing is gated by an environment variable:
+
+```
+S3BROWSER_SEARCH_WHITELIST_HOSTS=<comma-separated hostnames>
+```
+
+- The hostname is parsed from each connection's saved `endpoint` URL and compared exactly (case-insensitive) against the list.
+- Connections with **no explicit endpoint** (i.e. AWS) match the literal `s3.amazonaws.com`. Add that entry to enable search for AWS connections.
+- If the env var is **unset or empty**, search and indexing are disabled for every connection.
+- Read once at server startup; restart the server to pick up changes.
+
+Implementation: `server/config/searchWhitelist.ts`. The check is applied in three places:
+
+| Surface                              | Behavior when host is not allowlisted                                                  |
+| ------------------------------------ | -------------------------------------------------------------------------------------- |
+| `GET /index-status` and `GET /search`| `403` with `{ "code": "EndpointNotWhitelisted", "error": "..." }`                       |
+| `bun run index:keys` CLI             | Exits non-zero before any S3 call, printing the host that would need to be allowlisted |
+| Connection responses in `/api/auth/*`| Include `searchEnabled: boolean` so the UI can disable the Search button up front       |
+
+In the UI, the Search button (Toolbar + mobile dropdown) is rendered as disabled with an explanatory tooltip when the active connection is not allowlisted. Direct navigation to `/connection/:id/search/:bucket` for a disallowed connection shows an Alert pointing to the env var.
+
 ## Schema
 
 Two tables, both created on first startup by `initializeDatabase()`:

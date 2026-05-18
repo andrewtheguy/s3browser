@@ -15,6 +15,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { s3Middleware, requireBucket, AuthenticatedRequest, detectS3Vendor } from '../middleware/auth.js';
 import { getIndexStatus, searchObjectIndex } from '../db/index.js';
+import { isEndpointWhitelisted, SEARCH_WHITELIST_ENV_VAR } from '../config/searchWhitelist.js';
 
 const router = Router();
 
@@ -377,6 +378,13 @@ function parseLimitOffset(query: Record<string, unknown>): { limit: number; offs
 router.get('/:connectionId/:bucket/index-status', s3Middleware, requireBucket, (req: AuthenticatedRequest, res: Response): void => {
   const connectionId = req.connectionId!;
   const bucket = req.s3Credentials!.bucket!;
+  if (!isEndpointWhitelisted(req.s3Connection!.endpoint)) {
+    res.status(403).json({
+      error: `Search disabled: this connection's endpoint host is not in ${SEARCH_WHITELIST_ENV_VAR}.`,
+      code: 'EndpointNotWhitelisted',
+    });
+    return;
+  }
   const status = getIndexStatus(connectionId, bucket);
   if (!status || status.last_completed_at === null) {
     res.json({ lastIndexedAt: null, objectCount: null });
@@ -400,6 +408,14 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
 
   if (!q) {
     res.status(400).json({ error: 'Search query is required' });
+    return;
+  }
+
+  if (!isEndpointWhitelisted(req.s3Connection!.endpoint)) {
+    res.status(403).json({
+      error: `Search disabled: this connection's endpoint host is not in ${SEARCH_WHITELIST_ENV_VAR}.`,
+      code: 'EndpointNotWhitelisted',
+    });
     return;
   }
 

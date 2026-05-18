@@ -46,7 +46,7 @@ export function SearchPage() {
     connectionId: string;
     bucket: string;
   }>();
-  const { isConnected, credentials, selectBucket, activeConnectionId } = useS3ClientContext();
+  const { isConnected, credentials, selectBucket, activeConnectionId, activeSearchEnabled } = useS3ClientContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -108,6 +108,7 @@ export function SearchPage() {
   const [indexStatus, setIndexStatus] = useState<IndexStatusResponse | null>(null);
   useEffect(() => {
     if (!connectionId || !bucket || credentials?.bucket !== bucket) return;
+    if (!activeSearchEnabled) return;
     const controller = new AbortController();
     getIndexStatus(connectionId, bucket, controller.signal)
       .then(setIndexStatus)
@@ -116,7 +117,7 @@ export function SearchPage() {
         console.error('Failed to load index status', err);
       });
     return () => controller.abort();
-  }, [connectionId, bucket, credentials?.bucket]);
+  }, [connectionId, bucket, credentials?.bucket, activeSearchEnabled]);
 
   // Search state
   const [results, setResults] = useState<S3Object[]>([]);
@@ -143,6 +144,7 @@ export function SearchPage() {
   // Run a search whenever the URL query, pagination offset, or sort changes.
   useEffect(() => {
     if (!connectionId || !bucket || credentials?.bucket !== bucket) return;
+    if (!activeSearchEnabled) return;
     if (!queryFromUrl.trim()) {
       setResults([]);
       setTotal(0);
@@ -187,7 +189,7 @@ export function SearchPage() {
       });
 
     return () => controller.abort();
-  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, offset, sortKey, sortDir]);
+  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, offset, sortKey, sortDir, activeSearchEnabled]);
 
   const submitSearch = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -270,21 +272,35 @@ export function SearchPage() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               className="pl-8"
+              disabled={!activeSearchEnabled}
             />
           </div>
-          <Button type="submit">Search</Button>
+          <Button type="submit" disabled={!activeSearchEnabled}>Search</Button>
         </form>
 
-        <div className="text-xs text-muted-foreground">
-          {indexStatus?.lastIndexedAt ? (
-            <>
-              Index: {indexStatus.objectCount?.toLocaleString() ?? '?'} keys · updated {formatRelative(indexStatus.lastIndexedAt)}
-            </>
-          ) : (
-            <>Index not built yet for this bucket.</>
-          )}
-        </div>
+        {activeSearchEnabled && (
+          <div className="text-xs text-muted-foreground">
+            {indexStatus?.lastIndexedAt ? (
+              <>
+                Index: {indexStatus.objectCount?.toLocaleString() ?? '?'} keys · updated {formatRelative(indexStatus.lastIndexedAt)}
+              </>
+            ) : (
+              <>Index not built yet for this bucket.</>
+            )}
+          </div>
+        )}
       </div>
+
+      {!activeSearchEnabled && (
+        <Alert className="mb-3">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Search is disabled for this connection because its S3 endpoint host is not in
+            <span className="mx-1 font-mono">S3BROWSER_SEARCH_WHITELIST_HOSTS</span>.
+            Add the host to that comma-separated env var and restart the server to enable search.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {indexMissing && (
         <Alert className="mb-3">
@@ -303,7 +319,7 @@ export function SearchPage() {
         </Alert>
       )}
 
-      {!queryFromUrl.trim() ? (
+      {!activeSearchEnabled ? null : !queryFromUrl.trim() ? (
         <div className="py-16 text-center text-muted-foreground">
           Type a query to search indexed keys.
         </div>
