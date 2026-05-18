@@ -3,6 +3,7 @@ import {
   findObjectIndexRowsByKeys,
   getConnectionById,
   getOrCreateIndexedBucket,
+  resetObjectIndexTables,
   upsertObjectIndexBatch,
   sweepStaleObjects,
   markIndexCompleted,
@@ -112,6 +113,7 @@ type Args = {
   maxContentBytes: number;
   noContent: boolean;
   dryRun: boolean;
+  reindex: boolean;
   help: boolean;
   error?: string;
 };
@@ -122,6 +124,7 @@ function parseArgs(argv: string[]): Args {
     maxContentBytes: DEFAULT_MAX_CONTENT_BYTES,
     noContent: false,
     dryRun: false,
+    reindex: false,
     help: false,
   };
   const readValue = (flag: string, value: string | undefined): string | undefined => {
@@ -169,6 +172,9 @@ function parseArgs(argv: string[]): Args {
       case '--dry-run':
         args.dryRun = true;
         break;
+      case '--reindex':
+        args.reindex = true;
+        break;
       case '--help':
       case '-h':
         args.help = true;
@@ -203,6 +209,7 @@ Options:
   --max-content-bytes <n>    Per-object body cap in bytes. Default ${DEFAULT_MAX_CONTENT_BYTES}.
   --no-content               Skip content indexing entirely (keys-only).
   --dry-run                  Crawl and count only; do not write to the index.
+  --reindex                  Drop and recreate all search index tables before crawling.
   -h, --help                 Show this help.
 `);
 }
@@ -243,6 +250,11 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  if (args.reindex && args.dryRun) {
+    console.error('Cannot combine --reindex with --dry-run');
+    process.exit(1);
+  }
+
   const connection = getConnectionById(args.connection);
   if (!connection) {
     console.error(`Connection ${args.connection} not found in DB`);
@@ -276,6 +288,11 @@ async function main(): Promise<void> {
   console.log(`Indexing s3://${bucket} for connection ${connection.id} (${connection.profile_name}) ${contentMode}${args.dryRun ? ' [dry-run]' : ''}`);
 
   const { client } = await createS3ClientFromConnection(connection, bucket);
+
+  if (args.reindex) {
+    console.log('Dropping and recreating search index tables...');
+    resetObjectIndexTables();
+  }
 
   const indexedBucketId = args.dryRun ? -1 : getOrCreateIndexedBucket(connection.id, bucket);
   const runStartedAt = Math.floor(Date.now() / 1000);

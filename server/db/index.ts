@@ -126,50 +126,7 @@ function initializeSalt(database: Database): void {
   }
 }
 
-function initializeDatabase(): Database {
-  // Ensure the database directory exists
-  if (!existsSync(DB_DIR)) {
-    mkdirSync(DB_DIR, { recursive: true });
-  }
-
-  // Open database
-  const database = new Database(DB_PATH);
-
-  // Enable WAL mode for better concurrency
-  database.exec('PRAGMA journal_mode = WAL');
-
-  // Initialize salt from database (must happen before encryption key validation)
-  initializeSalt(database);
-
-  // Now validate encryption key (which requires salt to be set)
-  validateEncryptionKey();
-
-  // Fail fast at startup if the login password is missing/too short, rather than
-  // letting the server boot and only error on the first login attempt.
-  validateLoginPassword();
-
-  // Create tables
-  database.exec(`
-    -- S3 connections: saved S3 connection profiles (globally unique profile names)
-    CREATE TABLE IF NOT EXISTS s3_connections (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      profile_name TEXT NOT NULL UNIQUE,
-      endpoint TEXT NOT NULL,
-      access_key_id TEXT NOT NULL,
-      secret_access_key TEXT NOT NULL,
-      bucket TEXT,
-      region TEXT,
-      auto_detect_region INTEGER DEFAULT 1,
-      last_used_at INTEGER DEFAULT (unixepoch())
-    );
-  `);
-
-  // S3 object index: per-(connection, bucket) flat index of keys for search.
-  // Parent table records when the last full crawl completed; child table
-  // holds one row per object key with last_modified for incremental updates.
-  //
-  // All timestamp columns (last_completed_at, last_modified, seen_at) are
-  // unix epoch SECONDS (matching SQLite's unixepoch() function).
+function initializeObjectIndexSchema(database: Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS s3_indexed_buckets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,6 +171,53 @@ function initializeDatabase(): Database {
       INSERT INTO s3_object_content_fts(rowid, content) VALUES (new.id, new.content);
     END;
   `);
+}
+
+function initializeDatabase(): Database {
+  // Ensure the database directory exists
+  if (!existsSync(DB_DIR)) {
+    mkdirSync(DB_DIR, { recursive: true });
+  }
+
+  // Open database
+  const database = new Database(DB_PATH);
+
+  // Enable WAL mode for better concurrency
+  database.exec('PRAGMA journal_mode = WAL');
+
+  // Initialize salt from database (must happen before encryption key validation)
+  initializeSalt(database);
+
+  // Now validate encryption key (which requires salt to be set)
+  validateEncryptionKey();
+
+  // Fail fast at startup if the login password is missing/too short, rather than
+  // letting the server boot and only error on the first login attempt.
+  validateLoginPassword();
+
+  // Create tables
+  database.exec(`
+    -- S3 connections: saved S3 connection profiles (globally unique profile names)
+    CREATE TABLE IF NOT EXISTS s3_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile_name TEXT NOT NULL UNIQUE,
+      endpoint TEXT NOT NULL,
+      access_key_id TEXT NOT NULL,
+      secret_access_key TEXT NOT NULL,
+      bucket TEXT,
+      region TEXT,
+      auto_detect_region INTEGER DEFAULT 1,
+      last_used_at INTEGER DEFAULT (unixepoch())
+    );
+  `);
+
+  // S3 object index: per-(connection, bucket) flat index of keys for search.
+  // Parent table records when the last full crawl completed; child table
+  // holds one row per object key with last_modified for incremental updates.
+  //
+  // All timestamp columns (last_completed_at, last_modified, seen_at) are
+  // unix epoch SECONDS (matching SQLite's unixepoch() function).
+  initializeObjectIndexSchema(database);
 
   // Verify encryption key matches what was used to initialize the database
   verifyEncryptionKey(database);
@@ -354,6 +358,19 @@ export { encrypt, decrypt } from './crypto.js';
 // ---------------------------------------------------------------------------
 // S3 object index (per-bucket flat key index, used for search)
 // ---------------------------------------------------------------------------
+
+export function resetObjectIndexTables(): void {
+  const database = getDb();
+  database.exec(`
+    DROP TRIGGER IF EXISTS s3_object_index_ai;
+    DROP TRIGGER IF EXISTS s3_object_index_ad;
+    DROP TRIGGER IF EXISTS s3_object_index_au;
+    DROP TABLE IF EXISTS s3_object_content_fts;
+    DROP TABLE IF EXISTS s3_object_index;
+    DROP TABLE IF EXISTS s3_indexed_buckets;
+  `);
+  initializeObjectIndexSchema(database);
+}
 
 export function getOrCreateIndexedBucket(connectionId: number, bucket: string): number {
   const database = getDb();
