@@ -51,9 +51,9 @@ Encryption Key:
 const indexCmd = program
   .command('index')
   .description('Index an S3 bucket for full-text search')
-  .requiredOption(
+  .option(
     '-c, --connection <id>',
-    'Saved S3 connection ID (DB primary key)',
+    'Saved S3 connection ID (DB primary key, required unless --reset is set)',
     parsePositiveInt('--connection')
   )
   .option('--bucket <name>', "Bucket to index (defaults to the connection's saved bucket)")
@@ -63,6 +63,7 @@ const indexCmd = program
     parsePositiveInt('--batch-size'),
     1000
   )
+  .option('--reset', 'Delete the search index database and exit (no crawl)')
   .addHelpText(
     'after',
     `
@@ -76,10 +77,19 @@ unknown, a HEAD request checks for a text/* Content-Type.
 
 The crawl is incremental: rows with the same last_modified are touched
 without re-indexing; rows no longer present in the bucket are deleted at
-the end of the run.`
+the end of the run.
+
+Use --reset to delete the search index database instead of crawling.`
   )
   .action(
-    async (opts: { connection: number; bucket?: string; batchSize: number }) => {
+    async (opts: { connection?: number; bucket?: string; batchSize: number; reset?: boolean }, command) => {
+      if (opts.reset) {
+        runIndexReset();
+        return;
+      }
+      if (opts.connection === undefined) {
+        command.error('error: required option \'-c, --connection <id>\' not specified');
+      }
       await runIndex({
         connectionId: opts.connection,
         bucket: opts.bucket,
@@ -87,12 +97,5 @@ the end of the run.`
       });
     }
   );
-
-indexCmd
-  .command('reset')
-  .description('Delete the search index database and exit (no crawl)')
-  .action(() => {
-    runIndexReset();
-  });
 
 await program.parseAsync(process.argv);
