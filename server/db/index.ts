@@ -38,7 +38,6 @@ export interface DbObjectIndexRow {
   /** Unix epoch seconds, from S3 LastModified. */
   last_modified: number;
   size: number | null;
-  etag: string | null;
   /** Unix epoch seconds; set to the run's start time each time the indexer touches this row. */
   seen_at: number;
 }
@@ -188,10 +187,8 @@ function initializeDatabase(): Database {
       key TEXT NOT NULL,
       last_modified INTEGER NOT NULL,           -- unix epoch seconds, from S3 LastModified
       size INTEGER,
-      etag TEXT,
       seen_at INTEGER NOT NULL,                 -- unix epoch seconds; updated each indexer run
       content TEXT,                             -- UTF-8 body for text-like objects (NULL if not indexed)
-      content_indexed_etag TEXT,                -- S3 etag captured when content was last fetched
       UNIQUE(indexed_bucket_id, key),
       FOREIGN KEY (indexed_bucket_id) REFERENCES s3_indexed_buckets(id) ON DELETE CASCADE
     );
@@ -395,11 +392,8 @@ export interface ObjectIndexInput {
   /** Unix epoch seconds. */
   lastModified: number;
   size: number | null;
-  etag: string | null;
   /** Decoded UTF-8 body (capped); null when the object is non-text or skipped. */
   content: string | null;
-  /** S3 etag captured when content was fetched (null when no content). */
-  contentIndexedEtag: string | null;
 }
 
 export interface ObjectIndexUpsertResult {
@@ -410,10 +404,7 @@ export interface ObjectIndexUpsertResult {
 
 /** Existing row lookup result. Exported so the indexer can decide whether to refetch bodies. */
 export interface ObjectIndexExistingRow {
-  id: number;
   last_modified: number;
-  etag: string | null;
-  content_indexed_etag: string | null;
 }
 
 export function findObjectIndexRowsByKeys(
@@ -424,7 +415,7 @@ export function findObjectIndexRowsByKeys(
   if (keys.length === 0) return result;
   const database = getDb();
   const stmt = database.prepare(`
-    SELECT id, key, last_modified, etag, content_indexed_etag
+    SELECT key, last_modified
     FROM s3_object_index
     WHERE indexed_bucket_id = ? AND key = ?
   `);
@@ -434,10 +425,7 @@ export function findObjectIndexRowsByKeys(
       | undefined;
     if (row) {
       result.set(row.key, {
-        id: row.id,
         last_modified: row.last_modified,
-        etag: row.etag,
-        content_indexed_etag: row.content_indexed_etag,
       });
     }
   }
@@ -464,12 +452,12 @@ export function upsertObjectIndexBatch(
     WHERE indexed_bucket_id = ? AND key = ?
   `);
   const insertStmt = database.prepare(`
-    INSERT INTO s3_object_index (indexed_bucket_id, key, last_modified, size, etag, seen_at, content, content_indexed_etag)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO s3_object_index (indexed_bucket_id, key, last_modified, size, seen_at, content)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   const updateMetaStmt = database.prepare(`
     UPDATE s3_object_index
-    SET last_modified = ?, size = ?, etag = ?, seen_at = ?, content = ?, content_indexed_etag = ?
+    SET last_modified = ?, size = ?, seen_at = ?, content = ?
     WHERE id = ?
   `);
   const touchStmt = database.prepare(`
@@ -485,8 +473,8 @@ export function upsertObjectIndexBatch(
         | undefined;
       if (!existing) {
         insertStmt.run(
-          indexedBucketId, row.key, row.lastModified, row.size, row.etag, seenAt,
-          row.content, row.contentIndexedEtag
+          indexedBucketId, row.key, row.lastModified, row.size, seenAt,
+          row.content
         );
         result.added += 1;
       } else if (existing.last_modified === row.lastModified) {
@@ -494,8 +482,8 @@ export function upsertObjectIndexBatch(
         result.touched += 1;
       } else {
         updateMetaStmt.run(
-          row.lastModified, row.size, row.etag, seenAt,
-          row.content, row.contentIndexedEtag, existing.id
+          row.lastModified, row.size, seenAt,
+          row.content, existing.id
         );
         result.updated += 1;
       }
@@ -519,7 +507,6 @@ export interface ObjectIndexSearchHit {
   /** Unix epoch seconds. */
   last_modified: number;
   size: number | null;
-  etag: string | null;
 }
 
 export interface ObjectIndexSearchResult {
@@ -586,7 +573,7 @@ export function searchObjectIndex(
     : `key ${sortDir}`;
 
   const sql =  `
-    SELECT key, last_modified, size, etag
+    SELECT key, last_modified, size
     FROM s3_object_index
     WHERE ${whereSql}
     ORDER BY ${orderSql}

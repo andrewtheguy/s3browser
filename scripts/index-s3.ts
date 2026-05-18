@@ -184,7 +184,7 @@ function printHelp(): void {
   console.log(`Usage: bun run index -- --connection <id> [--bucket <name>]
 
 Crawls every object in an S3 bucket via ListObjectsV2 and stores
-(key, last_modified, size, etag, content) rows in ~/.s3browser/s3browser.db.
+(key, last_modified, size, content) rows in ~/.s3browser/s3browser.db.
 
 For text-like objects, the body (up to 1 MB by default) is downloaded and
 stored so the search endpoint can match against file contents via SQLite
@@ -193,8 +193,8 @@ is unknown, a HEAD request checks for a text/* Content-Type.
 
 The crawl is incremental: rows with the same last_modified are touched
 without re-indexing; rows no longer present in the bucket are deleted at
-the end of the run. Body fetches are skipped when the S3 etag matches the
-etag captured the last time content was indexed.
+the end of the run. Body fetches are skipped for rows with the same
+last_modified timestamp.
 
 Options:
   --connection <id>          Required. ID of the saved s3 connection (DB primary key).
@@ -282,7 +282,7 @@ async function main(): Promise<void> {
   const startMs = Date.now();
   const totals = {
     added: 0, updated: 0, touched: 0, removed: 0, seen: 0,
-    bodyFetched: 0, bodySkippedEtag: 0, bodySkippedNonText: 0, bodySkippedSize: 0,
+    bodyFetched: 0, bodySkippedUnchanged: 0, bodySkippedNonText: 0, bodySkippedSize: 0,
   };
 
   let continuationToken: string | undefined;
@@ -311,7 +311,6 @@ async function main(): Promise<void> {
           throw new Error(`S3 ListObjectsV2 returned no LastModified for key=${key}`);
         }
         const size = item.Size ?? null;
-        const etag = item.ETag ?? null;
         let needsBodyFetch = false;
         let needsHeadCheck = false;
         if (!args.noContent && !key.endsWith('/') && size !== 0) {
@@ -328,9 +327,7 @@ async function main(): Promise<void> {
             key,
             lastModified: Math.floor(item.LastModified.getTime() / 1000),
             size,
-            etag,
             content: null,
-            contentIndexedEtag: null,
           },
           needsBodyFetch,
           needsHeadCheck,
@@ -352,7 +349,7 @@ async function main(): Promise<void> {
         if (prior && prior.last_modified === row.input.lastModified) {
           row.needsBodyFetch = false;
           row.needsHeadCheck = false;
-          totals.bodySkippedEtag += 1;
+          totals.bodySkippedUnchanged += 1;
         }
       }
 
@@ -374,7 +371,6 @@ async function main(): Promise<void> {
         const text = await fetchTextBody(client, bucket, row.input.key, args.maxContentBytes);
         if (text !== null) {
           row.input.content = text;
-          row.input.contentIndexedEtag = row.input.etag;
           totals.bodyFetched += 1;
         }
       });
@@ -407,7 +403,7 @@ async function main(): Promise<void> {
   );
   if (!args.noContent) {
     console.log(
-      `Content: fetched=${totals.bodyFetched}, skipped(etag)=${totals.bodySkippedEtag}, skipped(non-text)=${totals.bodySkippedNonText}, skipped(over-cap)=${totals.bodySkippedSize}`
+      `Content: fetched=${totals.bodyFetched}, skipped(unchanged)=${totals.bodySkippedUnchanged}, skipped(non-text)=${totals.bodySkippedNonText}, skipped(over-cap)=${totals.bodySkippedSize}`
     );
   }
 }

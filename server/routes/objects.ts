@@ -437,7 +437,6 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
     size: hit.size ?? undefined,
     lastModified: new Date(hit.last_modified * 1000).toISOString(),
     isFolder: hit.key.endsWith('/'),
-    etag: hit.etag ?? undefined,
   }));
 
   res.json({
