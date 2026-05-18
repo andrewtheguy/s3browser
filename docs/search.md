@@ -20,7 +20,7 @@ When a connection isn't allowlisted, the search/index-status API routes refuse w
 ## Building the index
 
 ```sh
-bun run index:keys -- --connection <id> [--bucket <name>] [--batch-size <n>] [--dry-run]
+bun run index -- --connection <id> [--bucket <name>] [--batch-size <n>] [--dry-run]
 ```
 
 `--connection` is the DB id of a saved connection. `--bucket` defaults to the connection's saved bucket. Run `--help` for the full flag list.
@@ -44,5 +44,5 @@ Keys, sizes, last-modified, and etags are stored unencrypted in the local SQLite
 - Whitelist + gate: `server/config/searchWhitelist.ts`
 - Schema + upsert/sweep/search helpers: `server/db/index.ts`
 - API routes: `server/routes/objects.ts`
-- Indexer CLI: `scripts/index-s3-keys.ts`
+- Indexer CLI: `scripts/index-s3.ts`
 - Search page + Toolbar button: `src/pages/SearchPage.tsx`, `src/components/Toolbar/Toolbar.tsx`

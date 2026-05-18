@@ -422,7 +422,7 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
   const status = getIndexStatus(connectionId, bucket);
   if (!status || status.last_completed_at === null) {
     res.status(404).json({
-      error: `Index not built. Run: bun run index:keys -- --connection ${connectionId} --bucket ${bucket}`,
+      error: `Index not built. Run: bun run index -- --connection ${connectionId} --bucket ${bucket}`,
       code: 'IndexNotBuilt',
     });
     return;

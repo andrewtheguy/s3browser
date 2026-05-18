@@ -54,7 +54,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 function printHelp(): void {
-  console.log(`Usage: bun run index:keys -- --connection <id> [--bucket <name>]
+  console.log(`Usage: bun run index -- --connection <id> [--bucket <name>]
 
 Crawls every object in an S3 bucket via ListObjectsV2 and stores
 (key, last_modified, size, etag) rows in ~/.s3browser/s3browser.db.
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
     console.error(
       `Add it to the comma-separated list and retry, e.g.:`
     );
-    console.error(`  ${SEARCH_WHITELIST_ENV_VAR}="${host}" bun run index:keys -- --connection ${connection.id}`);
+    console.error(`  ${SEARCH_WHITELIST_ENV_VAR}="${host}" bun run index -- --connection ${connection.id}`);
     process.exit(1);
   }
 
