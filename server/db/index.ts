@@ -471,6 +471,7 @@ export interface SearchObjectIndexOptions {
   offset: number;
   sort?: ObjectIndexSortKey;
   dir?: ObjectIndexSortDir;
+  prefix?: string;
 }
 
 export function searchObjectIndex(
@@ -480,11 +481,21 @@ export function searchObjectIndex(
 ): ObjectIndexSearchResult {
   const database = getDb();
 
-  const whereSql = "indexed_bucket_id = ? AND key LIKE ? ESCAPE '\\'";
+  const whereParts: string[] = [
+    'indexed_bucket_id = ?',
+    "key LIKE ? ESCAPE '\\'",
+  ];
   const baseParams: (string | number)[] = [
     indexedBucketId,
     `%${escapeLikePattern(query)}%`,
   ];
+
+  if (options.prefix) {
+    whereParts.push("key LIKE ? ESCAPE '\\'");
+    baseParams.push(`${escapeLikePattern(options.prefix)}%`);
+  }
+
+  const whereSql = whereParts.join(' AND ');
 
   const sortKey: ObjectIndexSortKey = options.sort === 'last_modified' ? 'last_modified' : 'key';
   const sortDir: ObjectIndexSortDir = options.dir === 'desc' ? 'desc' : 'asc';
@@ -492,13 +503,17 @@ export function searchObjectIndex(
     ? `last_modified ${sortDir}, key ASC`
     : `key ${sortDir}`;
 
-  const hits = database.prepare(`
+  const sql =  `
     SELECT key, last_modified, size, etag
     FROM s3_object_index
     WHERE ${whereSql}
     ORDER BY ${orderSql}
     LIMIT ? OFFSET ?
-  `).all(...baseParams, options.limit, options.offset) as ObjectIndexSearchHit[];
+  `;
+
+  //console.debug('Executing search with SQL:', sql, 'and params:', baseParams, options.limit, options.offset);
+
+  const hits = database.prepare(sql).all(...baseParams, options.limit, options.offset) as ObjectIndexSearchHit[];
 
   const totalRow = database.prepare(`
     SELECT COUNT(*) AS count

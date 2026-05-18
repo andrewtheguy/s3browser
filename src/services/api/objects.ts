@@ -88,6 +88,7 @@ export async function searchObjects(
     offset?: number;
     sort?: SearchSortKey;
     dir?: SearchSortDir;
+    prefix?: string;
     signal?: AbortSignal;
   } = {}
 ): Promise<SearchObjectsResponse> {
@@ -104,6 +105,9 @@ export async function searchObjects(
   }
   if (options.dir) {
     params.set('dir', options.dir);
+  }
+  if (options.prefix) {
+    params.set('prefix', options.prefix);
   }
 
   const response = await apiGet<RawSearchObjectsResponse>(
