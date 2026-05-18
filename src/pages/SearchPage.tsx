@@ -264,15 +264,17 @@ export function SearchPage() {
               Search <span className="text-muted-foreground">in {bucket}</span>
             </span>
             {prefixFromUrl && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono font-normal text-muted-foreground">
-                <span>in {prefixFromUrl}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm font-mono font-semibold text-primary">
+                <span className="text-primary/70">scope:</span>
+                <span className="break-all">{prefixFromUrl}</span>
                 <button
                   type="button"
                   onClick={clearPrefix}
-                  className="hover:text-foreground"
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-primary/20"
                   aria-label="Clear prefix scope"
+                  title="Clear prefix scope"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               </span>
             )}
