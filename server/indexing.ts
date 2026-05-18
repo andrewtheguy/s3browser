@@ -17,10 +17,9 @@ import {
 } from './config/searchWhitelist.js';
 
 const MAX_CONTENT_BYTES = 2 * 1024 * 1024;
-const BODY_FETCH_CONCURRENCY = 8;
 const DEFAULT_BATCH_SIZE = 1000;
-const PROGRESS_KEY_INTERVAL = 5000;
-const PROGRESS_HEARTBEAT_MS = 15_000;
+const HEAD_OBJECT_TIMEOUT_MS = 15_000;
+const GET_OBJECT_TIMEOUT_MS = 30_000;
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'rst', 'json', 'jsonc', 'jsonl', 'ndjson', 'csv', 'tsv', 'log',
@@ -68,9 +67,55 @@ function formatErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function formatTimeoutMs(ms: number): string {
+  return `${(ms / 1000).toFixed(0)}s`;
+}
+
+async function withS3RequestTimeout<T>(
+  operation: string,
+  key: string,
+  timeoutMs: number,
+  task: (abortSignal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  let timeoutError: Error | undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      timedOut = true;
+      timeoutError = new Error(`${operation} timed out after ${formatTimeoutMs(timeoutMs)} for key=${key}`);
+      reject(timeoutError);
+      controller.abort();
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      task(controller.signal),
+      timeoutPromise,
+    ]);
+  } catch (err) {
+    if (timedOut && timeoutError) {
+      throw timeoutError;
+    }
+    throw err;
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 async function headIsText(client: S3Client, bucket: string, key: string): Promise<boolean> {
   try {
-    const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    const head = await withS3RequestTimeout(
+      'HEAD object',
+      key,
+      HEAD_OBJECT_TIMEOUT_MS,
+      (abortSignal) => client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }), { abortSignal })
+    );
     return isTextContentType(head.ContentType);
   } catch (err) {
     throw new Error(`failed to probe content type for ${key}: ${formatErrorMessage(err)}`, { cause: err });
@@ -84,64 +129,20 @@ async function fetchTextBody(
   maxBytes: number
 ): Promise<string> {
   try {
-    const resp = await client.send(new GetObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Range: `bytes=0-${maxBytes - 1}`,
-    }));
-    if (!resp.Body) {
-      throw new Error('S3 returned no response body');
-    }
-    const bytes = await resp.Body.transformToByteArray();
-    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    return await withS3RequestTimeout('GET object body', key, GET_OBJECT_TIMEOUT_MS, async (abortSignal) => {
+      const resp = await client.send(new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Range: `bytes=0-${maxBytes - 1}`,
+      }), { abortSignal });
+      if (!resp.Body) {
+        throw new Error('S3 returned no response body');
+      }
+      const bytes = await resp.Body.transformToByteArray();
+      return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    });
   } catch (err) {
     throw new Error(`failed to fetch body for ${key}: ${formatErrorMessage(err)}`, { cause: err });
-  }
-}
-
-async function runWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<void>
-): Promise<void> {
-  const runnerCount = Math.min(concurrency, items.length);
-  if (runnerCount <= 0) return;
-
-  let next = 0;
-  let failed = false;
-  let firstError: unknown;
-
-  const runners = Array.from({ length: runnerCount }, async () => {
-    while (next < items.length) {
-      if (failed) return;
-      const i = next++;
-      try {
-        await worker(items[i], i);
-      } catch (err) {
-        if (!failed) {
-          failed = true;
-          firstError = err;
-        }
-        return;
-      }
-    }
-  });
-
-  await Promise.all(runners);
-  if (failed) {
-    throw firstError;
-  }
-}
-
-async function withIntervalHeartbeat<T>(
-  heartbeat: () => void,
-  task: () => Promise<T>
-): Promise<T> {
-  const interval = setInterval(heartbeat, PROGRESS_HEARTBEAT_MS);
-  try {
-    return await task();
-  } finally {
-    clearInterval(interval);
   }
 }
 
@@ -219,40 +220,14 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
 
   let continuationToken: string | undefined;
   let pageNumber = 0;
-  let lastProgressSeen = 0;
-  let lastProgressMs = startMs;
-
-  const logProgress = (phase?: string): void => {
-    lastProgressSeen = totals.seen;
-    lastProgressMs = Date.now();
-    const elapsed = ((lastProgressMs - startMs) / 1000).toFixed(1);
-    const pageText = pageNumber > 0 ? `page ${pageNumber}` : 'before first page';
-    const phaseText = phase ? `, ${phase}` : '';
-    console.log(
-      `Indexing progress: ${totals.seen} keys seen (${pageText}, bodies fetched ${totals.bodyFetched}${phaseText}, elapsed ${elapsed}s)...`
-    );
-  };
-
-  const maybeLogProgress = (phase?: string): void => {
-    const now = Date.now();
-    if (
-      totals.seen - lastProgressSeen >= PROGRESS_KEY_INTERVAL ||
-      now - lastProgressMs >= PROGRESS_HEARTBEAT_MS
-    ) {
-      logProgress(phase);
-    }
-  };
 
   do {
-    const response = await withIntervalHeartbeat(
-      () => maybeLogProgress(`listing page ${pageNumber + 1}`),
-      () => client.send(
-        new ListObjectsV2Command({
-          Bucket: bucket,
-          MaxKeys: batchSize,
-          ContinuationToken: continuationToken,
-        })
-      )
+    const response = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        MaxKeys: batchSize,
+        ContinuationToken: continuationToken,
+      })
     );
 
     pageNumber += 1;
@@ -310,12 +285,8 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
         }
       }
 
-      // HEAD probes for unknown extensions
-      const headTargets = pending.filter((p) => p.needsHeadCheck);
-      let headChecked = 0;
-      await withIntervalHeartbeat(
-        () => maybeLogProgress(`checking content types ${headChecked}/${headTargets.length}`),
-        () => runWithConcurrency(headTargets, BODY_FETCH_CONCURRENCY, async (row) => {
+      for (const row of pending) {
+        if (row.needsHeadCheck) {
           const isText = await headIsText(client, bucket, row.input.key);
           if (isText) {
             row.needsBodyFetch = true;
@@ -323,34 +294,24 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
             totals.bodySkippedNonText += 1;
           }
           row.needsHeadCheck = false;
-          headChecked += 1;
-          maybeLogProgress(`checking content types ${headChecked}/${headTargets.length}`);
-        })
-      );
-
-      // Fetch text bodies in parallel.
-      const bodyTargets = pending.filter((p) => p.needsBodyFetch);
-      let bodiesFetchedThisPage = 0;
-      await withIntervalHeartbeat(
-        () => maybeLogProgress(`fetching bodies ${bodiesFetchedThisPage}/${bodyTargets.length}`),
-        () => runWithConcurrency(bodyTargets, BODY_FETCH_CONCURRENCY, async (row) => {
-          const text = await fetchTextBody(client, bucket, row.input.key, MAX_CONTENT_BYTES);
-          row.input.content = text;
+        }
+        if (row.needsBodyFetch) {
+          row.input.content = await fetchTextBody(client, bucket, row.input.key, MAX_CONTENT_BYTES);
           totals.bodyFetched += 1;
-          bodiesFetchedThisPage += 1;
-          maybeLogProgress(`fetching bodies ${bodiesFetchedThisPage}/${bodyTargets.length}`);
-        })
-      );
+        }
+      }
 
       const rows = pending.map((p) => p.input);
-      maybeLogProgress(`writing page ${pageNumber}`);
       const result = upsertObjectIndexBatch(indexedBucketId, runStartedAt, rows);
       totals.added += result.added;
       totals.updated += result.updated;
       totals.touched += result.touched;
     }
 
-    maybeLogProgress(`page ${pageNumber} complete`);
+    const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+    console.log(
+      `Page ${pageNumber}: ${totals.seen} keys seen, ${totals.bodyFetched} bodies fetched, elapsed ${elapsed}s`
+    );
 
     continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
   } while (continuationToken);
