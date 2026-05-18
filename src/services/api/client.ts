@@ -27,14 +27,28 @@ export async function apiRequest<T>(
   const { responseType = 'json', ...fetchOptions } = options;
   const url = `${API_BASE}${endpoint}`;
 
-  const response = await fetch(url, {
-    ...fetchOptions,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...fetchOptions.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...fetchOptions,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...fetchOptions.headers,
+      },
+    });
+  } catch (err) {
+    // Preserve aborts so callers can distinguish them.
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err;
+    }
+    // fetch() throws TypeError for network failures (connection refused, DNS, offline, CORS).
+    throw new ApiHttpError(
+      'Cannot reach server. Please check that the backend is running.',
+      0,
+      'NETWORK_ERROR',
+    );
+  }
 
   if (!response.ok) {
     let errorMessage = `Request failed with status ${response.status}`;
