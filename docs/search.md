@@ -23,7 +23,7 @@ When a connection isn't allowlisted, the search/index-status API routes refuse w
 bun run index -- --connection <id> [--bucket <name>] [--batch-size <n>] [--dry-run]
 ```
 
-`--connection` is the DB id of a saved connection. `--bucket` defaults to the connection's saved bucket. Run `--help` for the full flag list.
+`--connection` is the DB id of a saved connection. `--bucket` defaults to the connection's saved bucket. `--batch-size` controls S3 page/write loop size; DB writes are committed row by row. Run `--help` for the full flag list.
 
 The crawl is incremental: rows whose `LastModified` matches what's already indexed are touched, not rewritten, and objects no longer present in the bucket are deleted at the end of each run. The "last indexed at" timestamp only advances on a clean run, so a failed crawl leaves the UI's freshness banner pointing at the previous good state.
 
