@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { readdirSync, statSync, writeFileSync, existsSync } from 'fs';
 import { join, relative, extname } from 'path';
+import { createHash } from 'crypto';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
 const DIST_DIR = join(PROJECT_ROOT, 'dist');
@@ -28,7 +29,12 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 function toIdent(url: string): string {
-  return 'a_' + url.replace(/[^a-zA-Z0-9]/g, '_');
+  // Sanitized prefix is human-readable; sha1 suffix of the full URL guarantees
+  // uniqueness even when the prefix would collide (e.g. "/foo-bar" vs "/foo_bar").
+  const sanitized = url.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+/, '');
+  const prefix = sanitized.slice(0, 32);
+  const hash = createHash('sha1').update(url).digest('hex').slice(0, 8);
+  return `a_${prefix}_${hash}`;
 }
 
 if (!existsSync(DIST_DIR)) {
