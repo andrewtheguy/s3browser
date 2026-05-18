@@ -38,14 +38,18 @@ export function usePreview() {
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const cancelActiveRequest = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    requestIdRef.current++;
+  }, []);
+
   // Cleanup on unmount: abort any in-flight request
   useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+    return cancelActiveRequest;
+  }, [cancelActiveRequest]);
 
   const openPreview = useCallback(
     async (item: S3Object) => {
@@ -172,14 +176,7 @@ export function usePreview() {
   );
 
   const closePreview = useCallback(() => {
-    // Cancel any in-flight request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-
-    // Invalidate any pending request
-    requestIdRef.current++;
+    cancelActiveRequest();
 
     setState({
       isOpen: false,
@@ -191,7 +188,7 @@ export function usePreview() {
       item: null,
       cannotPreviewReason: null,
     });
-  }, []);
+  }, [cancelActiveRequest]);
 
   return {
     ...state,

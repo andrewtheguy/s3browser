@@ -849,6 +849,12 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
   // S3Object so content fetching can start immediately.
   const lastOpenedPreviewKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    return () => {
+      lastOpenedPreviewKeyRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!previewKey) {
       if (lastOpenedPreviewKeyRef.current !== null) {
         closePreview();
