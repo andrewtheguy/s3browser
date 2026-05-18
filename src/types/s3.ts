@@ -22,6 +22,7 @@ export interface S3Object {
   isLatest?: boolean;
   isDeleteMarker?: boolean;
   contentSnippet?: string | null;
+  contentMatchCount?: number;
 }
 
 export interface S3ListResult {

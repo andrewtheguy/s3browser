@@ -434,6 +434,11 @@ export function SearchPage() {
                         {item.contentSnippet ? (
                           <>
                             …<HighlightedText text={item.contentSnippet} query={queryFromUrl} />…
+                            {item.contentMatchCount ? (
+                              <span className="ml-2 whitespace-nowrap text-[11px] opacity-70">
+                                ({item.contentMatchCount} match{item.contentMatchCount === 1 ? '' : 'es'})
+                              </span>
+                            ) : null}
                           </>
                         ) : null}
                       </TableCell>

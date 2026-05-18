@@ -547,6 +547,8 @@ export interface ObjectIndexSearchHit {
   size: number | null;
   /** ~30 chars of context around the first content match, or null when only the key matched. */
   contentSnippet: string | null;
+  /** Total number of (case-insensitive ASCII) occurrences of the query in content. 0 when content didn't match. */
+  contentMatchCount: number;
 }
 
 export interface ObjectIndexSearchResult {
@@ -608,9 +610,10 @@ export function searchObjectIndex(
     : `key ${sortDir}`;
 
   // Extract ~30 chars of context around the first case-insensitive (ASCII-only;
-  // CJK passes through LOWER unchanged) occurrence of the query in content.
-  // INSTR/SUBSTR/LENGTH all operate on characters in SQLite, so the window is
-  // character-accurate for CJK. NULL when content didn't match or was NULL.
+  // CJK passes through LOWER unchanged) occurrence of the query in content, plus
+  // a total occurrence count via the LENGTH/REPLACE trick. INSTR/SUBSTR/LENGTH
+  // all operate on characters in SQLite, so windows and counts are
+  // character-accurate for CJK.
   const snippetSql = `
     CASE
       WHEN content IS NOT NULL AND INSTR(LOWER(content), LOWER(?)) > 0 THEN
@@ -620,7 +623,12 @@ export function searchObjectIndex(
           LENGTH(?) + 60
         )
       ELSE NULL
-    END AS contentSnippet
+    END AS contentSnippet,
+    CASE
+      WHEN content IS NOT NULL AND INSTR(LOWER(content), LOWER(?)) > 0 THEN
+        (LENGTH(LOWER(content)) - LENGTH(REPLACE(LOWER(content), LOWER(?), ''))) / LENGTH(?)
+      ELSE 0
+    END AS contentMatchCount
   `;
 
   const sql = `
@@ -633,7 +641,13 @@ export function searchObjectIndex(
 
   const hits = database
     .prepare(sql)
-    .all(query, query, query, ...baseParams, options.limit, options.offset) as ObjectIndexSearchHit[];
+    .all(
+      query, query, query,         // snippet: needle, needle, needle (for LENGTH)
+      query, query, query,         // count: needle (guard), needle (replace), needle (divisor)
+      ...baseParams,
+      options.limit,
+      options.offset,
+    ) as ObjectIndexSearchHit[];
 
   const totalRow = database.prepare(`
     SELECT COUNT(*) AS count
