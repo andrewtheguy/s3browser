@@ -545,6 +545,10 @@ export interface ObjectIndexSearchHit {
   /** Unix epoch seconds. */
   last_modified: number;
   size: number | null;
+  /** ~30 chars of context around the first content match, or null when only the key matched. */
+  contentSnippet: string | null;
+  /** Total number of (case-insensitive ASCII) occurrences of the query in content. 0 when content didn't match. */
+  contentMatchCount: number;
 }
 
 export interface ObjectIndexSearchResult {
@@ -605,17 +609,45 @@ export function searchObjectIndex(
     ? `last_modified ${sortDir}, key ASC`
     : `key ${sortDir}`;
 
-  const sql =  `
-    SELECT key, last_modified, size
+  // Extract ~30 chars of context around the first case-insensitive (ASCII-only;
+  // CJK passes through LOWER unchanged) occurrence of the query in content, plus
+  // a total occurrence count via the LENGTH/REPLACE trick. INSTR/SUBSTR/LENGTH
+  // all operate on characters in SQLite, so windows and counts are
+  // character-accurate for CJK.
+  const snippetSql = `
+    CASE
+      WHEN content IS NOT NULL AND INSTR(LOWER(content), LOWER(?)) > 0 THEN
+        SUBSTR(
+          content,
+          MAX(1, INSTR(LOWER(content), LOWER(?)) - 30),
+          LENGTH(?) + 60
+        )
+      ELSE NULL
+    END AS contentSnippet,
+    CASE
+      WHEN content IS NOT NULL AND INSTR(LOWER(content), LOWER(?)) > 0 THEN
+        (LENGTH(LOWER(content)) - LENGTH(REPLACE(LOWER(content), LOWER(?), ''))) / LENGTH(?)
+      ELSE 0
+    END AS contentMatchCount
+  `;
+
+  const sql = `
+    SELECT key, last_modified, size, ${snippetSql}
     FROM s3_object_index
     WHERE ${whereSql}
     ORDER BY ${orderSql}
     LIMIT ? OFFSET ?
   `;
 
-  //console.debug('Executing search with SQL:', sql, 'and params:', baseParams, options.limit, options.offset);
-
-  const hits = database.prepare(sql).all(...baseParams, options.limit, options.offset) as ObjectIndexSearchHit[];
+  const hits = database
+    .prepare(sql)
+    .all(
+      query, query, query,         // snippet: needle, needle, needle (for LENGTH)
+      query, query, query,         // count: needle (guard), needle (replace), needle (divisor)
+      ...baseParams,
+      options.limit,
+      options.offset,
+    ) as ObjectIndexSearchHit[];
 
   const totalRow = database.prepare(`
     SELECT COUNT(*) AS count

@@ -26,6 +26,7 @@ import {
 } from '../services/api/objects';
 import { cn } from '@/lib/utils';
 import { ApiHttpError } from '../services/api/client';
+import { HighlightedText } from '../components/HighlightedText';
 import type { S3Object } from '../types';
 
 const PAGE_SIZE = 100;
@@ -389,6 +390,7 @@ export function SearchPage() {
                       )}
                     </button>
                   </TableHead>
+                  <TableHead>Snippet</TableHead>
                   <TableHead className="w-[100px]">Size</TableHead>
                   <TableHead className="w-[180px]">
                     <button
@@ -425,8 +427,20 @@ export function SearchPage() {
                           }}
                           className="hover:underline break-all"
                         >
-                          {item.key}
+                          <HighlightedText text={item.key} query={queryFromUrl} />
                         </a>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground break-all">
+                        {item.contentSnippet ? (
+                          <>
+                            …<HighlightedText text={item.contentSnippet} query={queryFromUrl} />…
+                            {item.contentMatchCount ? (
+                              <span className="ml-2 whitespace-nowrap text-[11px] opacity-70">
+                                ({item.contentMatchCount} match{item.contentMatchCount === 1 ? '' : 'es'})
+                              </span>
+                            ) : null}
+                          </>
+                        ) : null}
                       </TableCell>
                       <TableCell>{item.isFolder ? '-' : formatFileSize(item.size)}</TableCell>
                       <TableCell>{formatDate(item.lastModified)}</TableCell>

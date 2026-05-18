@@ -12,6 +12,8 @@ export interface ListObjectsResponse {
     versionId?: string;
     isLatest?: boolean;
     isDeleteMarker?: boolean;
+    contentSnippet?: string | null;
+    contentMatchCount?: number;
   }>;
   continuationToken?: string;
   isTruncated: boolean;
