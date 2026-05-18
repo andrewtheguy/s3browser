@@ -19,27 +19,38 @@ function cleanupBunBuildFiles() {
 }
 
 const projectRoot = join(import.meta.dir, '..');
-const standaloneEntry = join(projectRoot, 'server', 'standalone.ts');
+const standaloneEntry = join(projectRoot, 'server', 'cli.ts');
 const outputPath = join(projectRoot, 's3browser');
 
 async function build() {
   console.log('Building standalone S3 Browser...\n');
 
-  // Step 1: Build the frontend with deterministic asset names (no hashes)
+  // Step 1: Build the frontend (Vite emits hashed filenames for cache busting)
   console.log('Step 1: Building frontend...');
   try {
     execSync('bun run build:client', {
       cwd: projectRoot,
       stdio: 'inherit',
-      env: { ...process.env, STANDALONE_BUILD: 'true' },
     });
   } catch {
     console.error('Error: Frontend build failed');
     process.exit(1);
   }
 
-  // Step 2: Compile standalone server for current platform with embedded assets
-  console.log('\nStep 2: Compiling standalone executable...');
+  // Step 2: Generate the embedded-assets map for the binary
+  console.log('\nStep 2: Generating embedded assets map...');
+  try {
+    execSync('bun run scripts/generate-embedded-assets.ts', {
+      cwd: projectRoot,
+      stdio: 'inherit',
+    });
+  } catch {
+    console.error('Error: Embedded-assets generation failed');
+    process.exit(1);
+  }
+
+  // Step 3: Compile standalone server for current platform with embedded assets
+  console.log('\nStep 3: Compiling standalone executable...');
   try {
     execSync(`bun build ${standaloneEntry} --compile --outfile ${outputPath} --target bun`, {
       cwd: projectRoot,

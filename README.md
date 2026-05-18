@@ -143,14 +143,31 @@ bun run build:standalone
 
 This creates an `s3browser` executable that can be run from anywhere without dependencies. By default, it builds for the current platform (macOS, Linux, or Windows).
 
+The binary is a multi-command CLI:
+
 ```bash
-./s3browser
-./s3browser -b :8080
-./s3browser --bind 127.0.0.1:3000
-./s3browser --bind [::1]:3000
+./s3browser server                          # run the HTTP server
+./s3browser server -b :8080                 # bind on all interfaces, port 8080
+./s3browser server --bind 127.0.0.1:3000    # localhost only
+./s3browser server --bind [::1]:3000        # IPv6 localhost
+./s3browser index --connection 1            # crawl + index a saved S3 connection
+./s3browser index --connection 1 --bucket my-bucket --batch-size 500
+./s3browser index reset                     # delete the search index DB
+./s3browser --help                          # top-level help
+./s3browser --version                       # version info
 ```
 
-By default, the standalone executable listens on all interfaces on port `8170`. Use `--bind 127.0.0.1:8170` for localhost-only access. Run `./s3browser --help` for all options.
+`./s3browser server` listens on all interfaces on port `8170` by default. Use `--bind 127.0.0.1:8170` for localhost-only access. Run `./s3browser server --help` or `./s3browser index --help` for subcommand-specific options.
+
+### CLI (development)
+
+During development, run the same subcommands without compiling via:
+
+```bash
+bun run cli server -b :3001
+bun run cli index --connection 1
+bun run cli index reset
+```
 
 ## Usage
 
