@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import { getDb, getIndexDb, closeDb } from '../db/index.js';
-import { acquireLock, releaseLock } from '../lock.js';
+import { acquireLock, releaseLock, SERVER_LOCK_FILE } from '../lock.js';
 import authRoutes from '../routes/auth.js';
 import objectsRoutes from '../routes/objects.js';
 import uploadRoutes, { cleanupUploadTracker } from '../routes/upload.js';
@@ -153,7 +153,7 @@ export async function runServer(opts: { bind?: string }): Promise<void> {
 
   // Acquire instance lock to prevent multiple instances
   try {
-    acquireLock();
+    acquireLock(SERVER_LOCK_FILE);
   } catch (error) {
     console.error(error instanceof Error ? error.message : 'Failed to acquire lock');
     process.exit(1);
@@ -166,7 +166,7 @@ export async function runServer(opts: { bind?: string }): Promise<void> {
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Failed to initialize database:', error instanceof Error ? error.message : error);
-    releaseLock();
+    releaseLock(SERVER_LOCK_FILE);
     process.exit(1);
   }
 
@@ -218,7 +218,7 @@ export async function runServer(opts: { bind?: string }): Promise<void> {
     }
 
     try {
-      releaseLock();
+      releaseLock(SERVER_LOCK_FILE);
     } catch (err) {
       console.error('Error releasing lock:', err);
     }
