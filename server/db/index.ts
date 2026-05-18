@@ -158,7 +158,7 @@ function initializeObjectIndexSchema(database: Database): void {
       content,
       content='s3_object_index',
       content_rowid='id',
-      tokenize='unicode61 remove_diacritics 2'
+      tokenize='trigram'
     );
 
     CREATE TRIGGER IF NOT EXISTS s3_object_index_ai AFTER INSERT ON s3_object_index BEGIN
@@ -556,14 +556,6 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
 }
 
-/**
- * Wrap a user-supplied search term as a single FTS5 phrase. Doubling internal
- * double-quotes keeps FTS5 operators (NEAR/AND/OR/columnspec/wildcard) inert.
- */
-function buildFtsQuery(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
-}
-
 export type ObjectIndexSortKey = 'key' | 'last_modified';
 export type ObjectIndexSortDir = 'asc' | 'desc';
 
@@ -582,19 +574,22 @@ export function searchObjectIndex(
 ): ObjectIndexSearchResult {
   const database = getIndexDb();
 
-  // Match strategy: key substring (LIKE) OR full-text on content (FTS5 phrase).
-  // Both halves are OR'd so a hit in either column surfaces the row.
+  // Match strategy: key substring (LIKE) OR content substring (LIKE on the
+  // trigram-tokenized FTS5 virtual table, which uses the FTS index internally).
+  // The trigram tokenizer handles CJK substrings that unicode61 cannot, since
+  // unicode61 collapses runs of CJK characters into a single token.
+  const likePattern = `%${escapeLikePattern(query)}%`;
   const whereParts: string[] = [
     'indexed_bucket_id = ?',
     `(
       key LIKE ? ESCAPE '\\'
-      OR id IN (SELECT rowid FROM s3_object_content_fts WHERE s3_object_content_fts MATCH ?)
+      OR id IN (SELECT rowid FROM s3_object_content_fts WHERE content LIKE ? ESCAPE '\\')
     )`,
   ];
   const baseParams: (string | number)[] = [
     indexedBucketId,
-    `%${escapeLikePattern(query)}%`,
-    buildFtsQuery(query),
+    likePattern,
+    likePattern,
   ];
 
   if (options.prefix) {
