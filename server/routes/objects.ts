@@ -87,6 +87,7 @@ interface S3Object {
   versionId?: string;
   isLatest?: boolean;
   isDeleteMarker?: boolean;
+  contentSnippet?: string | null;
 }
 
 function extractFileName(key: string): string {
@@ -440,6 +441,7 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
     size: hit.size ?? undefined,
     lastModified: new Date(hit.last_modified * 1000).toISOString(),
     isFolder: hit.key.endsWith('/'),
+    contentSnippet: hit.contentSnippet,
   }));
 
   res.json({

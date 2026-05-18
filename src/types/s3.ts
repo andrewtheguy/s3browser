@@ -21,6 +21,7 @@ export interface S3Object {
   versionId?: string;
   isLatest?: boolean;
   isDeleteMarker?: boolean;
+  contentSnippet?: string | null;
 }
 
 export interface S3ListResult {

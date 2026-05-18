@@ -545,6 +545,8 @@ export interface ObjectIndexSearchHit {
   /** Unix epoch seconds. */
   last_modified: number;
   size: number | null;
+  /** ~30 chars of context around the first content match, or null when only the key matched. */
+  contentSnippet: string | null;
 }
 
 export interface ObjectIndexSearchResult {
@@ -605,17 +607,33 @@ export function searchObjectIndex(
     ? `last_modified ${sortDir}, key ASC`
     : `key ${sortDir}`;
 
-  const sql =  `
-    SELECT key, last_modified, size
+  // Extract ~30 chars of context around the first case-insensitive (ASCII-only;
+  // CJK passes through LOWER unchanged) occurrence of the query in content.
+  // INSTR/SUBSTR/LENGTH all operate on characters in SQLite, so the window is
+  // character-accurate for CJK. NULL when content didn't match or was NULL.
+  const snippetSql = `
+    CASE
+      WHEN content IS NOT NULL AND INSTR(LOWER(content), LOWER(?)) > 0 THEN
+        SUBSTR(
+          content,
+          MAX(1, INSTR(LOWER(content), LOWER(?)) - 30),
+          LENGTH(?) + 60
+        )
+      ELSE NULL
+    END AS contentSnippet
+  `;
+
+  const sql = `
+    SELECT key, last_modified, size, ${snippetSql}
     FROM s3_object_index
     WHERE ${whereSql}
     ORDER BY ${orderSql}
     LIMIT ? OFFSET ?
   `;
 
-  //console.debug('Executing search with SQL:', sql, 'and params:', baseParams, options.limit, options.offset);
-
-  const hits = database.prepare(sql).all(...baseParams, options.limit, options.offset) as ObjectIndexSearchHit[];
+  const hits = database
+    .prepare(sql)
+    .all(query, query, query, ...baseParams, options.limit, options.offset) as ObjectIndexSearchHit[];
 
   const totalRow = database.prepare(`
     SELECT COUNT(*) AS count
