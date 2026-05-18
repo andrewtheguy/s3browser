@@ -314,11 +314,13 @@ async function main(): Promise<void> {
         let needsBodyFetch = false;
         let needsHeadCheck = false;
         if (!args.noContent && !key.endsWith('/') && size !== 0) {
-          if (size !== null && size > args.maxContentBytes) {
-            totals.bodySkippedSize += 1;
-          } else if (hasTextExtension(key)) {
-            needsBodyFetch = true;
-          } else {
+          if (hasTextExtension(key)) {
+            if (size !== null && size > args.maxContentBytes) {
+              totals.bodySkippedSize += 1;
+            } else {
+              needsBodyFetch = true;
+            }
+          } else if (size === null || size <= args.maxContentBytes) {
             needsHeadCheck = true;
           }
         }
