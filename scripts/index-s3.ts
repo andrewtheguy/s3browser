@@ -20,25 +20,43 @@ type Args = {
   batchSize: number;
   dryRun: boolean;
   help: boolean;
+  error?: string;
 };
 
 function parseArgs(argv: string[]): Args {
   const args: Args = { batchSize: 1000, dryRun: false, help: false };
+  const readValue = (flag: string, value: string | undefined): string | undefined => {
+    if (!value || value.startsWith('-')) {
+      args.error = `${flag} requires a value`;
+      return undefined;
+    }
+    return value;
+  };
+
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     switch (arg) {
-      case '--connection':
-        args.connection = Number(argv[i + 1]);
+      case '--connection': {
+        const value = readValue(arg, argv[i + 1]);
+        if (!value) return args;
+        args.connection = Number(value);
         i += 1;
         break;
-      case '--bucket':
-        args.bucket = argv[i + 1];
+      }
+      case '--bucket': {
+        const value = readValue(arg, argv[i + 1]);
+        if (!value) return args;
+        args.bucket = value;
         i += 1;
         break;
-      case '--batch-size':
-        args.batchSize = Number(argv[i + 1]);
+      }
+      case '--batch-size': {
+        const value = readValue(arg, argv[i + 1]);
+        if (!value) return args;
+        args.batchSize = Number(value);
         i += 1;
         break;
+      }
       case '--dry-run':
         args.dryRun = true;
         break;
@@ -77,6 +95,12 @@ Options:
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  if (args.error) {
+    console.error(args.error);
+    printHelp();
+    process.exit(1);
+  }
 
   if (args.help) {
     printHelp();
