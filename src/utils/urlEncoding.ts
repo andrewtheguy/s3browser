@@ -45,6 +45,17 @@ export function buildBrowseUrl(connectionId: number, bucket: string, path: strin
 }
 
 /**
+ * Build a search URL for a given connection, bucket and optional prefix scope.
+ */
+export function buildSearchUrl(connectionId: number, bucket: string, prefix: string = ''): string {
+  const encodedPath = encodeS3PathForUrl(prefix);
+  if (encodedPath) {
+    return `/connection/${connectionId}/search/${encodeURIComponent(bucket)}/${encodedPath}/`;
+  }
+  return `/connection/${connectionId}/search/${encodeURIComponent(bucket)}/`;
+}
+
+/**
  * Build an inline preview URL for a given connection, bucket and object key.
  * No trailing slash — the /preview/ route segment distinguishes file URLs from folder browse URLs.
  */

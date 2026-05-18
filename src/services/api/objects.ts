@@ -76,11 +76,21 @@ interface RawSearchObjectsResponse {
   objectCount: number | null;
 }
 
+export type SearchSortKey = 'key' | 'last_modified';
+export type SearchSortDir = 'asc' | 'desc';
+
 export async function searchObjects(
   connectionId: number,
   bucket: string,
   query: string,
-  options: { prefix?: string; limit?: number; offset?: number; signal?: AbortSignal } = {}
+  options: {
+    prefix?: string;
+    limit?: number;
+    offset?: number;
+    sort?: SearchSortKey;
+    dir?: SearchSortDir;
+    signal?: AbortSignal;
+  } = {}
 ): Promise<SearchObjectsResponse> {
   const params = new URLSearchParams();
   params.set('q', query);
@@ -92,6 +102,12 @@ export async function searchObjects(
   }
   if (typeof options.offset === 'number') {
     params.set('offset', String(options.offset));
+  }
+  if (options.sort) {
+    params.set('sort', options.sort);
+  }
+  if (options.dir) {
+    params.set('dir', options.dir);
   }
 
   const response = await apiGet<RawSearchObjectsResponse>(

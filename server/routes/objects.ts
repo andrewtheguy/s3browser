@@ -396,6 +396,8 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   const prefix = typeof req.query.prefix === 'string' ? req.query.prefix : undefined;
   const { limit, offset } = parseLimitOffset(req.query as Record<string, unknown>);
+  const sort = req.query.sort === 'last_modified' ? 'last_modified' : 'key';
+  const dir = req.query.dir === 'desc' ? 'desc' : 'asc';
 
   if (!q) {
     res.status(400).json({ error: 'Search query is required' });
@@ -411,7 +413,7 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
     return;
   }
 
-  const result = searchObjectIndex(status.id, q, { prefix, limit, offset });
+  const result = searchObjectIndex(status.id, q, { prefix, limit, offset, sort, dir });
 
   const objects: S3Object[] = result.hits.map((hit) => ({
     key: hit.key,

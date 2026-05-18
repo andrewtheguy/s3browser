@@ -380,12 +380,9 @@ export interface ObjectIndexUpsertResult {
  * transaction. Returns counts of each branch taken.
  *
  * Branches:
- *  - added:   no existing row -> INSERT (AI trigger updates FTS)
+ *  - added:   no existing row -> INSERT
  *  - updated: existing row, last_modified differs -> UPDATE metadata + seen_at
  *  - touched: existing row, last_modified matches -> UPDATE seen_at only
- *
- * The `AFTER UPDATE OF key` trigger means metadata-only UPDATE/touch don't
- * churn the FTS index since the key column stays unchanged.
  */
 export function upsertObjectIndexBatch(
   indexedBucketId: number,
@@ -458,10 +455,21 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
 }
 
+export type ObjectIndexSortKey = 'key' | 'last_modified';
+export type ObjectIndexSortDir = 'asc' | 'desc';
+
+export interface SearchObjectIndexOptions {
+  prefix?: string;
+  limit: number;
+  offset: number;
+  sort?: ObjectIndexSortKey;
+  dir?: ObjectIndexSortDir;
+}
+
 export function searchObjectIndex(
   indexedBucketId: number,
   query: string,
-  options: { prefix?: string; limit: number; offset: number }
+  options: SearchObjectIndexOptions
 ): ObjectIndexSearchResult {
   const database = getDb();
   const prefix = options.prefix?.trim() ? options.prefix : null;
@@ -477,11 +485,18 @@ export function searchObjectIndex(
   }
   const whereSql = whereClauses.join(' AND ');
 
+  const sortKey: ObjectIndexSortKey = options.sort === 'last_modified' ? 'last_modified' : 'key';
+  const sortDir: ObjectIndexSortDir = options.dir === 'desc' ? 'desc' : 'asc';
+  // NULLs LAST regardless of direction so missing timestamps don't crowd the top of the result.
+  const orderSql = sortKey === 'last_modified'
+    ? `last_modified IS NULL, last_modified ${sortDir}, key ASC`
+    : `key ${sortDir}`;
+
   const hits = database.prepare(`
     SELECT key, last_modified, size, etag
     FROM s3_object_index
     WHERE ${whereSql}
-    ORDER BY key
+    ORDER BY ${orderSql}
     LIMIT ? OFFSET ?
   `).all(...baseParams, options.limit, options.offset) as ObjectIndexSearchHit[];
 

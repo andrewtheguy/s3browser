@@ -13,6 +13,7 @@ import {
   FlaskConical,
   History,
   MoreVertical,
+  Search,
 } from 'lucide-react';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { useBrowserContext, useS3ClientContext } from '../../contexts';
-import { buildSelectBucketUrl } from '../../utils/urlEncoding';
+import { buildSelectBucketUrl, buildSearchUrl } from '../../utils/urlEncoding';
 
 const SEED_TEST_ITEM_COUNT = 10005;
 const seedEnv = import.meta.env as { MODE?: string; VITE_FEATURE_SEED_TEST_ITEMS?: string };
@@ -131,6 +132,17 @@ export function Toolbar({
   const handleChooseConnection = useCallback(() => {
     void navigate('/');
   }, [navigate]);
+
+  const handleSearch = useCallback(() => {
+    const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
+    const connId = !isNaN(parsedId) && parsedId > 0 ? parsedId : activeConnectionId;
+    const bucket = credentials?.bucket;
+    if (!connId || !bucket) {
+      return;
+    }
+    const prefix = pathSegments.length > 0 ? pathSegments.join('/') + '/' : '';
+    void navigate(buildSearchUrl(connId, bucket, prefix));
+  }, [connectionId, activeConnectionId, credentials?.bucket, pathSegments, navigate]);
 
   const handleChangeBucket = useCallback(() => {
     const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
@@ -249,6 +261,11 @@ export function Toolbar({
                   Refresh
                 </DropdownMenuItem>
 
+                <DropdownMenuItem onClick={handleSearch}>
+                  <Search className="h-4 w-4" />
+                  Search
+                </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem onClick={onCreateFolderClick}>
@@ -303,6 +320,16 @@ export function Toolbar({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Refresh</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" onClick={handleSearch}>
+                  <Search className="h-4 w-4 mr-2 sm:mr-1" />
+                  <span className="hidden sm:inline">Search</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Search indexed keys in this bucket</TooltipContent>
             </Tooltip>
 
             {onToggleSelection && (

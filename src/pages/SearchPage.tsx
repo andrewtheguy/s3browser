@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { AlertCircle, Search } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,10 @@ import {
   getIndexStatus,
   type SearchObjectsResponse,
   type IndexStatusResponse,
+  type SearchSortKey,
+  type SearchSortDir,
 } from '../services/api/objects';
+import { cn } from '@/lib/utils';
 import { ApiHttpError } from '../services/api/client';
 import type { S3Object } from '../types';
 
@@ -124,8 +127,22 @@ export function SearchPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [indexMissing, setIndexMissing] = useState(false);
+  const sortKey: SearchSortKey = searchParams.get('sort') === 'last_modified' ? 'last_modified' : 'key';
+  const sortDir: SearchSortDir = searchParams.get('dir') === 'desc' ? 'desc' : 'asc';
 
-  // Run a search whenever the URL query, prefix, or pagination offset changes.
+  const toggleSort = useCallback((key: SearchSortKey) => {
+    setOffset(0);
+    const next = new URLSearchParams(searchParams);
+    if (sortKey === key) {
+      next.set('dir', sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      next.set('sort', key);
+      next.set('dir', key === 'last_modified' ? 'desc' : 'asc');
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, sortKey, sortDir]);
+
+  // Run a search whenever the URL query, prefix, pagination offset, or sort changes.
   useEffect(() => {
     if (!connectionId || !bucket || credentials?.bucket !== bucket) return;
     if (!queryFromUrl.trim()) {
@@ -145,6 +162,8 @@ export function SearchPage() {
       prefix: prefix || undefined,
       limit: PAGE_SIZE,
       offset,
+      sort: sortKey,
+      dir: sortDir,
       signal: controller.signal,
     })
       .then((response: SearchObjectsResponse) => {
@@ -171,7 +190,7 @@ export function SearchPage() {
       });
 
     return () => controller.abort();
-  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, prefix, offset]);
+  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, prefix, offset, sortKey, sortDir]);
 
   const submitSearch = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -309,9 +328,41 @@ export function SearchPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Key</TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('key')}
+                      className={cn(
+                        'inline-flex items-center gap-1 hover:text-foreground',
+                        sortKey === 'key' ? 'text-foreground' : 'text-muted-foreground'
+                      )}
+                    >
+                      <span>Key</span>
+                      {sortKey === 'key' ? (
+                        sortDir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead className="w-[100px]">Size</TableHead>
-                  <TableHead className="w-[180px]">Last Modified</TableHead>
+                  <TableHead className="w-[180px]">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('last_modified')}
+                      className={cn(
+                        'inline-flex items-center gap-1 hover:text-foreground',
+                        sortKey === 'last_modified' ? 'text-foreground' : 'text-muted-foreground'
+                      )}
+                    >
+                      <span>Last Modified</span>
+                      {sortKey === 'last_modified' ? (
+                        sortDir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ArrowUpDown className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
