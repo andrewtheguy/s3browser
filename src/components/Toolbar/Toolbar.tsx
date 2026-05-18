@@ -136,10 +136,20 @@ export function Toolbar({
   const handleSearch = useCallback(() => {
     const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
     const connId = !isNaN(parsedId) && parsedId > 0 ? parsedId : activeConnectionId;
-    const bucket = credentials?.bucket;
-    if (!connId || !bucket) {
+
+    if (!connId || connId <= 0) {
+      console.error('Cannot search: no valid connection ID available');
+      void navigate('/');
       return;
     }
+
+    const bucket = credentials?.bucket;
+    if (!bucket) {
+      console.error('Cannot search: no bucket selected');
+      void navigate('/');
+      return;
+    }
+
     const prefix = pathSegments.length > 0 ? pathSegments.join('/') + '/' : '';
     void navigate(buildSearchUrl(connId, bucket, prefix));
   }, [connectionId, activeConnectionId, credentials?.bucket, pathSegments, navigate]);
