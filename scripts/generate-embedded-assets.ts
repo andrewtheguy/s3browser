@@ -50,6 +50,7 @@ if (files.length === 0) {
 
 const importLines: string[] = [];
 const entryLines: string[] = [];
+const seenIdents = new Set<string>();
 
 for (const full of files) {
   const ext = extname(full).toLowerCase();
@@ -65,6 +66,14 @@ for (const full of files) {
   // Import path is relative to the generated file (server/cli/embeddedAssets.generated.ts).
   const importPath = '../../' + relative(PROJECT_ROOT, full).split('\\').join('/');
   const ident = toIdent(url);
+  if (seenIdents.has(ident)) {
+    console.error(
+      `generate-embedded-assets: identifier collision for ${url}. ` +
+      `Generated identifier "${ident}" is already in use.`
+    );
+    process.exit(1);
+  }
+  seenIdents.add(ident);
   importLines.push(`import ${ident} from ${JSON.stringify(importPath)} with { type: 'text' };`);
   entryLines.push(`  ${JSON.stringify(url)}: { content: ${ident} as string, mime: ${JSON.stringify(mime)} },`);
 }

@@ -16,7 +16,9 @@ import { embeddedAssets } from './embeddedAssets.generated.js';
 
 // Parse bind address
 // Formats: :8080, 8080, 127.0.0.1:8080, [::1]:8080
-// Empty host (`:8080` or `8080`) binds to all interfaces (v4+v6)
+// Empty host (`:8080` or `8080`) binds to all interfaces (v4+v6).
+// IPv6 addresses MUST use bracket notation (`[addr]:port`) — a bare `::1` or
+// `::1:8080` is ambiguous (it's also itself a valid IPv6 address) and rejected.
 function parseBindAddress(bind: string | undefined): { host: string | undefined; port: number } {
   const defaultPort = 8170;
 
@@ -40,8 +42,16 @@ function parseBindAddress(bind: string | undefined): { host: string | undefined;
     return { host: ipv6Match[1], port: parseInt(ipv6Match[2], 10) };
   }
 
-  // IPv4 or hostname: 127.0.0.1:8080, localhost:8080
+  // Reject unbracketed IPv6 (multiple ':' and not wrapped in [...]).
+  // Falling through to lastColon parsing would silently mangle it.
   const lastColon = bind.lastIndexOf(':');
+  if (lastColon > 0 && !bind.startsWith('[') && bind.indexOf(':') !== lastColon) {
+    throw new Error(
+      `Invalid bind address "${bind}": IPv6 must use bracket notation, e.g. [${bind.replace(/:(\d+)$/, '')}]:${defaultPort}`
+    );
+  }
+
+  // IPv4 or hostname: 127.0.0.1:8080, localhost:8080
   if (lastColon > 0) {
     const port = parseInt(bind.slice(lastColon + 1), 10);
     return {
@@ -112,6 +122,10 @@ export async function runServer(opts: { bind?: string }): Promise<void> {
 
     // SPA fallback: serve index.html for all other routes
     const indexHtmlAsset = embeddedAssets['/index.html'];
+    if (!indexHtmlAsset) {
+      res.status(500).send('index.html not found');
+      return;
+    }
     res.setHeader('Content-Type', indexHtmlAsset.mime);
     res.send(indexHtmlAsset.content);
   });

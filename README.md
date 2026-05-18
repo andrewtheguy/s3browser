@@ -159,7 +159,7 @@ The binary is a multi-command CLI:
 
 `./s3browser server` listens on all interfaces on port `8170` by default. Use `--bind 127.0.0.1:8170` for localhost-only access. Run `./s3browser server --help` or `./s3browser index --help` for subcommand-specific options.
 
-### Indexing CLI (development)
+### CLI (development)
 
 During development, run the same subcommands without compiling via:
 
