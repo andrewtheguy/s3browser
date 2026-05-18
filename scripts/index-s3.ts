@@ -1,10 +1,10 @@
-import { indexS3Bucket } from '../server/indexing.js';
+import { indexS3Bucket, resetIndex } from '../server/indexing.js';
 
 type Args = {
   connection?: number;
   bucket?: string;
   batchSize: number;
-  reindex: boolean;
+  reset: boolean;
   help: boolean;
   error?: string;
 };
@@ -12,7 +12,7 @@ type Args = {
 function parseArgs(argv: string[]): Args {
   const args: Args = {
     batchSize: 1000,
-    reindex: false,
+    reset: false,
     help: false,
   };
   const readValue = (flag: string, value: string | undefined): string | undefined => {
@@ -47,8 +47,8 @@ function parseArgs(argv: string[]): Args {
         i += 1;
         break;
       }
-      case '--reindex':
-        args.reindex = true;
+      case '--reset':
+        args.reset = true;
         break;
       case '--help':
       case '-h':
@@ -78,10 +78,10 @@ the end of the run. Body fetches are skipped for rows with the same
 last_modified timestamp.
 
 Options:
-  --connection <id>          Required. ID of the saved s3 connection (DB primary key).
+  --connection <id>          Required (unless --reset). ID of the saved s3 connection (DB primary key).
   --bucket <name>            Bucket to index. Defaults to the connection's saved bucket.
   --batch-size <n>           Objects processed per DB transaction. Default 1000.
-  --reindex                  Drop and recreate all search index tables before crawling.
+  --reset                    Delete the search index database and exit (no crawl).
   -h, --help                 Show this help.
 `);
 }
@@ -100,6 +100,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (args.reset) {
+    resetIndex();
+    return;
+  }
+
   if (!args.connection || !Number.isFinite(args.connection) || args.connection <= 0) {
     console.error('Missing or invalid --connection <id>');
     printHelp();
@@ -115,7 +120,6 @@ async function main(): Promise<void> {
     connectionId: args.connection,
     bucket: args.bucket,
     batchSize: args.batchSize,
-    reindex: args.reindex,
   });
 }
 

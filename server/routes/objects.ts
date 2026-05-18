@@ -15,7 +15,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { s3Middleware, requireBucket, AuthenticatedRequest, detectS3Vendor } from '../middleware/auth.js';
 import { getIndexStatus, searchObjectIndex } from '../db/index.js';
-import { isEndpointWhitelisted, SEARCH_WHITELIST_ENV_VAR } from '../config/searchWhitelist.js';
+import { getEffectiveEndpointHost, isEndpointWhitelisted, SEARCH_WHITELIST_ENV_VAR } from '../config/searchWhitelist.js';
 
 const router = Router();
 
@@ -376,16 +376,17 @@ function parseLimitOffset(query: Record<string, unknown>): { limit: number; offs
 
 // GET /api/objects/:connectionId/:bucket/index-status
 router.get('/:connectionId/:bucket/index-status', s3Middleware, requireBucket, (req: AuthenticatedRequest, res: Response): void => {
-  const connectionId = req.connectionId!;
   const bucket = req.s3Credentials!.bucket!;
-  if (!isEndpointWhitelisted(req.s3Connection!.endpoint)) {
+  const endpoint = req.s3Connection!.endpoint;
+  if (!isEndpointWhitelisted(endpoint)) {
     res.status(403).json({
       error: `Search disabled: this connection's endpoint host is not in ${SEARCH_WHITELIST_ENV_VAR}.`,
       code: 'EndpointNotWhitelisted',
     });
     return;
   }
-  const status = getIndexStatus(connectionId, bucket);
+  const endpointHost = getEffectiveEndpointHost(endpoint)!;
+  const status = getIndexStatus(endpointHost, bucket);
   if (!status || status.last_completed_at === null) {
     res.json({ lastIndexedAt: null, objectCount: null });
     return;
@@ -412,7 +413,8 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
     return;
   }
 
-  if (!isEndpointWhitelisted(req.s3Connection!.endpoint)) {
+  const endpoint = req.s3Connection!.endpoint;
+  if (!isEndpointWhitelisted(endpoint)) {
     res.status(403).json({
       error: `Search disabled: this connection's endpoint host is not in ${SEARCH_WHITELIST_ENV_VAR}.`,
       code: 'EndpointNotWhitelisted',
@@ -420,7 +422,8 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
     return;
   }
 
-  const status = getIndexStatus(connectionId, bucket);
+  const endpointHost = getEffectiveEndpointHost(endpoint)!;
+  const status = getIndexStatus(endpointHost, bucket);
   if (!status || status.last_completed_at === null) {
     res.status(404).json({
       error: `Index not built. Run: bun run index -- --connection ${connectionId} --bucket ${bucket}`,

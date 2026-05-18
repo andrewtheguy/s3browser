@@ -1,9 +1,9 @@
 import { GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, type S3Client } from '@aws-sdk/client-s3';
 import {
+  deleteIndexDatabase,
   findObjectIndexRowsByKeys,
   getConnectionById,
   getOrCreateIndexedBucket,
-  resetObjectIndexTables,
   upsertObjectIndexBatch,
   sweepStaleObjects,
   markIndexCompleted,
@@ -117,7 +117,6 @@ export interface IndexS3BucketOptions {
   connectionId: number;
   bucket?: string;
   batchSize?: number;
-  reindex?: boolean;
 }
 
 export interface IndexS3BucketStats {
@@ -134,7 +133,7 @@ export interface IndexS3BucketStats {
 }
 
 export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<IndexS3BucketStats> {
-  const { connectionId, reindex = false } = options;
+  const { connectionId } = options;
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
 
   if (!Number.isFinite(connectionId) || connectionId <= 0) {
@@ -167,16 +166,11 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
     throw new Error('No bucket specified and connection has no default bucket');
   }
 
-  console.log(`Indexing s3://${bucket} for connection ${connection.id} (${connection.profile_name})`);
+  console.log(`Indexing s3://${bucket} for connection ${connection.id} (${connection.profile_name}) at ${endpointHost}`);
 
   const { client } = await createS3ClientFromConnection(connection, bucket);
 
-  if (reindex) {
-    console.log('Dropping and recreating search index tables...');
-    resetObjectIndexTables();
-  }
-
-  const indexedBucketId = getOrCreateIndexedBucket(connection.id, bucket);
+  const indexedBucketId = getOrCreateIndexedBucket(endpointHost, bucket);
   const runStartedAt = Math.floor(Date.now() / 1000);
   const startMs = Date.now();
   const totals: IndexS3BucketStats = {
@@ -303,4 +297,10 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
   );
 
   return totals;
+}
+
+export function resetIndex(): void {
+  console.log('Deleting and recreating the search index database...');
+  deleteIndexDatabase();
+  console.log('Search index database is empty.');
 }
