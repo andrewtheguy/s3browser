@@ -1,0 +1,27 @@
+# S3 Browser configuration
+# Place this file at ~/.s3browser/config.toml
+#
+# Environment variables (and Bun-auto-loaded .env values) take precedence
+# over values defined here. The encryption key is NOT configurable here -
+# set S3BROWSER_ENCRYPTION_KEY env var or write ~/.s3browser/encryption.key.
+#
+# Values must be quoted strings. Unquoted integers/booleans will be rejected
+# at startup (e.g. S3BROWSER_PRESIGNED_URL_TTLS = 1 is invalid).
+
+# Login password for the web UI (16+ chars).
+# File fallback: ~/.s3browser/login.password
+# Generate with: openssl rand -hex 24
+# S3BROWSER_LOGIN_PASSWORD = "your-16-plus-char-password"
+
+# Presigned URL TTL choices shown in the preview/file list "copy URL" actions.
+# Comma-delimited list. Each entry is one positive integer + one unit:
+#   h = hours, d = days, w = weeks. Mixing units in one entry is not allowed.
+# Each entry must not exceed 7 days (AWS S3 SigV4 maximum); larger values are dropped.
+# Defaults to "1h,1d" if unset or empty.
+# S3BROWSER_PRESIGNED_URL_TTLS = "1h,1d"
+
+# Allowlist of S3 endpoint hostnames for which local key search and the
+# indexing CLI are enabled. Comma-delimited list, exact (case-insensitive) match
+# against the hostname parsed from the connection's saved endpoint URL.
+# If unset or empty, search and indexing are disabled for ALL connections.
+# S3BROWSER_SEARCH_WHITELIST_HOSTS = "minio.example.com,objstore.local"

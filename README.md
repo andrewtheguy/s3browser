@@ -96,6 +96,19 @@ chmod 600 ~/.s3browser/encryption.key
 export S3BROWSER_ENCRYPTION_KEY=$(openssl rand -hex 32)
 ```
 
+**Optional TOML config** (`~/.s3browser/config.toml`):
+
+Settings other than the encryption key can be put in a TOML file. Environment variables (and any `.env` Bun auto-loads) take precedence over values defined here. See `config.toml.example` for the template.
+
+```toml
+# ~/.s3browser/config.toml
+S3BROWSER_LOGIN_PASSWORD = "your-16-plus-char-password"
+S3BROWSER_PRESIGNED_URL_TTLS = "1h,1d"
+S3BROWSER_SEARCH_WHITELIST_HOSTS = "minio.example.com,objstore.local"
+```
+
+The encryption key is intentionally excluded — keep it in `~/.s3browser/encryption.key` or the env var.
+
 ### Development
 
 Start both the frontend and backend in development mode:
@@ -183,6 +196,7 @@ Persistent app data is stored in `~/.s3browser/`:
 | `s3browser.db` | SQLite database (saved connections) |
 | `encryption.key` | Encryption key for S3 credentials |
 | `login.password` | Login password |
+| `config.toml` | Optional TOML config (all settings except encryption key) |
 
 SQLite may also create `s3browser.db-wal` and `s3browser.db-shm`. The standalone executable uses `s3browser.lock` while running to prevent multiple instances.
 

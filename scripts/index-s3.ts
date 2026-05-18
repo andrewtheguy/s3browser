@@ -1,3 +1,4 @@
+import '../server/config/configFile.js';
 import { indexS3Bucket, resetIndex } from '../server/indexing.js';
 
 type Args = {

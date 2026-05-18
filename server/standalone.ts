@@ -1,3 +1,4 @@
+import './config/configFile.js';
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import { parseArgs } from 'util';
