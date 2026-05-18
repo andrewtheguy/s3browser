@@ -4,7 +4,9 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 const LOCK_DIR = join(homedir(), '.s3browser');
-const LOCK_FILE = join(LOCK_DIR, 's3browser.lock');
+
+export const SERVER_LOCK_FILE = 's3browser.lock';
+export const INDEX_LOCK_FILE = 's3browser.index.lock';
 
 // flock constants
 const LOCK_EX = 2;  // Exclusive lock
@@ -41,11 +43,11 @@ function loadLibc() {
 
 const libc = loadLibc();
 
-let lockFd: number | null = null;
+const heldLocks = new Map<string, number>();
 
-export function acquireLock(): void {
-  // Already holding the lock
-  if (lockFd !== null) {
+export function acquireLock(filename: string = SERVER_LOCK_FILE): void {
+  // Already holding this lock
+  if (heldLocks.has(filename)) {
     return;
   }
 
@@ -53,23 +55,26 @@ export function acquireLock(): void {
     mkdirSync(LOCK_DIR, { recursive: true });
   }
 
+  const lockPath = join(LOCK_DIR, filename);
+
   // Open lock file (create if doesn't exist)
-  const fd = openSync(LOCK_FILE, 'a');
+  const fd = openSync(lockPath, 'a');
 
   // Try to acquire exclusive non-blocking lock
   const result = libc.symbols.flock(fd, LOCK_EX | LOCK_NB);
   if (result !== 0) {
     closeSync(fd);
-    throw new Error('Another s3browser instance is already running');
+    throw new Error(`Another s3browser process is holding ${filename}`);
   }
 
-  // Only set lockFd after successful lock acquisition
-  lockFd = fd;
+  // Only record the fd after successful lock acquisition
+  heldLocks.set(filename, fd);
 }
 
-export function releaseLock(): void {
-  if (lockFd !== null) {
-    closeSync(lockFd);
-    lockFd = null;
+export function releaseLock(filename: string = SERVER_LOCK_FILE): void {
+  const fd = heldLocks.get(filename);
+  if (fd !== undefined) {
+    closeSync(fd);
+    heldLocks.delete(filename);
   }
 }
