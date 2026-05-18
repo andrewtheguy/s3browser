@@ -19,7 +19,7 @@ function cleanupBunBuildFiles() {
 }
 
 const projectRoot = join(import.meta.dir, '..');
-const standaloneEntry = join(projectRoot, 'server', 'standalone.ts');
+const standaloneEntry = join(projectRoot, 'server', 'cli.ts');
 const outputPath = join(projectRoot, 's3browser');
 
 async function build() {
