@@ -467,7 +467,6 @@ export type ObjectIndexSortKey = 'key' | 'last_modified';
 export type ObjectIndexSortDir = 'asc' | 'desc';
 
 export interface SearchObjectIndexOptions {
-  prefix?: string;
   limit: number;
   offset: number;
   sort?: ObjectIndexSortKey;
@@ -480,18 +479,12 @@ export function searchObjectIndex(
   options: SearchObjectIndexOptions
 ): ObjectIndexSearchResult {
   const database = getDb();
-  const prefix = options.prefix?.trim() ? options.prefix : null;
 
-  const whereClauses = ['indexed_bucket_id = ?', "key LIKE ? ESCAPE '\\'"];
+  const whereSql = "indexed_bucket_id = ? AND key LIKE ? ESCAPE '\\'";
   const baseParams: (string | number)[] = [
     indexedBucketId,
     `%${escapeLikePattern(query)}%`,
   ];
-  if (prefix) {
-    whereClauses.push("key LIKE ? ESCAPE '\\'");
-    baseParams.push(`${escapeLikePattern(prefix)}%`);
-  }
-  const whereSql = whereClauses.join(' AND ');
 
   const sortKey: ObjectIndexSortKey = options.sort === 'last_modified' ? 'last_modified' : 'key';
   const sortDir: ObjectIndexSortDir = options.dir === 'desc' ? 'desc' : 'asc';

@@ -84,7 +84,6 @@ export async function searchObjects(
   bucket: string,
   query: string,
   options: {
-    prefix?: string;
     limit?: number;
     offset?: number;
     sort?: SearchSortKey;
@@ -94,9 +93,6 @@ export async function searchObjects(
 ): Promise<SearchObjectsResponse> {
   const params = new URLSearchParams();
   params.set('q', query);
-  if (options.prefix) {
-    params.set('prefix', options.prefix);
-  }
   if (typeof options.limit === 'number') {
     params.set('limit', String(options.limit));
   }

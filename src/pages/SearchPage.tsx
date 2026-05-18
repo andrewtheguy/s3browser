@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useS3ClientContext } from '../contexts';
-import { decodeUrlToS3Path, buildBrowseUrl, buildPreviewUrl } from '../utils/urlEncoding';
+import { buildBrowseUrl, buildPreviewUrl } from '../utils/urlEncoding';
 import { formatDate, formatFileSize } from '../utils/formatters';
 import {
   searchObjects,
@@ -42,10 +42,9 @@ function formatRelative(iso: string | null): string {
 }
 
 export function SearchPage() {
-  const { connectionId: urlConnectionId, bucket, '*': splatPath } = useParams<{
+  const { connectionId: urlConnectionId, bucket } = useParams<{
     connectionId: string;
     bucket: string;
-    '*': string;
   }>();
   const { isConnected, credentials, selectBucket, activeConnectionId } = useS3ClientContext();
   const navigate = useNavigate();
@@ -53,7 +52,6 @@ export function SearchPage() {
 
   const parsedConnectionId = urlConnectionId ? parseInt(urlConnectionId, 10) : NaN;
   const connectionId = !Number.isNaN(parsedConnectionId) && parsedConnectionId > 0 ? parsedConnectionId : null;
-  const prefix = useMemo(() => decodeUrlToS3Path(splatPath || '', true), [splatPath]);
 
   const [selectingBucket, setSelectingBucket] = useState(false);
   const [bucketError, setBucketError] = useState<string | null>(null);
@@ -142,7 +140,7 @@ export function SearchPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, sortKey, sortDir]);
 
-  // Run a search whenever the URL query, prefix, pagination offset, or sort changes.
+  // Run a search whenever the URL query, pagination offset, or sort changes.
   useEffect(() => {
     if (!connectionId || !bucket || credentials?.bucket !== bucket) return;
     if (!queryFromUrl.trim()) {
@@ -159,7 +157,6 @@ export function SearchPage() {
     setIndexMissing(false);
 
     searchObjects(connectionId, bucket, queryFromUrl, {
-      prefix: prefix || undefined,
       limit: PAGE_SIZE,
       offset,
       sort: sortKey,
@@ -190,7 +187,7 @@ export function SearchPage() {
       });
 
     return () => controller.abort();
-  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, prefix, offset, sortKey, sortDir]);
+  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, offset, sortKey, sortDir]);
 
   const submitSearch = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -247,12 +244,12 @@ export function SearchPage() {
       <div className="mb-4 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">
-            Search <span className="text-muted-foreground">in {bucket}{prefix ? ` / ${prefix}` : ''}</span>
+            Search <span className="text-muted-foreground">in {bucket}</span>
           </h1>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void navigate(buildBrowseUrl(connectionId, bucket, prefix))}
+            onClick={() => void navigate(buildBrowseUrl(connectionId, bucket, ''))}
           >
             Back to browse
           </Button>

@@ -394,7 +394,6 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
   const bucket = req.s3Credentials!.bucket!;
 
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-  const prefix = typeof req.query.prefix === 'string' ? req.query.prefix : undefined;
   const { limit, offset } = parseLimitOffset(req.query as Record<string, unknown>);
   const sort = req.query.sort === 'last_modified' ? 'last_modified' : 'key';
   const dir = req.query.dir === 'desc' ? 'desc' : 'asc';
@@ -413,7 +412,7 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
     return;
   }
 
-  const result = searchObjectIndex(status.id, q, { prefix, limit, offset, sort, dir });
+  const result = searchObjectIndex(status.id, q, { limit, offset, sort, dir });
 
   const objects: S3Object[] = result.hits.map((hit) => ({
     key: hit.key,

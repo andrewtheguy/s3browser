@@ -40,7 +40,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'connection/:connectionId/search/:bucket/*',
+        path: 'connection/:connectionId/search/:bucket',
         element: (
           <AuthGuard>
             <SearchPage />
