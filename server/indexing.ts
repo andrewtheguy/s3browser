@@ -21,7 +21,7 @@ const BODY_FETCH_CONCURRENCY = 8;
 const DEFAULT_BATCH_SIZE = 1000;
 
 const TEXT_EXTENSIONS = new Set([
-  'txt', 'md', 'markdown', 'rst', 'json', 'jsonc', 'ndjson', 'csv', 'tsv', 'log',
+  'txt', 'md', 'markdown', 'rst', 'json', 'jsonc', 'jsonl', 'ndjson', 'csv', 'tsv', 'log',
   'xml', 'html', 'htm', 'yml', 'yaml', 'toml', 'ini', 'conf', 'cfg', 'env',
   'css', 'scss', 'less', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'vue', 'svelte',
   'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift', 'c', 'h', 'cc', 'cpp', 'hpp',
