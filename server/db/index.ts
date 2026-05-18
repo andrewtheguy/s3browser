@@ -26,6 +26,7 @@ export interface DbIndexedBucket {
   id: number;
   connection_id: number;
   bucket: string;
+  /** Unix epoch seconds when the most recent crawl finished; null until first completion. */
   last_completed_at: number | null;
   object_count: number | null;
 }
@@ -34,9 +35,11 @@ export interface DbObjectIndexRow {
   id: number;
   indexed_bucket_id: number;
   key: string;
-  last_modified: number | null;
+  /** Unix epoch seconds, from S3 LastModified. */
+  last_modified: number;
   size: number | null;
   etag: string | null;
+  /** Unix epoch seconds; set to the run's start time each time the indexer touches this row. */
   seen_at: number;
 }
 
@@ -165,12 +168,15 @@ function initializeDatabase(): Database {
   // S3 object index: per-(connection, bucket) flat index of keys for search.
   // Parent table records when the last full crawl completed; child table
   // holds one row per object key with last_modified for incremental updates.
+  //
+  // All timestamp columns (last_completed_at, last_modified, seen_at) are
+  // unix epoch SECONDS (matching SQLite's unixepoch() function).
   database.exec(`
     CREATE TABLE IF NOT EXISTS s3_indexed_buckets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       connection_id INTEGER NOT NULL,
       bucket TEXT NOT NULL,
-      last_completed_at INTEGER,
+      last_completed_at INTEGER,                -- unix epoch seconds; NULL until first crawl completes
       object_count INTEGER,
       UNIQUE(connection_id, bucket),
       FOREIGN KEY (connection_id) REFERENCES s3_connections(id) ON DELETE CASCADE
@@ -180,10 +186,10 @@ function initializeDatabase(): Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       indexed_bucket_id INTEGER NOT NULL,
       key TEXT NOT NULL,
-      last_modified INTEGER,
+      last_modified INTEGER NOT NULL,           -- unix epoch seconds, from S3 LastModified
       size INTEGER,
       etag TEXT,
-      seen_at INTEGER NOT NULL,
+      seen_at INTEGER NOT NULL,                 -- unix epoch seconds; updated each indexer run
       UNIQUE(indexed_bucket_id, key),
       FOREIGN KEY (indexed_bucket_id) REFERENCES s3_indexed_buckets(id) ON DELETE CASCADE
     );
@@ -364,7 +370,8 @@ export function markIndexCompleted(indexedBucketId: number, objectCount: number)
 
 export interface ObjectIndexInput {
   key: string;
-  lastModified: number | null;
+  /** Unix epoch seconds. */
+  lastModified: number;
   size: number | null;
   etag: string | null;
 }
@@ -412,12 +419,12 @@ export function upsertObjectIndexBatch(
   const apply = database.transaction((batch: ObjectIndexInput[]) => {
     for (const row of batch) {
       const existing = findStmt.get(indexedBucketId, row.key) as
-        | { id: number; last_modified: number | null }
+        | { id: number; last_modified: number }
         | undefined;
       if (!existing) {
         insertStmt.run(indexedBucketId, row.key, row.lastModified, row.size, row.etag, seenAt);
         result.added += 1;
-      } else if ((existing.last_modified ?? null) === (row.lastModified ?? null)) {
+      } else if (existing.last_modified === row.lastModified) {
         touchStmt.run(seenAt, existing.id);
         result.touched += 1;
       } else {
@@ -441,7 +448,8 @@ export function sweepStaleObjects(indexedBucketId: number, runStartedAt: number)
 
 export interface ObjectIndexSearchHit {
   key: string;
-  last_modified: number | null;
+  /** Unix epoch seconds. */
+  last_modified: number;
   size: number | null;
   etag: string | null;
 }
@@ -487,9 +495,8 @@ export function searchObjectIndex(
 
   const sortKey: ObjectIndexSortKey = options.sort === 'last_modified' ? 'last_modified' : 'key';
   const sortDir: ObjectIndexSortDir = options.dir === 'desc' ? 'desc' : 'asc';
-  // NULLs LAST regardless of direction so missing timestamps don't crowd the top of the result.
   const orderSql = sortKey === 'last_modified'
-    ? `last_modified IS NULL, last_modified ${sortDir}, key ASC`
+    ? `last_modified ${sortDir}, key ASC`
     : `key ${sortDir}`;
 
   const hits = database.prepare(`

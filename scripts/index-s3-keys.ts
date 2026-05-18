@@ -127,14 +127,21 @@ async function main(): Promise<void> {
     const contents = response.Contents ?? [];
 
     if (contents.length > 0) {
-      const rows: ObjectIndexInput[] = contents.map((item) => ({
-        key: item.Key ?? '',
-        lastModified: item.LastModified
-          ? Math.floor(item.LastModified.getTime() / 1000)
-          : null,
-        size: item.Size ?? null,
-        etag: item.ETag ?? null,
-      })).filter((r) => r.key.length > 0);
+      const rows: ObjectIndexInput[] = contents.map((item) => {
+        const key = item.Key ?? '';
+        if (!key) {
+          throw new Error('S3 ListObjectsV2 returned a Contents row without a Key');
+        }
+        if (!item.LastModified) {
+          throw new Error(`S3 ListObjectsV2 returned no LastModified for key=${key}`);
+        }
+        return {
+          key,
+          lastModified: Math.floor(item.LastModified.getTime() / 1000),
+          size: item.Size ?? null,
+          etag: item.ETag ?? null,
+        };
+      });
 
       totals.seen += rows.length;
 

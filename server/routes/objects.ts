@@ -419,9 +419,7 @@ router.get('/:connectionId/:bucket/search', s3Middleware, requireBucket, (req: A
     key: hit.key,
     name: extractFileName(hit.key),
     size: hit.size ?? undefined,
-    lastModified: hit.last_modified !== null
-      ? new Date(hit.last_modified * 1000).toISOString()
-      : undefined,
+    lastModified: new Date(hit.last_modified * 1000).toISOString(),
     isFolder: hit.key.endsWith('/'),
     etag: hit.etag ?? undefined,
   }));
