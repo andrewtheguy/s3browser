@@ -1,163 +1,48 @@
 # Key Search
 
-This document describes the local key search feature: how the index is built, how queries are served, and how the page is wired.
-
-## Scope
-
-- `server/db/index.ts` — schema for `s3_indexed_buckets` and `s3_object_index`, plus the upsert / sweep / search helpers.
-- `server/routes/objects.ts` — `GET /search` and `GET /index-status` endpoints.
-- `scripts/index-s3-keys.ts` — CLI that crawls a bucket and populates the index.
-- `src/services/api/objects.ts` — `searchObjects()` and `getIndexStatus()`.
-- `src/router.tsx` — `/connection/:connectionId/search/:bucket` route.
-- `src/pages/SearchPage.tsx` — the search UI.
-- `src/components/Toolbar/Toolbar.tsx` — the Search button on browse.
-
-## Overview
-
-Search runs against a **local SQLite index** in `~/.s3browser/s3browser.db`, not against S3 itself. The index has to be built by a CLI command before search will return any results, and it must be rebuilt to pick up bucket changes.
-
-Match is a case-sensitive **SQL `LIKE` substring** against the full S3 key — no full-text tokenization, no glob support. Results can be sorted by key or by S3 `LastModified`.
+Local substring search over S3 object keys. Search runs against a SQLite index in `~/.s3browser/s3browser.db`, not against S3 — the index is populated by a CLI command and only reflects bucket state as of its last run.
 
 ## Endpoint host allowlist
 
-Both indexing and search call `ListObjectsV2`, which is the expensive operation on S3 (cost per request scales with object count). To keep this opt-in per endpoint, search/indexing is gated by an environment variable:
+Indexing and search both depend on `ListObjectsV2`, which can be expensive on large buckets. Both are opt-in per S3 endpoint via:
 
 ```
 S3BROWSER_SEARCH_WHITELIST_HOSTS=<comma-separated hostnames>
 ```
 
-- The hostname is parsed from each connection's saved `endpoint` URL and compared exactly (case-insensitive) against the list.
-- Connections with **no explicit endpoint** (i.e. AWS) match the literal `s3.amazonaws.com`. Add that entry to enable search for AWS connections.
-- If the env var is **unset or empty**, search and indexing are disabled for every connection.
-- Read once at server startup; restart the server to pick up changes.
+- Compared exactly (case-insensitive) against the hostname of each connection's saved endpoint URL.
+- Connections with no explicit endpoint (AWS) match the literal `s3.amazonaws.com`.
+- Unset or empty → search and indexing are disabled for every connection. This is the default.
+- Read once at server startup; restart to pick up changes.
 
-Implementation: `server/config/searchWhitelist.ts`. The check is applied in three places:
+When a connection isn't allowlisted, the search/index-status API routes refuse with a 4xx, the indexer CLI exits before any S3 call, and the UI surfaces the Search button as disabled with an explanatory tooltip.
 
-| Surface                              | Behavior when host is not allowlisted                                                  |
-| ------------------------------------ | -------------------------------------------------------------------------------------- |
-| `GET /index-status` and `GET /search`| `403` with `{ "code": "EndpointNotWhitelisted", "error": "..." }`                       |
-| `bun run index:keys` CLI             | Exits non-zero before any S3 call, printing the host that would need to be allowlisted |
-| Connection responses in `/api/auth/*`| Include `searchEnabled: boolean` so the UI can disable the Search button up front       |
-
-In the UI, the Search button (Toolbar + mobile dropdown) is rendered as disabled with an explanatory tooltip when the active connection is not allowlisted. Direct navigation to `/connection/:id/search/:bucket` for a disallowed connection shows an Alert pointing to the env var.
-
-## Schema
-
-Two tables, both created on first startup by `initializeDatabase()`:
-
-```sql
-s3_indexed_buckets (
-  id INTEGER PRIMARY KEY,
-  connection_id INTEGER,           -- FK -> s3_connections.id, ON DELETE CASCADE
-  bucket TEXT,
-  last_completed_at INTEGER,       -- unix epoch SECONDS; NULL until first crawl completes
-  object_count INTEGER,
-  UNIQUE(connection_id, bucket)
-)
-
-s3_object_index (
-  id INTEGER PRIMARY KEY,
-  indexed_bucket_id INTEGER,       -- FK -> s3_indexed_buckets.id, ON DELETE CASCADE
-  key TEXT NOT NULL,
-  last_modified INTEGER NOT NULL,  -- unix epoch SECONDS, from S3 LastModified
-  size INTEGER,
-  etag TEXT,
-  seen_at INTEGER NOT NULL,        -- unix epoch SECONDS; set on every indexer pass
-  UNIQUE(indexed_bucket_id, key)
-)
-```
-
-**All timestamp columns are unix epoch seconds**, matching SQLite's `unixepoch()`. The route and API layers convert to/from JS `Date` via `* 1000`.
-
-The `s3_indexed_buckets` parent table exists so the per-key rows reference a single integer instead of repeating `(connection_id, bucket)` text on every row.
-
-## Indexer CLI
+## Building the index
 
 ```sh
 bun run index:keys -- --connection <id> [--bucket <name>] [--batch-size <n>] [--dry-run]
 ```
 
-- `--connection <id>` is required and is the DB primary key of a saved connection.
-- `--bucket <name>` defaults to the connection's saved bucket.
-- `--batch-size` controls how many objects are processed per DB transaction (default 1000).
-- `--dry-run` walks the bucket but does not write to the index.
+`--connection` is the DB id of a saved connection. `--bucket` defaults to the connection's saved bucket. Run `--help` for the full flag list.
 
-The crawl uses `ListObjectsV2` with no `Delimiter`, so every object is enumerated flat.
+The crawl is incremental: rows whose `LastModified` matches what's already indexed are touched, not rewritten, and objects no longer present in the bucket are deleted at the end of each run. The "last indexed at" timestamp only advances on a clean run, so a failed crawl leaves the UI's freshness banner pointing at the previous good state.
 
-### Incremental behavior
+## Search semantics
 
-For each object the indexer runs one of three branches per row:
+- Case-sensitive `LIKE` substring against the full S3 key. No tokenization or globbing.
+- Bucket-wide; no prefix filter.
+- Sortable by `key` or `last_modified`, either direction.
 
-| Existing row | `last_modified` match? | Action               | FTS-like overhead |
-| ------------ | ---------------------- | -------------------- | ----------------- |
-| no           | n/a                    | INSERT               | one INSERT        |
-| yes          | yes                    | UPDATE seen_at only  | minimal touch     |
-| yes          | no                     | UPDATE all metadata  | one UPDATE        |
-
-After every page is processed the indexer runs a **stale sweep**:
-
-```sql
-DELETE FROM s3_object_index
-WHERE indexed_bucket_id = ? AND seen_at < <run_started_at>
-```
-
-This removes any row not touched during the current run, i.e. objects that no longer exist in the bucket. Then `last_completed_at` is set to `unixepoch()`.
-
-If the indexer errors out mid-run, `last_completed_at` is **not** updated, so the UI's freshness banner continues to show the previous successful timestamp.
-
-`item.Key` and `item.LastModified` are required from `ListObjectsV2` — the indexer throws if S3 returns a `Contents` row missing either.
-
-## API endpoints
-
-Both require the standard auth + connection middleware.
-
-### `GET /api/objects/:connectionId/:bucket/index-status`
-
-Returns the freshness banner data:
-
-```json
-{ "lastIndexedAt": "2026-05-18T03:14:07.000Z", "objectCount": 12345 }
-```
-
-`lastIndexedAt` is `null` when no completed crawl exists.
-
-### `GET /api/objects/:connectionId/:bucket/search`
-
-Query parameters:
-
-- `q` — search term, required.
-- `limit` — 1–500, default 100.
-- `offset` — 0+, default 0.
-- `sort` — `key` (default) or `last_modified`.
-- `dir` — `asc` (default) or `desc`.
-
-Search is always bucket-wide; there is no `prefix` parameter and the URL has no path suffix.
-
-Returns:
-
-```json
-{
-  "objects": [...],          // shaped like the listing endpoint's S3Object
-  "total": 42,
-  "lastIndexedAt": "2026-05-18T03:14:07.000Z",
-  "objectCount": 12345
-}
-```
-
-When no index exists for the bucket, the server returns `404` with `code: "IndexNotBuilt"` and an error message containing the exact CLI command to run.
-
-## Frontend
-
-The Search button in the browse toolbar navigates to `/connection/<id>/search/<bucket>`. The page uses URL search params for all interactive state so links and bookmarks survive reload:
-
-- `?q=...` — the query.
-- `?sort=key|last_modified` — sort column.
-- `?dir=asc|desc` — direction.
-
-Pagination uses local state (`offset`) and is reset to 0 on every query/sort change.
+The Search page is at `/connection/:connectionId/search/:bucket`. Query, sort, and direction live in URL search params so links and reloads work.
 
 ## Trust boundary
 
-Object keys are stored unencrypted in the local SQLite DB. The trust boundary matches the existing object-listing endpoint — if reading a bucket's objects is acceptable, storing those keys locally is too.
+Keys, sizes, last-modified, and etags are stored unencrypted in the local SQLite DB. The trust boundary matches the existing object-listing endpoint — if listing a bucket is acceptable, persisting its listing metadata locally is too. Connection secret keys remain encrypted at rest.
 
-The secret access key for the connection is encrypted at rest as before; only the listing metadata (key, size, last-modified, etag) is plaintext.
+## Source pointers
+
+- Whitelist + gate: `server/config/searchWhitelist.ts`
+- Schema + upsert/sweep/search helpers: `server/db/index.ts`
+- API routes: `server/routes/objects.ts`
+- Indexer CLI: `scripts/index-s3-keys.ts`
+- Search page + Toolbar button: `src/pages/SearchPage.tsx`, `src/components/Toolbar/Toolbar.tsx`
