@@ -20,6 +20,7 @@ const MAX_CONTENT_BYTES = 2 * 1024 * 1024;
 const DEFAULT_BATCH_SIZE = 1000;
 const HEAD_OBJECT_TIMEOUT_MS = 15_000;
 const GET_OBJECT_TIMEOUT_MS = 30_000;
+const SLOW_FETCH_LOG_MS = 1_000;
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'rst', 'json', 'jsonc', 'jsonl', 'ndjson', 'csv', 'tsv', 'log',
@@ -287,7 +288,12 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
 
       for (const row of pending) {
         if (row.needsHeadCheck) {
+          const headStart = Date.now();
           const isText = await headIsText(client, bucket, row.input.key);
+          const headMs = Date.now() - headStart;
+          if (headMs > SLOW_FETCH_LOG_MS) {
+            console.log(`  slow HEAD ${headMs}ms key=${row.input.key}`);
+          }
           if (isText) {
             row.needsBodyFetch = true;
           } else {
@@ -296,7 +302,12 @@ export async function indexS3Bucket(options: IndexS3BucketOptions): Promise<Inde
           row.needsHeadCheck = false;
         }
         if (row.needsBodyFetch) {
+          const bodyStart = Date.now();
           row.input.content = await fetchTextBody(client, bucket, row.input.key, MAX_CONTENT_BYTES);
+          const bodyMs = Date.now() - bodyStart;
+          if (bodyMs > SLOW_FETCH_LOG_MS) {
+            console.log(`  slow GET ${bodyMs}ms key=${row.input.key} size=${row.input.size ?? '?'}`);
+          }
           totals.bodyFetched += 1;
         }
       }
