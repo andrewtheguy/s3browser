@@ -444,6 +444,8 @@ export interface ObjectIndexUpsertResult {
   touched: number;
 }
 
+type ObjectIndexUpsertBranch = keyof ObjectIndexUpsertResult;
+
 /** Existing row lookup result. Exported so the indexer can decide whether to refetch bodies. */
 export interface ObjectIndexExistingRow {
   last_modified: number;
@@ -475,8 +477,9 @@ export function findObjectIndexRowsByKeys(
 }
 
 /**
- * Insert/update/touch a batch of objects for an indexed bucket within a single
- * transaction. Returns counts of each branch taken.
+ * Insert/update/touch objects for an indexed bucket. Each row is applied in its
+ * own transaction so large crawl batches do not become large SQLite commits.
+ * Returns counts of each branch taken.
  *
  * Branches:
  *  - added:   no existing row -> INSERT
@@ -508,31 +511,32 @@ export function upsertObjectIndexBatch(
 
   const result: ObjectIndexUpsertResult = { added: 0, updated: 0, touched: 0 };
 
-  const apply = database.transaction((batch: ObjectIndexInput[]) => {
-    for (const row of batch) {
-      const existing = findStmt.get(indexedBucketId, row.key) as
-        | { id: number; last_modified: number }
-        | undefined;
-      if (!existing) {
-        insertStmt.run(
-          indexedBucketId, row.key, row.lastModified, row.size, seenAt,
-          row.content
-        );
-        result.added += 1;
-      } else if (existing.last_modified === row.lastModified) {
-        touchStmt.run(seenAt, existing.id);
-        result.touched += 1;
-      } else {
-        updateMetaStmt.run(
-          row.lastModified, row.size, seenAt,
-          row.content, existing.id
-        );
-        result.updated += 1;
-      }
+  const applyRow = database.transaction((row: ObjectIndexInput): ObjectIndexUpsertBranch => {
+    const existing = findStmt.get(indexedBucketId, row.key) as
+      | { id: number; last_modified: number }
+      | undefined;
+    if (!existing) {
+      insertStmt.run(
+        indexedBucketId, row.key, row.lastModified, row.size, seenAt,
+        row.content
+      );
+      return 'added';
     }
+    if (existing.last_modified === row.lastModified) {
+      touchStmt.run(seenAt, existing.id);
+      return 'touched';
+    }
+
+    updateMetaStmt.run(
+      row.lastModified, row.size, seenAt,
+      row.content, existing.id
+    );
+    return 'updated';
   });
 
-  apply(rows);
+  for (const row of rows) {
+    result[applyRow(row)] += 1;
+  }
   return result;
 }
 

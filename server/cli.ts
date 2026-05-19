@@ -59,7 +59,7 @@ const indexCmd = program
   .option('--bucket <name>', "Bucket to index (defaults to the connection's saved bucket)")
   .option(
     '--batch-size <n>',
-    'Objects processed per DB transaction',
+    'Objects processed per S3 page/write loop',
     parsePositiveInt('--batch-size'),
     1000
   )
