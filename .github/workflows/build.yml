@@ -23,7 +23,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          version=$(grep -E '^version\s*=' pyproject.toml | head -n1 | sed -E 's/version\s*=\s*"([^"]+)"/\1/')
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
           if [ -z "$version" ]; then
             echo "::error::Could not parse version from pyproject.toml"
             exit 1
