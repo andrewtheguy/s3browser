@@ -41,6 +41,8 @@ line-length = 100
 extend-exclude = [".venv", "dist", "dist-server", "node_modules"]
 
 [tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
 select = [
     "E",
     "W",
@@ -49,6 +51,7 @@ select = [
     "B",
     "UP",
     "SIM",
+    "RUF029",
 ]
 
 [tool.ruff.lint.flake8-bugbear]
