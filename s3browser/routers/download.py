@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
+from contextlib import AsyncExitStack
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from s3browser.db import get_connection_by_id
 from s3browser.dependencies import get_s3_context
-from s3browser.s3 import S3Context, is_access_denied, is_not_found, require_bucket
+from s3browser.s3 import (
+    S3Context,
+    create_s3_context_from_connection,
+    is_access_denied,
+    is_not_found,
+    require_bucket,
+)
 from s3browser.utils import (
     build_content_disposition,
     extract_file_name,
@@ -61,43 +68,57 @@ async def presigned_url(
     return {"url": url}
 
 
-async def _iter_body(body: Any) -> AsyncIterator[bytes]:
-    async with body as stream:
-        while True:
-            chunk = await stream.read(64 * 1024)
-            if not chunk:
-                break
-            yield chunk
-
-
 @router.get("/{connection_id}/{bucket}/object")
 async def download_object(
     request: Request,
+    connection_id: int,
+    bucket: str,
     range_header: str | None = Header(default=None, alias="Range"),
-    context: S3Context = Depends(get_s3_context),
 ) -> StreamingResponse:
-    bucket = require_bucket(context)
+    if connection_id <= 0:
+        raise HTTPException(status_code=400, detail="Valid connection ID is required")
+    connection = get_connection_by_id(connection_id)
+    if connection is None:
+        raise HTTPException(status_code=404, detail="Connection not found")
     key = validate_object_key(request.query_params.get("key"))
     version_id = sanitize_version_id(request.query_params.get("versionId"))
     disposition = "inline" if request.query_params.get("disposition") == "inline" else "attachment"
     content_type_override = validate_content_type(request.query_params.get("contentType"))
-    params: dict[str, object] = {"Bucket": bucket, "Key": key}
-    if version_id:
-        params["VersionId"] = version_id
-    if range_header:
-        params["Range"] = range_header
+
+    exit_stack = AsyncExitStack()
     try:
-        response = await context.client.get_object(**params)
-    except Exception as error:
-        if is_access_denied(error):
-            raise HTTPException(status_code=403, detail="Access denied") from error
-        if is_not_found(error):
-            raise HTTPException(status_code=404, detail="Object not found") from error
-        print(f"Failed to stream object: {error}")
-        raise HTTPException(status_code=500, detail="Failed to stream object") from error
-    body = response.get("Body")
-    if body is None:
-        raise HTTPException(status_code=500, detail="Missing response body")
+        try:
+            context = await exit_stack.enter_async_context(
+                create_s3_context_from_connection(connection, bucket)
+            )
+        except Exception as error:
+            print(f"Failed to create S3 client: {error}")
+            raise HTTPException(
+                status_code=500, detail="Failed to initialize S3 connection"
+            ) from error
+        bucket_name = require_bucket(context)
+        params: dict[str, object] = {"Bucket": bucket_name, "Key": key}
+        if version_id:
+            params["VersionId"] = version_id
+        if range_header:
+            params["Range"] = range_header
+        try:
+            response = await context.client.get_object(**params)
+        except Exception as error:
+            if is_access_denied(error):
+                raise HTTPException(status_code=403, detail="Access denied") from error
+            if is_not_found(error):
+                raise HTTPException(status_code=404, detail="Object not found") from error
+            print(f"Failed to stream object: {error}")
+            raise HTTPException(status_code=500, detail="Failed to stream object") from error
+        body = response.get("Body")
+        if body is None:
+            raise HTTPException(status_code=500, detail="Missing response body")
+        stream = await exit_stack.enter_async_context(body)
+    except BaseException:
+        await exit_stack.aclose()
+        raise
+
     filename = extract_file_name(key) or "download"
     headers: dict[str, str] = {
         "Content-Disposition": "inline"
@@ -112,8 +133,19 @@ async def download_object(
         headers["Content-Length"] = str(response["ContentLength"])
     if response.get("ContentRange"):
         headers["Content-Range"] = response["ContentRange"]
+
+    async def _iter_body() -> AsyncIterator[bytes]:
+        try:
+            while True:
+                chunk = await stream.read(64 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            await exit_stack.aclose()
+
     return StreamingResponse(
-        _iter_body(body),
+        _iter_body(),
         status_code=206 if response.get("ContentRange") else 200,
         headers=headers,
         media_type=headers["Content-Type"],
