@@ -583,7 +583,7 @@ wheels = [
 
 [[package]]
 name = "s3browser"
-version = "0.0.77"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
