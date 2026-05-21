@@ -1,41 +1,49 @@
-# Build stage
-FROM oven/bun:1.3-alpine AS builder
+# --- Frontend stage: build static assets with Bun ---
+FROM oven/bun:1.3-alpine AS frontend-builder
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lock ./
+COPY frontend ./frontend
+RUN cd frontend && bun install --frozen-lockfile && bun run build
 
-# Install all dependencies (including devDependencies for build)
-RUN bun install --frozen-lockfile
+# --- Builder stage: install the s3browser Python project ---
+FROM python:3.12-slim-bookworm AS builder
 
-# Copy source files
-COPY . .
+RUN apt-get -yqq update && \
+    apt-get install -yq --no-install-recommends ca-certificates && \
+    apt-get autoremove -y && \
+    apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
-# Build frontend and server
-RUN bun run build
+ENV app=/usr/src/app
+WORKDIR $app
 
-# Production stage
-FROM oven/bun:1.3-alpine AS runner
+# Copy lock + metadata first for better layer caching
+COPY pyproject.toml uv.lock README.md ./
+# Frontend assets are force-included into s3browser/static by the wheel build (see pyproject.toml)
+COPY --from=frontend-builder /app/dist ./dist
 
-RUN mkdir -p /home/bun/app && chown -R bun:bun /home/bun
+ENV UV_PROJECT_ENVIRONMENT="/usr/local/"
+RUN --mount=from=ghcr.io/astral-sh/uv:0.9.11,source=/uv,target=/uv \
+    /uv sync --locked --no-dev --no-editable --no-install-project
 
-WORKDIR /home/bun/app
+# Copy application code
+COPY s3browser ./s3browser
 
-# Copy package files
-COPY --chown=bun:bun package.json bun.lock ./
+# Install the project itself (builds & installs the wheel, embedding dist/ as s3browser/static)
+RUN --mount=from=ghcr.io/astral-sh/uv:0.9.11,source=/uv,target=/uv \
+    /uv sync --locked --no-dev --no-editable
 
-# Install production dependencies only
-USER bun
-RUN bun install --frozen-lockfile --production
+# --- Runtime stage: minimal Python image ---
+FROM python:3.12-slim-bookworm
 
-# Copy built frontend from builder
-COPY --from=builder --chown=bun:bun /app/dist ./dist
+RUN apt-get -yqq update && \
+    apt-get install -yq --no-install-recommends ca-certificates tini && \
+    apt-get autoremove -y && \
+    apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
-# Copy built server from builder
-COPY --from=builder --chown=bun:bun /app/dist-server ./dist-server
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin/s3browser /usr/local/bin/s3browser
 
-ENV NODE_ENV=production
+EXPOSE 8170
 
-EXPOSE 3000
-
-CMD ["bun", "run", "start"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["s3browser", "server", "--bind", ":8170"]

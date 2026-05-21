@@ -6,12 +6,12 @@ This document describes the current security controls used by the file preview f
 
 Preview functionality is implemented in:
 
-- `src/hooks/usePreview.ts`
-- `src/components/PreviewDialog/PreviewPanel.tsx`
-- `src/components/PreviewDialog/PreviewBody.tsx`
-- `src/components/PreviewDialog/TextPreview.tsx`
-- `src/utils/previewUtils.ts`
-- `server/routes/download.ts`
+- `frontend/src/hooks/usePreview.ts`
+- `frontend/src/components/PreviewDialog/PreviewPanel.tsx`
+- `frontend/src/components/PreviewDialog/PreviewBody.tsx`
+- `frontend/src/components/PreviewDialog/TextPreview.tsx`
+- `frontend/src/utils/previewUtils.ts`
+- `s3browser/routers/download.py`
 
 ## Client-Side Controls
 

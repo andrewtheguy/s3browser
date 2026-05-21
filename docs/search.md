@@ -20,7 +20,7 @@ When a connection isn't allowlisted, the search/index-status API routes refuse w
 ## Building the index
 
 ```sh
-bun run index -- --connection <id> [--bucket <name>] [--batch-size <n>] [--dry-run]
+s3browser index --connection <id> [--bucket <name>] [--batch-size <n>]
 ```
 
 `--connection` is the DB id of a saved connection. `--bucket` defaults to the connection's saved bucket. `--batch-size` controls S3 page/write loop size; DB writes are committed row by row. Run `--help` for the full flag list.
@@ -41,8 +41,8 @@ Keys, sizes, last-modified, and etags are stored unencrypted in the local SQLite
 
 ## Source pointers
 
-- Whitelist + gate: `server/config/searchWhitelist.ts`
-- Schema + upsert/sweep/search helpers: `server/db/index.ts`
-- API routes: `server/routes/objects.ts`
-- Indexer CLI: `scripts/index-s3.ts`
-- Search page + Toolbar button: `src/pages/SearchPage.tsx`, `src/components/Toolbar/Toolbar.tsx`
+- Whitelist + gate: `s3browser/config.py` (`get_search_whitelist_hosts`)
+- Schema + upsert/sweep/search helpers: `s3browser/db.py`
+- API routes: `s3browser/routers/objects.py`
+- Indexer CLI: `s3browser/cli.py` (`index` subcommand), `s3browser/indexing.py`
+- Search page + Toolbar button: `frontend/src/pages/SearchPage.tsx`, `frontend/src/components/Toolbar/Toolbar.tsx`

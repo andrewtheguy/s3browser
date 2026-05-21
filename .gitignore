@@ -8,6 +8,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
 dist
 dist-ssr
 *.local
@@ -31,9 +36,10 @@ dist-ssr
 *.sln
 *.sw?
 dist-server/
+dist-python/
 
 # Standalone build artifacts
-/s3browser
+
 server/cli/embeddedAssets.generated.ts
 
 # npm lock file (using bun.lockb instead)
