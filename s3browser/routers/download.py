@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/download", tags=["download"])
 
 
 @router.get("/{connection_id}/{bucket}/url")
-def presigned_url(
+async def presigned_url(
     request: Request,
     context: S3Context = Depends(get_s3_context),
 ) -> dict[str, str]:
@@ -52,28 +52,26 @@ def presigned_url(
     if content_type:
         params["ResponseContentType"] = content_type
     try:
-        url = context.client.generate_presigned_url("get_object", Params=params, ExpiresIn=ttl)
+        url = await context.client.generate_presigned_url(
+            "get_object", Params=params, ExpiresIn=ttl
+        )
     except Exception as error:
         print(f"Failed to generate presigned URL: {error}")
         raise HTTPException(status_code=500, detail="Failed to generate presigned URL") from error
     return {"url": url}
 
 
-def _iter_body(body: Any) -> Iterator[bytes]:
-    try:
+async def _iter_body(body: Any) -> AsyncIterator[bytes]:
+    async with body as stream:
         while True:
-            chunk = body.read(64 * 1024)
+            chunk = await stream.read(64 * 1024)
             if not chunk:
                 break
             yield chunk
-    finally:
-        close = getattr(body, "close", None)
-        if callable(close):
-            close()
 
 
 @router.get("/{connection_id}/{bucket}/object")
-def download_object(
+async def download_object(
     request: Request,
     range_header: str | None = Header(default=None, alias="Range"),
     context: S3Context = Depends(get_s3_context),
@@ -89,7 +87,7 @@ def download_object(
     if range_header:
         params["Range"] = range_header
     try:
-        response = context.client.get_object(**params)
+        response = await context.client.get_object(**params)
     except Exception as error:
         if is_access_denied(error):
             raise HTTPException(status_code=403, detail="Access denied") from error

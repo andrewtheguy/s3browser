@@ -18,7 +18,7 @@ def _is_lifecycle_not_configured(error: object) -> bool:
 
 
 @router.get("/{connection_id}/{bucket}/info")
-def bucket_info(context: S3Context = Depends(get_s3_context)) -> dict[str, object]:
+async def bucket_info(context: S3Context = Depends(get_s3_context)) -> dict[str, object]:
     bucket = require_bucket(context)
     client = context.client
     result: dict[str, object] = {
@@ -29,7 +29,7 @@ def bucket_info(context: S3Context = Depends(get_s3_context)) -> dict[str, objec
         "lifecycleRules": [],
     }
     try:
-        versioning = client.get_bucket_versioning(Bucket=bucket)
+        versioning = await client.get_bucket_versioning(Bucket=bucket)
         result["versioning"] = {
             "status": versioning.get("Status"),
             "mfaDelete": versioning.get("MFADelete"),
@@ -37,7 +37,7 @@ def bucket_info(context: S3Context = Depends(get_s3_context)) -> dict[str, objec
     except Exception as error:
         print(f"Failed to get bucket versioning: {error}")
     try:
-        encryption = client.get_bucket_encryption(Bucket=bucket)
+        encryption = await client.get_bucket_encryption(Bucket=bucket)
         rules = encryption.get("ServerSideEncryptionConfiguration", {}).get("Rules", [])
         if rules:
             default_rule = rules[0].get("ApplyServerSideEncryptionByDefault", {})
@@ -56,7 +56,7 @@ def bucket_info(context: S3Context = Depends(get_s3_context)) -> dict[str, objec
             print(f"Failed to get bucket encryption: {error}")
             result["encryptionError"] = text
     try:
-        lifecycle = client.get_bucket_lifecycle_configuration(Bucket=bucket)
+        lifecycle = await client.get_bucket_lifecycle_configuration(Bucket=bucket)
         rules_out: list[dict[str, object]] = []
         for rule in lifecycle.get("Rules", []):
             expiration = rule.get("Expiration")

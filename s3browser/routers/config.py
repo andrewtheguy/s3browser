@@ -7,5 +7,5 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 
 @router.get("")
 @router.get("/")
-def get_config() -> dict[str, object]:
+async def get_config() -> dict[str, object]:
     return {"presignedUrlTtls": list(get_presigned_url_ttl_options())}

@@ -77,7 +77,7 @@ app.add_middleware(
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
+async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:  # noqa: RUF029
     if isinstance(exc.detail, dict):
         content = (
             exc.detail
@@ -90,7 +90,7 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(
+async def validation_exception_handler(  # noqa: RUF029
     _request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     return JSONResponse(
@@ -99,7 +99,7 @@ async def validation_exception_handler(
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
+async def unhandled_exception_handler(_request: Request, exc: Exception) -> JSONResponse:  # noqa: RUF029
     print(f"Unhandled error: {exc}")
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
 

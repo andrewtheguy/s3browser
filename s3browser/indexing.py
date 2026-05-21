@@ -9,13 +9,12 @@ from s3browser.config import SEARCH_WHITELIST_ENV_VAR, get_search_whitelist_host
 from s3browser.db import (
     delete_index_database,
     find_object_index_rows_by_keys,
-    get_connection_by_id,
     get_or_create_indexed_bucket,
     mark_index_completed,
     sweep_stale_objects,
     upsert_object_index_batch,
 )
-from s3browser.s3 import create_s3_context_from_connection, get_effective_endpoint_host
+from s3browser.s3 import S3Context, get_effective_endpoint_host
 
 MAX_CONTENT_BYTES = 2 * 1024 * 1024
 DEFAULT_BATCH_SIZE = 1000
@@ -135,35 +134,27 @@ def _timestamp_seconds(value: object) -> int:
     raise RuntimeError("S3 ListObjectsV2 returned no LastModified")
 
 
-def _head_is_text(client: Any, bucket: str, key: str) -> bool:
-    head = client.head_object(Bucket=bucket, Key=key)
+async def _head_is_text(client: Any, bucket: str, key: str) -> bool:
+    head = await client.head_object(Bucket=bucket, Key=key)
     return _is_text_content_type(head.get("ContentType"))
 
 
-def _fetch_text_body(client: Any, bucket: str, key: str, max_bytes: int) -> str:
-    response = client.get_object(Bucket=bucket, Key=key, Range=f"bytes=0-{max_bytes - 1}")
+async def _fetch_text_body(client: Any, bucket: str, key: str, max_bytes: int) -> str:
+    response = await client.get_object(Bucket=bucket, Key=key, Range=f"bytes=0-{max_bytes - 1}")
     body = response.get("Body")
     if body is None:
         raise RuntimeError("S3 returned no response body")
-    try:
-        data = body.read()
-    finally:
-        close = getattr(body, "close", None)
-        if callable(close):
-            close()
+    async with body as stream:
+        data = await stream.read()
     return bytes(data).decode("utf-8", errors="replace")
 
 
-def index_s3_bucket(
-    connection_id: int, bucket: str | None = None, batch_size: int = DEFAULT_BATCH_SIZE
+async def index_s3_bucket(
+    context: S3Context, batch_size: int = DEFAULT_BATCH_SIZE
 ) -> dict[str, int | float]:
-    if connection_id <= 0:
-        raise RuntimeError("Missing or invalid connectionId")
     if batch_size <= 0:
         raise RuntimeError("Invalid batchSize")
-    connection = get_connection_by_id(connection_id)
-    if connection is None:
-        raise RuntimeError(f"Connection {connection_id} not found in DB")
+    connection = context.connection
     endpoint_host = get_effective_endpoint_host(connection.endpoint)
     if not endpoint_host or endpoint_host not in get_search_whitelist_hosts():
         if not endpoint_host:
@@ -176,14 +167,13 @@ def index_s3_bucket(
             f'Refusing to index: connection {connection.id} endpoint host "{endpoint_host}" '
             f"is not in {SEARCH_WHITELIST_ENV_VAR}."
         )
-    effective_bucket = bucket or connection.bucket
+    effective_bucket = context.credentials.bucket
     if not effective_bucket:
         raise RuntimeError("No bucket specified and connection has no default bucket")
     print(
         f"Indexing s3://{effective_bucket} for connection {connection.id} "
         f"({connection.profile_name}) at {endpoint_host}"
     )
-    context = create_s3_context_from_connection(connection, effective_bucket)
     client = context.client
     indexed_bucket_id = get_or_create_indexed_bucket(endpoint_host, effective_bucket)
     run_started_at = int(time.time())
@@ -208,7 +198,7 @@ def index_s3_bucket(
         params: dict[str, object] = {"Bucket": effective_bucket, "MaxKeys": batch_size}
         if continuation_token:
             params["ContinuationToken"] = continuation_token
-        response = client.list_objects_v2(**params)
+        response = await client.list_objects_v2(**params)
         page_number += 1
         contents = response.get("Contents", [])
         pending: list[PendingRow] = []
@@ -257,7 +247,7 @@ def index_s3_bucket(
             if row.needs_head_check:
                 started = time.time()
                 try:
-                    is_text = _head_is_text(client, effective_bucket, key)
+                    is_text = await _head_is_text(client, effective_bucket, key)
                 except Exception as error:
                     print(f"  HEAD failed key={key}: {error}")
                     totals["headCheckErrors"] = int(totals["headCheckErrors"]) + 1
@@ -275,7 +265,7 @@ def index_s3_bucket(
             if row.needs_body_fetch:
                 started = time.time()
                 try:
-                    row.input["content"] = _fetch_text_body(
+                    row.input["content"] = await _fetch_text_body(
                         client, effective_bucket, key, MAX_CONTENT_BYTES
                     )
                 except Exception as error:
