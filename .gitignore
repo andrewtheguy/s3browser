@@ -37,6 +37,7 @@ dist-python/
 *.sln
 *.sw?
 dist-server/
+dist-python/
 
 # Standalone build artifacts
 

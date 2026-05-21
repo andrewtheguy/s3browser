@@ -79,9 +79,11 @@ jobs:
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
+        working-directory: frontend
 
       - name: Build frontend
-        run: bun run build:client
+        run: bun run build
+        working-directory: frontend
 
       - name: Build wheel and sdist
         run: uv build --out-dir dist-python

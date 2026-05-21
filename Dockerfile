@@ -2,12 +2,8 @@
 FROM oven/bun:1.3-alpine AS frontend-builder
 WORKDIR /app
 
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
-COPY index.html components.json postcss.config.js tailwind.config.js tsconfig*.json vite.config.ts ./
-COPY public ./public
-COPY src ./src
-RUN bun run build:client
+COPY frontend ./frontend
+RUN cd frontend && bun install --frozen-lockfile && bun run build
 
 # --- Builder stage: install the s3browser Python project ---
 FROM python:3.12-slim-bookworm AS builder

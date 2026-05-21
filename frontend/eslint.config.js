@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['.venv', 'dist', 'dist-server', 'server', 's3browser/static']),
+  globalIgnores(['dist', 'node_modules']),
   // Frontend files (src/)
   {
     files: ['src/**/*.{ts,tsx}'],

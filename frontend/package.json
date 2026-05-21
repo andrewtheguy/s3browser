@@ -1,19 +1,12 @@
 {
-  "name": "s3browser",
+  "name": "s3browser-frontend",
   "private": true,
-  "version": "0.0.77",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
-    "dev:client": "vite",
-    "dev:server": "uv run s3browser server --bind localhost:3001 --reload",
-    "build": "bun run build:client && uv build --out-dir dist-python",
-    "build:client": "tsc -b tsconfig.app.json && vite build",
-    "build:python": "uv build --out-dir dist-python",
-    "start": "uv run s3browser server",
+    "dev": "vite",
+    "build": "tsc -b tsconfig.app.json && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "cli": "uv run s3browser"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@lucide/lab": "^0.1.2",
@@ -48,7 +41,6 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.24",
-    "concurrently": "^9.1.2",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

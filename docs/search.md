@@ -45,4 +45,4 @@ Keys, sizes, last-modified, and etags are stored unencrypted in the local SQLite
 - Schema + upsert/sweep/search helpers: `s3browser/db.py`
 - API routes: `s3browser/routers/objects.py`
 - Indexer CLI: `s3browser/cli.py` (`index` subcommand), `s3browser/indexing.py`
-- Search page + Toolbar button: `src/pages/SearchPage.tsx`, `src/components/Toolbar/Toolbar.tsx`
+- Search page + Toolbar button: `frontend/src/pages/SearchPage.tsx`, `frontend/src/components/Toolbar/Toolbar.tsx`

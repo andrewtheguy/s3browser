@@ -60,8 +60,8 @@ The image entrypoint runs `s3browser server --bind :8170`. Mount `~/.s3browser` 
 ```bash
 git clone https://github.com/andrewtheguy/s3browser.git
 cd s3browser
-bun install
-bun run build:client
+bun --cwd frontend install
+bun --cwd frontend run build
 uv tool install .
 ```
 
@@ -88,7 +88,7 @@ s3browser server
 ### Installation
 
 ```bash
-bun install
+bun --cwd frontend install
 uv sync
 ```
 
@@ -142,29 +142,28 @@ The encryption key is intentionally excluded — keep it in `~/.s3browser/encryp
 
 ### Development
 
-Start both the frontend and backend in development mode:
+Start the backend and frontend in two terminals:
 
 ```bash
-bun run dev
+# Terminal 1: FastAPI backend with reload
+uv run s3browser server --bind localhost:3001 --reload
+
+# Terminal 2: Vite dev server
+bun --cwd frontend run dev
 ```
 
 The frontend runs on `http://localhost:5173` and proxies API requests to the backend on `http://localhost:3001`.
 
-To bind the dev backend to a different interface, set `HOST`. You can also set `PORT` to change the backend port:
-
-```bash
-uv run s3browser server --bind :3001 --reload
-```
-
-The Vite dev proxy is configured for backend port `3001`; if you run the backend on a different port, update `vite.config.ts` or call the backend directly.
+The Vite dev proxy is configured for backend port `3001`; if you run the backend on a different port, update `frontend/vite.config.ts` or call the backend directly.
 
 ### Production Build And Tool Install
 
 ```bash
-bun run build
+bun --cwd frontend run build
+uv build --out-dir dist-python
 ```
 
-This builds the Vite frontend in `dist/` and Python package artifacts in `dist-python/`. The wheel includes the current `dist/` frontend assets so an installed `s3browser` command can serve the full app.
+`bun --cwd frontend run build` writes the Vite frontend to `dist/` (at the repo root, where the Python wheel picks it up). `uv build` then produces Python package artifacts in `dist-python/`. The wheel includes the current `dist/` frontend assets so an installed `s3browser` command can serve the full app.
 
 Install the command from the current checkout with uv:
 
