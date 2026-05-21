@@ -198,6 +198,8 @@ def index_s3_bucket(
         "bodySkippedUnchanged": 0,
         "bodySkippedNonText": 0,
         "bodySkippedSize": 0,
+        "headCheckErrors": 0,
+        "bodyFetchErrors": 0,
         "elapsedMs": 0,
     }
     continuation_token: str | None = None
@@ -254,7 +256,14 @@ def index_s3_bucket(
             key = str(row.input["key"])
             if row.needs_head_check:
                 started = time.time()
-                is_text = _head_is_text(client, effective_bucket, key)
+                try:
+                    is_text = _head_is_text(client, effective_bucket, key)
+                except Exception as error:
+                    print(f"  HEAD failed key={key}: {error}")
+                    totals["headCheckErrors"] = int(totals["headCheckErrors"]) + 1
+                    row.needs_head_check = False
+                    row.needs_body_fetch = False
+                    continue
                 elapsed = time.time() - started
                 if elapsed > SLOW_FETCH_LOG_SECONDS:
                     print(f"  slow HEAD {elapsed * 1000:.0f}ms key={key}")
@@ -265,9 +274,15 @@ def index_s3_bucket(
                 row.needs_head_check = False
             if row.needs_body_fetch:
                 started = time.time()
-                row.input["content"] = _fetch_text_body(
-                    client, effective_bucket, key, MAX_CONTENT_BYTES
-                )
+                try:
+                    row.input["content"] = _fetch_text_body(
+                        client, effective_bucket, key, MAX_CONTENT_BYTES
+                    )
+                except Exception as error:
+                    print(f"  GET failed key={key}: {error}")
+                    totals["bodyFetchErrors"] = int(totals["bodyFetchErrors"]) + 1
+                    row.needs_body_fetch = False
+                    continue
                 elapsed = time.time() - started
                 if elapsed > SLOW_FETCH_LOG_SECONDS:
                     size = row.input["size"] or "?"

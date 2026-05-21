@@ -274,7 +274,7 @@ def save_connection(
     conn = get_db()
     if connection_id is not None:
         if secret_access_key:
-            conn.execute(
+            update_cursor = conn.execute(
                 """
                 UPDATE s3_connections SET
                   profile_name = ?, endpoint = ?, access_key_id = ?, secret_access_key = ?,
@@ -293,7 +293,7 @@ def save_connection(
                 ),
             )
         else:
-            conn.execute(
+            update_cursor = conn.execute(
                 """
                 UPDATE s3_connections SET
                   profile_name = ?, endpoint = ?, access_key_id = ?, bucket = ?, region = ?,
@@ -310,7 +310,7 @@ def save_connection(
                     connection_id,
                 ),
             )
-        if conn.total_changes == 0:
+        if update_cursor.rowcount == 0:
             raise RuntimeError("Connection not found")
         conn.commit()
         saved = get_connection_by_id(connection_id)
@@ -426,20 +426,20 @@ def mark_index_completed(indexed_bucket_id: int, object_count: int) -> None:
 def find_object_index_rows_by_keys(indexed_bucket_id: int, keys: list[str]) -> dict[str, int]:
     if not keys:
         return {}
+    conn = get_index_db()
     result: dict[str, int] = {}
-    for key in keys:
-        row = (
-            get_index_db()
-            .execute(
-                """
+    chunk_size = 500
+    for start in range(0, len(keys), chunk_size):
+        chunk = keys[start : start + chunk_size]
+        placeholders = ",".join("?" * len(chunk))
+        rows = conn.execute(
+            f"""
             SELECT key, last_modified FROM s3_object_index
-            WHERE indexed_bucket_id = ? AND key = ?
+            WHERE indexed_bucket_id = ? AND key IN ({placeholders})
             """,
-                (indexed_bucket_id, key),
-            )
-            .fetchone()
-        )
-        if row:
+            (indexed_bucket_id, *chunk),
+        ).fetchall()
+        for row in rows:
             result[str(row["key"])] = int(row["last_modified"])
     return result
 
@@ -449,46 +449,44 @@ def upsert_object_index_batch(
 ) -> dict[str, int]:
     conn = get_index_db()
     result = {"added": 0, "updated": 0, "touched": 0}
+    if not rows:
+        return result
+    existing = find_object_index_rows_by_keys(indexed_bucket_id, [str(row["key"]) for row in rows])
+    params: list[tuple[Any, ...]] = []
     for row in rows:
-        existing = conn.execute(
-            """
-            SELECT id, last_modified FROM s3_object_index
-            WHERE indexed_bucket_id = ? AND key = ?
-            """,
-            (indexed_bucket_id, row["key"]),
-        ).fetchone()
-        if existing is None:
-            conn.execute(
-                """
-                                INSERT INTO s3_object_index
-                                    (indexed_bucket_id, key, last_modified, size, seen_at, content)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    indexed_bucket_id,
-                    row["key"],
-                    row["last_modified"],
-                    row["size"],
-                    seen_at,
-                    row["content"],
-                ),
-            )
+        key = str(row["key"])
+        prior_lm = existing.get(key)
+        if prior_lm is None:
             result["added"] += 1
-        elif int(existing["last_modified"]) == int(row["last_modified"]):
-            conn.execute(
-                "UPDATE s3_object_index SET seen_at = ? WHERE id = ?", (seen_at, existing["id"])
-            )
+        elif prior_lm == int(row["last_modified"]):
             result["touched"] += 1
         else:
-            conn.execute(
-                """
-                UPDATE s3_object_index
-                SET last_modified = ?, size = ?, seen_at = ?, content = ?
-                WHERE id = ?
-                """,
-                (row["last_modified"], row["size"], seen_at, row["content"], existing["id"]),
-            )
             result["updated"] += 1
+        params.append(
+            (
+                indexed_bucket_id,
+                row["key"],
+                row["last_modified"],
+                row["size"],
+                seen_at,
+                row["content"],
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO s3_object_index
+            (indexed_bucket_id, key, last_modified, size, seen_at, content)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(indexed_bucket_id, key) DO UPDATE SET
+          size = CASE WHEN s3_object_index.last_modified = excluded.last_modified
+                      THEN s3_object_index.size ELSE excluded.size END,
+          content = CASE WHEN s3_object_index.last_modified = excluded.last_modified
+                         THEN s3_object_index.content ELSE excluded.content END,
+          last_modified = excluded.last_modified,
+          seen_at = excluded.seen_at
+        """,
+        params,
+    )
     conn.commit()
     return result
 

@@ -15,7 +15,6 @@ __pycache__/
 .ruff_cache/
 dist
 dist-ssr
-dist-python/
 *.local
 
 # Environment variables
