@@ -359,6 +359,15 @@ wheels = [
 ]
 
 [[package]]
+name = "filelock"
+version = "3.29.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/fe/997687a931ab51049acce6fa1f23e8f01216374ea81374ddee763c493db5/filelock-3.29.0.tar.gz", hash = "sha256:69974355e960702e789734cb4871f884ea6fe50bd8404051a3530bc07809cf90", size = 57571, upload-time = "2026-04-19T15:39:10.068Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/47/dd9a212ef6e343a6857485ffe25bba537304f1913bdbed446a23f7f592e1/filelock-3.29.0-py3-none-any.whl", hash = "sha256:96f5f6344709aa1572bbf631c640e4ebeeb519e08da902c39a001882f30ac258", size = 39812, upload-time = "2026-04-19T15:39:08.752Z" },
+]
+
+[[package]]
 name = "frozenlist"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -994,12 +1003,13 @@ wheels = [
 
 [[package]]
 name = "s3browser"
-version = "0.1.3"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "aiobotocore" },
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "filelock" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1018,6 +1028,7 @@ requires-dist = [
     { name = "aiobotocore", specifier = ">=3.7.0,<3.8.0" },
     { name = "cryptography", specifier = ">=46.0.0,<49.0.0" },
     { name = "fastapi", specifier = ">=0.136.1,<0.137.0" },
+    { name = "filelock", specifier = ">=3.29.0,<4.0.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "python-multipart", specifier = ">=0.0.27,<0.0.28" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.46.0,<0.48.0" },
