@@ -35,6 +35,17 @@ Object encryption reporting varies by vendor. If the object metadata does not in
 
 Each manual release publishes a Python wheel (with the frontend assets embedded) and a multi-arch Docker image to GitHub Container Registry.
 
+### Quick install (latest released wheel)
+
+Fetches the latest `s3browser-<version>-py3-none-any.whl` from GitHub Releases and installs it with `uv tool install`. Requires [uv](https://docs.astral.sh/uv/) and `curl`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andrewtheguy/s3browser/main/scripts/install.sh | bash
+s3browser server
+```
+
+Re-run the command to upgrade to the latest release.
+
 ### From the GitHub Pages package index (recommended)
 
 Released wheels are indexed at `https://andrewtheguy.github.io/s3browser/simple/`. Install with [uv](https://docs.astral.sh/uv/):
