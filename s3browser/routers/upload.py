@@ -79,7 +79,7 @@ async def upload_single(
         raise HTTPException(status_code=413, detail="Request body too large")
     content_type = request.headers.get("content-type") or "application/octet-stream"
     try:
-        context.client.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type)
+        await context.client.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type)
     except Exception as error:
         print(f"Single file upload failed: {error}")
         raise HTTPException(status_code=500, detail="Single file upload failed") from error
@@ -87,7 +87,7 @@ async def upload_single(
 
 
 @router.post("/{connection_id}/{bucket}/initiate")
-def initiate_upload(
+async def initiate_upload(
     body: InitiateUploadBody, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     bucket = require_bucket(context)
@@ -101,7 +101,7 @@ def initiate_upload(
         )
     key = validate_object_key(body.key, message="Key is required")
     try:
-        response = context.client.create_multipart_upload(
+        response = await context.client.create_multipart_upload(
             Bucket=bucket,
             Key=key,
             ContentType=body.contentType or "application/octet-stream",
@@ -158,7 +158,7 @@ async def upload_part(
     if len(body) > RAW_PART_LIMIT:
         raise HTTPException(status_code=413, detail="Request body too large")
     try:
-        response = context.client.upload_part(
+        response = await context.client.upload_part(
             Bucket=bucket,
             Key=tracked.sanitized_key,
             UploadId=upload_id,
@@ -172,7 +172,7 @@ async def upload_part(
 
 
 @router.post("/{connection_id}/{bucket}/complete")
-def complete_upload(
+async def complete_upload(
     body: CompleteUploadBody, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     bucket = require_bucket(context)
@@ -190,7 +190,7 @@ def complete_upload(
         raise HTTPException(status_code=403, detail="Key does not match the upload")
     parts = sorted(body.parts, key=lambda part: part.partNumber)
     try:
-        context.client.complete_multipart_upload(
+        await context.client.complete_multipart_upload(
             Bucket=bucket,
             Key=tracked.sanitized_key,
             UploadId=body.uploadId,
@@ -200,7 +200,7 @@ def complete_upload(
         )
     except Exception as error:
         try:
-            context.client.abort_multipart_upload(
+            await context.client.abort_multipart_upload(
                 Bucket=bucket, Key=tracked.sanitized_key, UploadId=body.uploadId
             )
         except Exception as abort_error:
@@ -215,7 +215,7 @@ def complete_upload(
 
 
 @router.post("/{connection_id}/{bucket}/abort")
-def abort_upload(
+async def abort_upload(
     body: AbortUploadBody, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, bool]:
     bucket = require_bucket(context)
@@ -231,7 +231,7 @@ def abort_upload(
             raise HTTPException(status_code=400, detail="Key does not match the upload")
         key = tracked.sanitized_key
     try:
-        context.client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=body.uploadId)
+        await context.client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=body.uploadId)
     except Exception as error:
         print(f"Failed to abort multipart upload: {error}")
         raise HTTPException(status_code=500, detail="Failed to abort multipart upload") from error

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
-import boto3
+from aiobotocore.session import AioSession, get_session
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException
@@ -14,6 +16,7 @@ from s3browser.db import S3Connection, decrypt_connection_secret_key, update_con
 
 S3Vendor = str
 
+_session: AioSession = get_session()
 _bucket_region_cache: dict[str, str] = {}
 
 
@@ -102,10 +105,16 @@ def _client_config(endpoint: str | None = None) -> Config:
     return Config()
 
 
-def create_s3_client(credentials: S3Credentials) -> Any:
+@asynccontextmanager
+async def _create_aio_client(service: str, **kwargs: Any) -> AsyncIterator[Any]:
+    async with _session.create_client(service, **kwargs) as client:
+        yield client
+
+
+@asynccontextmanager
+async def create_s3_client(credentials: S3Credentials) -> AsyncIterator[Any]:
     endpoint = normalize_endpoint(credentials.endpoint)
-    kwargs = {
-        "service_name": "s3",
+    kwargs: dict[str, Any] = {
         "region_name": credentials.region,
         "aws_access_key_id": credentials.access_key_id,
         "aws_secret_access_key": credentials.secret_access_key,
@@ -113,27 +122,28 @@ def create_s3_client(credentials: S3Credentials) -> Any:
     }
     if endpoint:
         kwargs["endpoint_url"] = endpoint
-    return boto3.client(**kwargs)
+    async with _create_aio_client("s3", **kwargs) as client:
+        yield client
 
 
-def get_bucket_region(
+async def get_bucket_region(
     access_key_id: str, secret_access_key: str, bucket: str, endpoint: str | None = None
 ) -> str:
     if endpoint:
         return "us-east-1"
-    client = boto3.client(
+    async with _create_aio_client(
         "s3",
         region_name="us-east-1",
         aws_access_key_id=access_key_id,
         aws_secret_access_key=secret_access_key,
-    )
-    try:
-        response = client.get_bucket_location(Bucket=bucket)
-    except (BotoCoreError, ClientError) as error:
-        print(f"Failed to get bucket location: {error}")
-        raise RuntimeError(
-            "Failed to detect bucket region. Please specify the region manually."
-        ) from error
+    ) as client:
+        try:
+            response = await client.get_bucket_location(Bucket=bucket)
+        except (BotoCoreError, ClientError) as error:
+            print(f"Failed to get bucket location: {error}")
+            raise RuntimeError(
+                "Failed to detect bucket region. Please specify the region manually."
+            ) from error
     location = response.get("LocationConstraint")
     if not location:
         return "us-east-1"
@@ -142,9 +152,10 @@ def get_bucket_region(
     return str(location)
 
 
-def create_s3_context_from_connection(
+@asynccontextmanager
+async def create_s3_context_from_connection(
     connection: S3Connection, bucket: str | None = None
-) -> S3Context:
+) -> AsyncIterator[S3Context]:
     secret = decrypt_connection_secret_key(connection)
     endpoint = normalize_endpoint(connection.endpoint)
     effective_bucket = bucket or connection.bucket
@@ -155,7 +166,7 @@ def create_s3_context_from_connection(
             region = _bucket_region_cache[cache_key]
         else:
             try:
-                region = get_bucket_region(
+                region = await get_bucket_region(
                     connection.access_key_id, secret, effective_bucket, endpoint
                 )
                 _bucket_region_cache[cache_key] = region
@@ -169,92 +180,95 @@ def create_s3_context_from_connection(
         endpoint=endpoint,
     )
     update_connection_last_used(connection.id)
-    return S3Context(
-        connection_id=connection.id,
-        connection=connection,
-        client=create_s3_client(credentials),
-        credentials=credentials,
-    )
+    async with create_s3_client(credentials) as client:
+        yield S3Context(
+            connection_id=connection.id,
+            connection=connection,
+            client=client,
+            credentials=credentials,
+        )
 
 
-def validate_credentials(credentials: S3Credentials) -> dict[str, str | bool]:
-    client = create_s3_client(credentials)
-    try:
-        client.head_bucket(Bucket=credentials.bucket)
-        return {"valid": True}
-    except (BotoCoreError, ClientError) as error:
-        code = error_code(error)
-        if code == "NotFound":
-            return {"valid": False, "error": "Bucket not found"}
-        if code in {"AccessDenied", "Forbidden"}:
+async def validate_credentials(credentials: S3Credentials) -> dict[str, str | bool]:
+    async with create_s3_client(credentials) as client:
+        try:
+            await client.head_bucket(Bucket=credentials.bucket)
             return {"valid": True}
-        if code in {"InvalidAccessKeyId", "SignatureDoesNotMatch"}:
-            return {"valid": False, "error": "Invalid credentials"}
-        return {"valid": False, "error": format_error_with_code(error)}
+        except (BotoCoreError, ClientError) as error:
+            code = error_code(error)
+            if code == "NotFound":
+                return {"valid": False, "error": "Bucket not found"}
+            if code in {"AccessDenied", "Forbidden"}:
+                return {"valid": True}
+            if code in {"InvalidAccessKeyId", "SignatureDoesNotMatch"}:
+                return {"valid": False, "error": "Invalid credentials"}
+            return {"valid": False, "error": format_error_with_code(error)}
 
 
-def validate_credentials_only(
+async def validate_credentials_only(
     access_key_id: str, secret_access_key: str, region: str, endpoint: str | None = None
 ) -> dict[str, str | bool]:
     normalized_endpoint = normalize_endpoint(endpoint)
     if normalized_endpoint:
-        client = create_s3_client(
+        async with create_s3_client(
             S3Credentials(
                 access_key_id=access_key_id,
                 secret_access_key=secret_access_key,
                 region=region,
                 endpoint=normalized_endpoint,
             )
-        )
-        try:
-            client.list_buckets()
-            return {"valid": True}
-        except (BotoCoreError, ClientError) as error:
-            code = error_code(error)
-            message = format_error_with_code(error)
-            if code in {"AccessDenied", "Forbidden"}:
+        ) as client:
+            try:
+                await client.list_buckets()
                 return {"valid": True}
-            if code in {
-                "InvalidAccessKeyId",
-                "SignatureDoesNotMatch",
-                "ExpiredToken",
-                "ExpiredTokenException",
-            }:
+            except (BotoCoreError, ClientError) as error:
+                code = error_code(error)
+                message = format_error_with_code(error)
+                if code in {"AccessDenied", "Forbidden"}:
+                    return {"valid": True}
+                if code in {
+                    "InvalidAccessKeyId",
+                    "SignatureDoesNotMatch",
+                    "ExpiredToken",
+                    "ExpiredTokenException",
+                }:
+                    return {"valid": False, "error": message}
                 return {"valid": False, "error": message}
-            return {"valid": False, "error": message}
-    sts = boto3.client(
+    async with _create_aio_client(
         "sts",
         region_name=region,
         aws_access_key_id=access_key_id,
         aws_secret_access_key=secret_access_key,
-    )
-    try:
-        sts.get_caller_identity()
-        return {"valid": True}
-    except (BotoCoreError, ClientError) as error:
-        code = error_code(error)
-        if code in {"AccessDenied", "Forbidden"}:
-            s3_client = create_s3_client(
-                S3Credentials(
-                    access_key_id=access_key_id, secret_access_key=secret_access_key, region=region
-                )
-            )
-            try:
-                s3_client.list_buckets()
-                return {"valid": True}
-            except (BotoCoreError, ClientError) as s3_error:
-                if error_code(s3_error) in {"AccessDenied", "Forbidden"}:
-                    return {"valid": True}
-                return {
-                    "valid": False,
-                    "error": "STS blocked by policy and S3 check failed: "
-                    f"{format_error_with_code(s3_error)}",
-                }
-        return {"valid": False, "error": format_error_with_code(error)}
+    ) as sts:
+        try:
+            await sts.get_caller_identity()
+            return {"valid": True}
+        except (BotoCoreError, ClientError) as error:
+            code = error_code(error)
+            if code in {"AccessDenied", "Forbidden"}:
+                async with create_s3_client(
+                    S3Credentials(
+                        access_key_id=access_key_id,
+                        secret_access_key=secret_access_key,
+                        region=region,
+                    )
+                ) as s3_client:
+                    try:
+                        await s3_client.list_buckets()
+                        return {"valid": True}
+                    except (BotoCoreError, ClientError) as s3_error:
+                        if error_code(s3_error) in {"AccessDenied", "Forbidden"}:
+                            return {"valid": True}
+                        return {
+                            "valid": False,
+                            "error": "STS blocked by policy and S3 check failed: "
+                            f"{format_error_with_code(s3_error)}",
+                        }
+            return {"valid": False, "error": format_error_with_code(error)}
 
 
-def list_user_buckets(client: Any) -> list[dict[str, str]]:
-    response = client.list_buckets()
+async def list_user_buckets(client: Any) -> list[dict[str, str]]:
+    response = await client.list_buckets()
     buckets: list[dict[str, str]] = []
     for bucket in response.get("Buckets", []):
         name = bucket.get("Name")
@@ -268,9 +282,9 @@ def list_user_buckets(client: Any) -> list[dict[str, str]]:
     return buckets
 
 
-def validate_bucket(client: Any, bucket: str) -> dict[str, str | bool]:
+async def validate_bucket(client: Any, bucket: str) -> dict[str, str | bool]:
     try:
-        client.head_bucket(Bucket=bucket)
+        await client.head_bucket(Bucket=bucket)
         return {"valid": True}
     except (BotoCoreError, ClientError) as error:
         code = error_code(error)

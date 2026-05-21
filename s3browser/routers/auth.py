@@ -166,7 +166,7 @@ def _build_rclone_profile(
 
 
 @router.post("/login")
-def login(body: LoginRequest, request: Request, response: Response) -> dict[str, bool]:
+async def login(body: LoginRequest, request: Request, response: Response) -> dict[str, bool]:
     if not body.password:
         raise HTTPException(status_code=400, detail="Password is required")
     if not secrets.compare_digest(body.password, get_login_password()):
@@ -183,14 +183,14 @@ def login(body: LoginRequest, request: Request, response: Response) -> dict[str,
 
 
 @router.post("/logout")
-def logout(response: Response) -> dict[str, bool]:
+async def logout(response: Response) -> dict[str, bool]:
     clear_bucket_region_cache()
     response.delete_cookie(AUTH_COOKIE_NAME, path="/")
     return {"success": True}
 
 
 @router.get("/status")
-def status(request: Request, response: Response) -> dict[str, bool]:
+async def status(request: Request, response: Response) -> dict[str, bool]:
     token = request.cookies.get(AUTH_COOKIE_NAME)
     authenticated = verify_auth_token(token)
     if not authenticated:
@@ -199,7 +199,7 @@ def status(request: Request, response: Response) -> dict[str, bool]:
 
 
 @router.post("/connections")
-def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
+async def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
     if not body.accessKeyId:
         raise HTTPException(status_code=400, detail="Access key ID is required")
     if not body.profileName or not body.profileName.strip():
@@ -223,7 +223,7 @@ def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
     if body.bucket:
         if not detected_region:
             try:
-                detected_region = get_bucket_region(
+                detected_region = await get_bucket_region(
                     body.accessKeyId, effective_secret, body.bucket, body.endpoint
                 )
             except RuntimeError as error:
@@ -238,9 +238,9 @@ def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
         endpoint=body.endpoint,
     )
     validation = (
-        validate_credentials(credentials)
+        await validate_credentials(credentials)
         if body.bucket
-        else validate_credentials_only(
+        else await validate_credentials_only(
             body.accessKeyId, effective_secret, detected_region, body.endpoint
         )
     )
@@ -274,7 +274,7 @@ def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
 
 
 @router.get("/connections")
-def list_connections(request: Request) -> dict[str, object]:
+async def list_connections(request: Request) -> dict[str, object]:
     if request.query_params.get("clear_region_cache") in {"1", "true"}:
         clear_bucket_region_cache()
     return {
@@ -283,7 +283,7 @@ def list_connections(request: Request) -> dict[str, object]:
 
 
 @router.get("/connections/{connection_id}")
-def get_connection(connection_id: int) -> dict[str, object]:
+async def get_connection(connection_id: int) -> dict[str, object]:
     if connection_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid connection ID")
     connection = get_connection_by_id(connection_id)
@@ -293,7 +293,7 @@ def get_connection(connection_id: int) -> dict[str, object]:
 
 
 @router.delete("/connections/{connection_id}")
-def delete_connection(connection_id: int) -> dict[str, bool]:
+async def delete_connection(connection_id: int) -> dict[str, bool]:
     if connection_id <= 0:
         raise HTTPException(status_code=400, detail="Valid connection ID is required")
     if not delete_connection_by_id(connection_id):
@@ -302,13 +302,13 @@ def delete_connection(connection_id: int) -> dict[str, bool]:
 
 
 @router.get("/buckets/{connection_id}")
-def list_buckets(
+async def list_buckets(
     request: Request, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     if request.query_params.get("clear_region_cache") in {"1", "true"}:
         clear_bucket_region_cache()
     try:
-        return {"buckets": list_user_buckets(context.client)}
+        return {"buckets": await list_user_buckets(context.client)}
     except Exception as error:
         message = str(error)
         lower = message.lower()
@@ -320,12 +320,12 @@ def list_buckets(
 
 
 @router.post("/validate-bucket/{connection_id}")
-def validate_bucket_for_connection(
+async def validate_bucket_for_connection(
     body: SelectBucketRequest, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     if not body.bucket:
         raise HTTPException(status_code=400, detail="Bucket name is required")
-    validation = validate_bucket(context.client, body.bucket)
+    validation = await validate_bucket(context.client, body.bucket)
     if not validation.get("valid"):
         raise HTTPException(
             status_code=400, detail=str(validation.get("error") or "Invalid bucket")
@@ -334,12 +334,12 @@ def validate_bucket_for_connection(
 
 
 @router.post("/test-connection")
-def test_connection(body: ConnectionRequest) -> dict[str, bool]:
+async def test_connection(body: ConnectionRequest) -> dict[str, bool]:
     if not body.accessKeyId or not body.secretAccessKey:
         raise HTTPException(status_code=400, detail="Missing required credentials")
     region = body.region or "us-east-1"
     validation = (
-        validate_credentials(
+        await validate_credentials(
             S3Credentials(
                 access_key_id=body.accessKeyId,
                 secret_access_key=body.secretAccessKey,
@@ -349,7 +349,7 @@ def test_connection(body: ConnectionRequest) -> dict[str, bool]:
             )
         )
         if body.bucket
-        else validate_credentials_only(
+        else await validate_credentials_only(
             body.accessKeyId, body.secretAccessKey, region, body.endpoint
         )
     )
@@ -361,7 +361,7 @@ def test_connection(body: ConnectionRequest) -> dict[str, bool]:
 
 
 @router.post("/connections/{connection_id}/export")
-def export_connection(
+async def export_connection(
     connection_id: int, body: ExportProfileRequest, response: Response
 ) -> dict[str, str]:
     if connection_id <= 0:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
@@ -63,7 +64,16 @@ def parse_bind_address(bind: str | None) -> BindAddress:
 
 
 def run_index(args: argparse.Namespace) -> int:
+    from s3browser.db import get_connection_by_id
     from s3browser.indexing import index_s3_bucket, reset_index
+    from s3browser.s3 import create_s3_context_from_connection
+
+    async def _run() -> None:
+        connection = get_connection_by_id(args.connection)
+        if connection is None:
+            raise RuntimeError(f"Connection {args.connection} not found in DB")
+        async with create_s3_context_from_connection(connection, args.bucket) as context:
+            await index_s3_bucket(context, batch_size=args.batch_size)
 
     try:
         with FileLock(INDEX_LOCK_FILE):
@@ -76,7 +86,7 @@ def run_index(args: argparse.Namespace) -> int:
                         file=sys.stderr,
                     )
                     return 2
-                index_s3_bucket(args.connection, bucket=args.bucket, batch_size=args.batch_size)
+                asyncio.run(_run())
     except Exception as error:
         print(error, file=sys.stderr)
         return 1
