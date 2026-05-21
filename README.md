@@ -17,6 +17,7 @@ A web-based file manager for AWS S3 and S3-compatible storage services (Backblaz
 - Auto-detect bucket region or specify manually
 - Support for custom S3-compatible endpoints
 - Save and manage multiple S3 connection profiles
+- Experimental full-text search across indexed bucket contents (`s3browser index`)
 
 ## Vendor Support
 
