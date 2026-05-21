@@ -5,9 +5,6 @@ A web-based file manager for AWS S3 and S3-compatible storage services (Backblaz
 > [!WARNING]
 > This is pre-release software (0.1.x). No compatibility between versions is guaranteed while the version remains 0.1.x. It has been used for basic operations with S3, Backblaze B2, and GarageHQ, but it is not extensively tested yet, particularly around error handling.
 
-> [!CAUTION]
-> This application is designed for use on **private networks** or **trusted devices** only. It uses a single shared password for authentication and is not intended for public internet deployment. Do not expose this application to untrusted networks.
-
 ## Features
 
 - Browse S3 buckets with folder navigation
