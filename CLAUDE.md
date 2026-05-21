@@ -1,3 +1,4 @@
+no backward compatibility of any kind because the project is private
 frontend code lives in `frontend/`; the Python package lives in `s3browser/` at the repo root
 use bun instead of npm for frontend commands
 use javascript for frontend logic and python for backend logic uv for Python backend commands

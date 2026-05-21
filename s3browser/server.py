@@ -121,7 +121,7 @@ async def api_auth_middleware(
             AUTH_COOKIE_NAME,
             create_auth_token(),
             httponly=True,
-            secure=os.environ.get("NODE_ENV") == "production",
+            secure=os.environ.get("ENVIRONMENT") == "production",
             samesite="lax",
             path="/",
         )

@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import secrets
+import threading
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -11,6 +12,7 @@ IV_LENGTH = 12
 AUTH_TAG_LENGTH = 16
 SALT_LENGTH = 32
 
+_state_lock = threading.Lock()
 _salt: bytes | None = None
 _encryption_key: bytes | None = None
 
@@ -19,8 +21,9 @@ def set_salt(salt: bytes) -> None:
     global _encryption_key, _salt
     if len(salt) != SALT_LENGTH:
         raise RuntimeError(f"Salt must be exactly {SALT_LENGTH} bytes")
-    _salt = salt
-    _encryption_key = None
+    with _state_lock:
+        _salt = salt
+        _encryption_key = None
 
 
 def generate_salt() -> bytes:
@@ -29,19 +32,20 @@ def generate_salt() -> bytes:
 
 def _get_encryption_key() -> bytes:
     global _encryption_key
-    if _encryption_key is not None:
+    with _state_lock:
+        if _encryption_key is not None:
+            return _encryption_key
+        if _salt is None:
+            raise RuntimeError("Encryption salt not initialized")
+        _encryption_key = hashlib.scrypt(
+            get_encryption_key_source().encode("utf-8"),
+            salt=_salt,
+            n=16384,
+            r=8,
+            p=1,
+            dklen=32,
+        )
         return _encryption_key
-    if _salt is None:
-        raise RuntimeError("Encryption salt not initialized")
-    _encryption_key = hashlib.scrypt(
-        get_encryption_key_source().encode("utf-8"),
-        salt=_salt,
-        n=16384,
-        r=8,
-        p=1,
-        dklen=32,
-    )
-    return _encryption_key
 
 
 def encrypt(plaintext: str) -> str:
