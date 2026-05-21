@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.11"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install backend dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Ruff lint
+        run: uv run ruff check
+
+      - name: Ruff format check
+        run: uv run ruff format --check
+
+      - name: BasedPyright
+        run: uv run basedpyright
+
+      - name: Pytest
+        run: uv run pytest
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Biome lint
+        run: bun run lint --reporter=rdjson
+        working-directory: frontend
+
+      - name: TypeScript
+        run: npx tsc
+        working-directory: frontend
+
+      - name: Frontend build
+        run: bun run build
+        working-directory: frontend
