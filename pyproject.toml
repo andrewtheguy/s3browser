@@ -65,3 +65,4 @@ typeCheckingMode = "standard"
 
 [tool.pytest.ini_options]
 norecursedirs = ["tmp"]
+pythonpath = ["."]

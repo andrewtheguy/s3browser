@@ -36,19 +36,19 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Install backend dependencies
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group dev --no-install-project
 
       - name: Ruff lint
-        run: uv run ruff check
+        run: uv run --no-sync ruff check
 
       - name: Ruff format check
-        run: uv run ruff format --check
+        run: uv run --no-sync ruff format --check
 
       - name: BasedPyright
-        run: uv run basedpyright
+        run: uv run --no-sync basedpyright
 
       - name: Pytest
-        run: uv run pytest
+        run: uv run --no-sync pytest
 
   frontend:
     name: Frontend
