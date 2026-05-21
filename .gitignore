@@ -33,7 +33,7 @@ dist-ssr
 dist-server/
 
 # Standalone build artifacts
-/s3browser
+
 server/cli/embeddedAssets.generated.ts
 
 # npm lock file (using bun.lockb instead)
