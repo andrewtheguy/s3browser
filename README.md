@@ -60,8 +60,7 @@ The image entrypoint runs `s3browser server --bind :8170`. Mount `~/.s3browser` 
 ```bash
 git clone https://github.com/andrewtheguy/s3browser.git
 cd s3browser
-bun --cwd frontend install
-bun --cwd frontend run build
+(cd frontend && bun install && bun run build)
 uv tool install .
 ```
 
@@ -88,7 +87,7 @@ s3browser server
 ### Installation
 
 ```bash
-bun --cwd frontend install
+(cd frontend && bun install)
 uv sync
 ```
 
@@ -142,14 +141,22 @@ The encryption key is intentionally excluded — keep it in `~/.s3browser/encryp
 
 ### Development
 
-Start the backend and frontend in two terminals:
+Run both servers from the repo root with one command:
+
+```bash
+make dev
+```
+
+That spawns `uv run s3browser server --bind localhost:3001 --reload` and the Vite dev server in `frontend/` concurrently; Ctrl-C tears down both.
+
+If you prefer two terminals:
 
 ```bash
 # Terminal 1: FastAPI backend with reload
 uv run s3browser server --bind localhost:3001 --reload
 
 # Terminal 2: Vite dev server
-bun --cwd frontend run dev
+cd frontend && bun run dev
 ```
 
 The frontend runs on `http://localhost:5173` and proxies API requests to the backend on `http://localhost:3001`.
@@ -159,11 +166,10 @@ The Vite dev proxy is configured for backend port `3001`; if you run the backend
 ### Production Build And Tool Install
 
 ```bash
-bun --cwd frontend run build
-uv build --out-dir dist-python
+make build
 ```
 
-`bun --cwd frontend run build` writes the Vite frontend to `dist/` (at the repo root, where the Python wheel picks it up). `uv build` then produces Python package artifacts in `dist-python/`. The wheel includes the current `dist/` frontend assets so an installed `s3browser` command can serve the full app.
+This runs `bun run build` in `frontend/` (writing the Vite output to `dist/` at the repo root) and then `uv build --out-dir dist-python`. The wheel includes the current `dist/` frontend assets so an installed `s3browser` command can serve the full app.
 
 Install the command from the current checkout with uv:
 
