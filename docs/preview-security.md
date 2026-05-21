@@ -11,7 +11,7 @@ Preview functionality is implemented in:
 - `src/components/PreviewDialog/PreviewBody.tsx`
 - `src/components/PreviewDialog/TextPreview.tsx`
 - `src/utils/previewUtils.ts`
-- `server/routes/download.ts`
+- `s3browser/routers/download.py`
 
 ## Client-Side Controls
 

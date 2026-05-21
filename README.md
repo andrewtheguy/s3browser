@@ -31,7 +31,31 @@ Current vendor detection (based on endpoint):
 
 Object encryption reporting varies by vendor. If the object metadata does not include encryption fields, the UI shows `None` for AWS S3 and Backblaze B2, and `Unknown` for other vendors to avoid false positives. This list is intended to grow as vendor-specific behavior is documented.
 
-## Install From Source
+## Install
+
+Each manual release publishes a Python wheel (with the frontend assets embedded) and a multi-arch Docker image to GitHub Container Registry.
+
+### From a released wheel
+
+Grab `s3browser-<version>-py3-none-any.whl` from the [Releases](https://github.com/andrewtheguy/s3browser/releases) page and install it with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install ./s3browser-<version>-py3-none-any.whl
+s3browser server
+```
+
+### From Docker
+
+```bash
+docker pull ghcr.io/andrewtheguy/s3browser:latest
+docker run --rm -p 8170:8170 \
+  -v "$HOME/.s3browser:/root/.s3browser" \
+  ghcr.io/andrewtheguy/s3browser:latest
+```
+
+The image entrypoint runs `s3browser server --bind :8170`. Mount `~/.s3browser` so the SQLite DB, encryption key, and login password persist between runs.
+
+### From source
 
 ```bash
 git clone https://github.com/andrewtheguy/s3browser.git

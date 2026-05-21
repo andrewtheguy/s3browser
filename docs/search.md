@@ -41,8 +41,8 @@ Keys, sizes, last-modified, and etags are stored unencrypted in the local SQLite
 
 ## Source pointers
 
-- Whitelist + gate: `server/config/searchWhitelist.ts`
-- Schema + upsert/sweep/search helpers: `server/db/index.ts`
-- API routes: `server/routes/objects.ts`
-- Indexer CLI: `scripts/index-s3.ts`
+- Whitelist + gate: `s3browser/config.py` (`get_search_whitelist_hosts`)
+- Schema + upsert/sweep/search helpers: `s3browser/db.py`
+- API routes: `s3browser/routers/objects.py`
+- Indexer CLI: `s3browser/cli.py` (`index` subcommand), `s3browser/indexing.py`
 - Search page + Toolbar button: `src/pages/SearchPage.tsx`, `src/components/Toolbar/Toolbar.tsx`
