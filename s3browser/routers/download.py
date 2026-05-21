@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Any
+from collections.abc import AsyncIterator, Awaitable
+from inspect import isawaitable
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -17,6 +18,7 @@ from s3browser.utils import (
 )
 
 router = APIRouter(prefix="/api/download", tags=["download"])
+STREAM_CHUNK_SIZE = 64 * 1024
 
 
 @router.get("/{connection_id}/{bucket}/url")
@@ -61,13 +63,35 @@ async def presigned_url(
     return {"url": url}
 
 
+async def _await_if_needed(result: object) -> None:
+    if isawaitable(result):
+        await cast(Awaitable[object], result)
+
+
+async def _call_body_callback(body: Any, name: str) -> bool:
+    callback = getattr(body, name, None)
+    if not callable(callback):
+        return False
+    await _await_if_needed(callback())
+    return True
+
+
+async def _release_body(body: Any) -> None:
+    if await _call_body_callback(body, "release"):
+        await _call_body_callback(body, "wait_for_close")
+        return
+    await _call_body_callback(body, "close")
+
+
 async def _iter_body(body: Any) -> AsyncIterator[bytes]:
-    async with body as stream:
+    try:
         while True:
-            chunk = await stream.read(64 * 1024)
+            chunk = await body.read(STREAM_CHUNK_SIZE)
             if not chunk:
                 break
             yield chunk
+    finally:
+        await _release_body(body)
 
 
 @router.get("/{connection_id}/{bucket}/object")
