@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -297,9 +298,14 @@ async def search_objects(
 
 async def _seed_test_items(client: Any, bucket: str, prefix: str) -> None:
     width = len(str(TEST_SEED_COUNT))
-    for index in range(TEST_SEED_COUNT):
-        key = f"{prefix}item-{index + 1:0{width}d}.txt"
-        await client.put_object(Bucket=bucket, Key=key, Body=b"", ContentType="text/plain")
+    semaphore = asyncio.Semaphore(TEST_SEED_CONCURRENCY)
+
+    async def _put(key: str) -> None:
+        async with semaphore:
+            await client.put_object(Bucket=bucket, Key=key, Body=b"", ContentType="text/plain")
+
+    tasks = [_put(f"{prefix}item-{index + 1:0{width}d}.txt") for index in range(TEST_SEED_COUNT)]
+    await asyncio.gather(*tasks)
 
 
 @router.post("/{connection_id}/{bucket}/seed-test-items")
