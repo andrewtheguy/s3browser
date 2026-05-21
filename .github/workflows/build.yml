@@ -185,3 +185,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: gh release edit "${{ needs.setup.outputs.release_tag }}" --draft=false
+
+  deploy-pages:
+    if: github.ref_name == 'main'
+    needs: create-release
+    uses: ./.github/workflows/pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
