@@ -513,6 +513,7 @@ def search_object_index(
     sort: str = "key",
     direction: str = "asc",
     prefix: str = "",
+    extension: str = "",
 ) -> dict[str, Any]:
     conn = get_index_db()
     like_pattern = f"%{escape_like_pattern(query)}%"
@@ -529,6 +530,9 @@ def search_object_index(
     if prefix:
         where_parts.append("key LIKE ? ESCAPE '\\'")
         params.append(f"{escape_like_pattern(prefix)}%")
+    if extension:
+        where_parts.append("key LIKE ? ESCAPE '\\'")
+        params.append(f"%.{escape_like_pattern(extension)}")
     where_sql = " AND ".join(where_parts)
     sort_key = "last_modified" if sort == "last_modified" else "key"
     sort_dir = "desc" if direction == "desc" else "asc"

@@ -267,6 +267,7 @@ async def search_objects(
     limit, offset = _parse_limit_offset(request)
     sort = "last_modified" if request.query_params.get("sort") == "last_modified" else "key"
     direction = "desc" if request.query_params.get("dir") == "desc" else "asc"
+    extension = request.query_params.get("ext", "").strip().lstrip(".")
     result = search_object_index(
         status.id,
         query,
@@ -275,6 +276,7 @@ async def search_objects(
         sort=sort,
         direction=direction,
         prefix=request.query_params.get("prefix", ""),
+        extension=extension,
     )
     objects = [
         {

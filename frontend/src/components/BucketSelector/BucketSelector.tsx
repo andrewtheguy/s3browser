@@ -31,6 +31,7 @@ export function BucketSelector({ connectionId }: BucketSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const didClearRegionCacheRef = useRef(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: react-to-change idiom; reset the ref when connectionId changes
   useEffect(() => {
     didClearRegionCacheRef.current = false;
   }, [connectionId]);

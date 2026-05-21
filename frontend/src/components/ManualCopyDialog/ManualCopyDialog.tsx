@@ -20,6 +20,7 @@ interface ManualCopyDialogProps {
 export function ManualCopyDialog({ open, onOpenChange, url, title }: ManualCopyDialogProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-focus/select when a new url appears in the open dialog
   useEffect(() => {
     if (!open) return;
     const id = window.setTimeout(() => {
