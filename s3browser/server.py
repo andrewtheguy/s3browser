@@ -153,12 +153,12 @@ class SPAStaticFiles(StaticFiles):
 
 
 def _static_directory() -> Path | None:
-    local_dist = Path.cwd() / "dist"
-    if (local_dist / "index.html").is_file():
-        return local_dist
     package_static = Path(__file__).resolve().parent / "static"
     if (package_static / "index.html").is_file():
         return package_static
+    local_dist = Path.cwd() / "dist"
+    if (local_dist / "index.html").is_file():
+        return local_dist
     return None
 
 

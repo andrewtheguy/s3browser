@@ -302,7 +302,11 @@ def delete_connection(connection_id: int) -> dict[str, bool]:
 
 
 @router.get("/buckets/{connection_id}")
-def list_buckets(context: S3Context = Depends(get_s3_context)) -> dict[str, object]:
+def list_buckets(
+    request: Request, context: S3Context = Depends(get_s3_context)
+) -> dict[str, object]:
+    if request.query_params.get("clear_region_cache") in {"1", "true"}:
+        clear_bucket_region_cache()
     try:
         return {"buckets": list_user_buckets(context.client)}
     except Exception as error:
@@ -357,12 +361,15 @@ def test_connection(body: ConnectionRequest) -> dict[str, bool]:
 
 
 @router.post("/connections/{connection_id}/export")
-def export_connection(connection_id: int, body: ExportProfileRequest) -> dict[str, str]:
+def export_connection(
+    connection_id: int, body: ExportProfileRequest, response: Response
+) -> dict[str, str]:
     if connection_id <= 0:
         raise HTTPException(status_code=400, detail="Valid connection ID is required")
     connection = get_connection_by_id(connection_id)
     if connection is None:
         raise HTTPException(status_code=404, detail="Connection not found")
+    response.headers["Cache-Control"] = "no-store"
     secret = decrypt_connection_secret_key(connection)
     profile_name = _sanitize_profile_name(connection.profile_name, f"connection-{connection.id}")
     filename_base = _sanitize_filename(profile_name)

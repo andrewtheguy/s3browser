@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
-import posixpath
 import re
 from datetime import UTC, datetime
 from urllib.parse import quote
@@ -38,12 +37,11 @@ def validate_object_key(value: object, *, message: str = "Object key is required
         )
     if value.startswith("/"):
         raise HTTPException(status_code=400, detail="Absolute paths not allowed")
-    normalized = posixpath.normpath(value)
-    if normalized.startswith("..") or normalized in {".", ""}:
+    if any(segment == ".." for segment in value.split("/")):
         raise HTTPException(status_code=400, detail="Directory traversal not allowed")
-    if len(normalized.encode("utf-8")) > 1024:
+    if len(value.encode("utf-8")) > 1024:
         raise HTTPException(status_code=400, detail="Key exceeds maximum length of 1024 bytes")
-    return normalized
+    return value
 
 
 def validate_copy_key(value: str, label: str) -> None:
