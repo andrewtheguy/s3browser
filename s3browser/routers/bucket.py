@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 
+from s3browser.async_s3 import S3Error
 from s3browser.dependencies import get_s3_context
 from s3browser.s3 import S3Context, require_bucket
 from s3browser.utils import isoformat_z
@@ -7,18 +8,16 @@ from s3browser.utils import isoformat_z
 router = APIRouter(prefix="/api/bucket", tags=["bucket"])
 
 
-def _is_encryption_not_supported(error: object) -> bool:
-    text = str(error).lower()
-    return "notimplemented" in text or "not implemented" in text or "unsupportedoperation" in text
+def _is_encryption_not_supported(error: S3Error) -> bool:
+    return error.code in {"NotImplemented", "UnsupportedOperation"}
 
 
-def _is_lifecycle_not_configured(error: object) -> bool:
-    text = str(error).lower()
-    return "nosuchlifecycleconfiguration" in text or "no such lifecycle configuration" in text
+def _is_lifecycle_not_configured(error: S3Error) -> bool:
+    return error.code == "NoSuchLifecycleConfiguration"
 
 
 @router.get("/{connection_id}/{bucket}/info")
-def bucket_info(context: S3Context = Depends(get_s3_context)) -> dict[str, object]:
+async def bucket_info(context: S3Context = Depends(get_s3_context)) -> dict[str, object]:
     bucket = require_bucket(context)
     client = context.client
     result: dict[str, object] = {
@@ -29,72 +28,66 @@ def bucket_info(context: S3Context = Depends(get_s3_context)) -> dict[str, objec
         "lifecycleRules": [],
     }
     try:
-        versioning = client.get_bucket_versioning(Bucket=bucket)
+        versioning = await client.get_bucket_versioning(bucket)
         result["versioning"] = {
-            "status": versioning.get("Status"),
-            "mfaDelete": versioning.get("MFADelete"),
+            "status": versioning.status,
+            "mfaDelete": versioning.mfa_delete,
         }
-    except Exception as error:
-        print(f"Failed to get bucket versioning: {error}")
+    except S3Error as error:
+        if error.code != "VersioningNotConfigured":
+            print(f"Failed to get bucket versioning: {error}")
     try:
-        encryption = client.get_bucket_encryption(Bucket=bucket)
-        rules = encryption.get("ServerSideEncryptionConfiguration", {}).get("Rules", [])
-        if rules:
-            default_rule = rules[0].get("ApplyServerSideEncryptionByDefault", {})
-            if default_rule:
-                result["encryption"] = {
-                    "algorithm": default_rule.get("SSEAlgorithm"),
-                    "kmsKeyId": default_rule.get("KMSMasterKeyID"),
-                }
-    except Exception as error:
-        text = str(error)
-        if "ServerSideEncryptionConfigurationNotFoundError" in text:
+        encryption = await client.get_bucket_encryption(bucket)
+        if encryption.rules:
+            first = encryption.rules[0]
+            result["encryption"] = {
+                "algorithm": first.sse_algorithm,
+                "kmsKeyId": first.kms_master_key_id,
+            }
+    except S3Error as error:
+        if error.code == "ServerSideEncryptionConfigurationNotFoundError":
             pass
         elif _is_encryption_not_supported(error):
             result["encryptionError"] = "Not supported by this storage provider"
         else:
             print(f"Failed to get bucket encryption: {error}")
-            result["encryptionError"] = text
+            result["encryptionError"] = str(error)
     try:
-        lifecycle = client.get_bucket_lifecycle_configuration(Bucket=bucket)
+        rules = await client.get_bucket_lifecycle_configuration(bucket)
         rules_out: list[dict[str, object]] = []
-        for rule in lifecycle.get("Rules", []):
-            expiration = rule.get("Expiration")
-            transitions = rule.get("Transitions")
-            noncurrent = rule.get("NoncurrentVersionExpiration")
-            abort_upload = rule.get("AbortIncompleteMultipartUpload")
+        for rule in rules:
             item: dict[str, object] = {
-                "id": rule.get("ID"),
-                "status": rule.get("Status") or "Unknown",
-                "prefix": rule.get("Filter", {}).get("Prefix"),
+                "id": rule.id,
+                "status": rule.status or "Unknown",
+                "prefix": rule.filter_prefix or rule.prefix,
             }
-            if expiration:
+            if rule.expiration:
                 item["expiration"] = {
-                    "days": expiration.get("Days"),
-                    "date": isoformat_z(expiration.get("Date")),
-                    "expiredObjectDeleteMarker": expiration.get("ExpiredObjectDeleteMarker"),
+                    "days": rule.expiration.days,
+                    "date": isoformat_z(rule.expiration.date),
+                    "expiredObjectDeleteMarker": rule.expiration.expired_object_delete_marker,
                 }
-            if transitions:
+            if rule.transitions:
                 item["transitions"] = [
                     {
-                        "days": t.get("Days"),
-                        "date": isoformat_z(t.get("Date")),
-                        "storageClass": t.get("StorageClass") or "Unknown",
+                        "days": t.days,
+                        "date": isoformat_z(t.date),
+                        "storageClass": t.storage_class or "Unknown",
                     }
-                    for t in transitions
+                    for t in rule.transitions
                 ]
-            if noncurrent:
+            if rule.noncurrent_expiration_days is not None:
                 item["noncurrentVersionExpiration"] = {
-                    "days": noncurrent.get("NoncurrentDays"),
-                    "newerNoncurrentVersions": noncurrent.get("NewerNoncurrentVersions"),
+                    "days": rule.noncurrent_expiration_days,
+                    "newerNoncurrentVersions": None,
                 }
-            if abort_upload:
+            if rule.abort_incomplete_multipart_days is not None:
                 item["abortIncompleteMultipartUpload"] = {
-                    "daysAfterInitiation": abort_upload.get("DaysAfterInitiation")
+                    "daysAfterInitiation": rule.abort_incomplete_multipart_days
                 }
             rules_out.append(item)
         result["lifecycleRules"] = rules_out
-    except Exception as error:
+    except S3Error as error:
         if not _is_lifecycle_not_configured(error):
             print(f"Failed to get bucket lifecycle: {error}")
             result["lifecycleError"] = str(error)

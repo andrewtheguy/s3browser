@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from s3browser.async_s3 import KeyToDelete, MultipartPart, S3Client, S3Error
 from s3browser.config import SEARCH_WHITELIST_ENV_VAR, get_search_whitelist_hosts
 from s3browser.db import get_index_status, search_object_index
 from s3browser.dependencies import get_s3_context
@@ -123,7 +123,7 @@ def _object_response(
 
 
 @router.get("/{connection_id}/{bucket}")
-def list_objects(
+async def list_objects(
     request: Request, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     bucket = require_bucket(context)
@@ -133,97 +133,91 @@ def list_objects(
     objects: list[dict[str, object]] = []
     if include_versions:
         markers = decode_version_token(continuation_token)
-        params: dict[str, object] = {
-            "Bucket": bucket,
-            "Prefix": prefix,
-            "Delimiter": "/",
-            "MaxKeys": 1000,
-        }
-        if markers.get("KeyMarker"):
-            params["KeyMarker"] = markers["KeyMarker"]
-        if markers.get("VersionIdMarker"):
-            params["VersionIdMarker"] = markers["VersionIdMarker"]
         try:
-            response = context.client.list_object_versions(**params)
-        except Exception as error:
+            response = await context.client.list_object_versions(
+                bucket,
+                prefix=prefix,
+                delimiter="/",
+                max_keys=1000,
+                key_marker=markers.get("KeyMarker"),
+                version_id_marker=markers.get("VersionIdMarker"),
+            )
+        except S3Error as error:
             if is_access_denied(error):
                 raise HTTPException(status_code=403, detail="Access denied") from error
-            if "NotImplemented" in str(error):
+            if error.code == "NotImplemented":
                 raise HTTPException(
                     status_code=501,
                     detail={"error": "Versioning not supported", "code": "NotImplemented"},
                 ) from error
             print(f"Failed to list object versions: {error}")
             raise HTTPException(status_code=500, detail="Internal server error") from error
-        for item in response.get("CommonPrefixes", []):
-            key = item.get("Prefix")
-            if key:
-                objects.append(_object_response(str(key), is_folder=True))
-        for item in response.get("Versions", []):
-            key = item.get("Key")
-            if key and key != prefix:
+        for common_prefix in response.common_prefixes:
+            objects.append(_object_response(common_prefix, is_folder=True))
+        for version in response.versions:
+            if not version.key or version.key == prefix:
+                continue
+            if version.is_delete_marker:
                 objects.append(
                     _object_response(
-                        str(key),
-                        size=item.get("Size"),
-                        last_modified=item.get("LastModified"),
-                        is_folder=False,
-                        etag=item.get("ETag"),
-                        versionId=item.get("VersionId"),
-                        isLatest=item.get("IsLatest"),
+                        version.key,
+                        last_modified=version.last_modified,
+                        is_folder=version.key.endswith("/"),
+                        versionId=version.version_id,
+                        isLatest=version.is_latest,
+                        isDeleteMarker=True,
                     )
                 )
-        for item in response.get("DeleteMarkers", []):
-            key = item.get("Key")
-            if key and key != prefix:
-                key_str = str(key)
+            else:
                 objects.append(
                     _object_response(
-                        key_str,
-                        last_modified=item.get("LastModified"),
-                        is_folder=key_str.endswith("/"),
-                        versionId=item.get("VersionId"),
-                        isLatest=item.get("IsLatest"),
-                        isDeleteMarker=True,
+                        version.key,
+                        size=version.size,
+                        last_modified=version.last_modified,
+                        is_folder=False,
+                        etag=version.etag,
+                        versionId=version.version_id,
+                        isLatest=version.is_latest,
                     )
                 )
         return {
             "objects": objects,
             "continuationToken": encode_version_token(
-                response.get("NextKeyMarker"), response.get("NextVersionIdMarker")
+                response.next_key_marker, response.next_version_id_marker
             ),
-            "isTruncated": bool(response.get("IsTruncated")),
+            "isTruncated": response.is_truncated,
         }
-    params = {"Bucket": bucket, "Prefix": prefix, "Delimiter": "/", "MaxKeys": 1000}
-    if continuation_token:
-        params["ContinuationToken"] = continuation_token
     try:
-        response = context.client.list_objects_v2(**params)
-    except Exception as error:
+        response = await context.client.list_objects_v2(
+            bucket,
+            prefix=prefix,
+            delimiter="/",
+            max_keys=1000,
+            continuation_token=continuation_token,
+        )
+    except S3Error as error:
         if is_access_denied(error):
             raise HTTPException(status_code=403, detail="Access denied") from error
         print(f"Failed to list objects: {error}")
         raise HTTPException(status_code=500, detail="Internal server error") from error
-    for item in response.get("CommonPrefixes", []):
-        key = item.get("Prefix")
-        if key:
-            objects.append(_object_response(str(key), is_folder=True))
-    for item in response.get("Contents", []):
-        key = item.get("Key")
-        if key and key != prefix:
-            objects.append(
-                _object_response(
-                    str(key),
-                    size=item.get("Size"),
-                    last_modified=item.get("LastModified"),
-                    is_folder=False,
-                    etag=item.get("ETag"),
-                )
+    for common_prefix in response.common_prefixes:
+        objects.append(_object_response(common_prefix, is_folder=True))
+    for item in response.contents:
+        if not item.key or item.key == prefix:
+            continue
+        objects.append(
+            _object_response(
+                item.key,
+                size=item.size,
+                last_modified=item.last_modified,
+                is_folder=False,
+                etag=item.etag,
             )
+        )
     return {
         "objects": objects,
-        "continuationToken": response.get("NextContinuationToken"),
-        "isTruncated": bool(response.get("IsTruncated")),
+        "continuationToken": response.next_continuation_token,
+        "isTruncated": response.is_truncated,
     }
 
 
@@ -295,15 +289,15 @@ def search_objects(
     }
 
 
-def _seed_test_items(client: Any, bucket: str, prefix: str) -> None:
+async def _seed_test_items(client: S3Client, bucket: str, prefix: str) -> None:
     width = len(str(TEST_SEED_COUNT))
     for index in range(TEST_SEED_COUNT):
         key = f"{prefix}item-{index + 1:0{width}d}.txt"
-        client.put_object(Bucket=bucket, Key=key, Body=b"", ContentType="text/plain")
+        await client.put_object(bucket, key, b"", content_type="text/plain")
 
 
 @router.post("/{connection_id}/{bucket}/seed-test-items")
-def seed_test_items(
+async def seed_test_items(
     body: SeedTestItemsRequest, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     if os.environ.get("FEATURE_SEED_TEST_ITEMS") not in {"true", "1"}:
@@ -311,45 +305,39 @@ def seed_test_items(
     if not body.prefix:
         raise HTTPException(status_code=400, detail="Prefix is required")
     prefix = sanitize_folder_path(body.prefix)
-    _seed_test_items(context.client, require_bucket(context), prefix)
+    await _seed_test_items(context.client, require_bucket(context), prefix)
     return {"created": TEST_SEED_COUNT, "prefix": prefix}
 
 
 @router.delete("/{connection_id}/{bucket}")
-def delete_object(
+async def delete_object(
     request: Request, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, bool]:
     bucket = require_bucket(context)
     key = validate_object_key(request.query_params.get("key"))
-    params: dict[str, object] = {"Bucket": bucket, "Key": key}
     version_id = sanitize_version_id(request.query_params.get("versionId"))
-    if version_id:
-        params["VersionId"] = version_id
-    context.client.delete_object(**params)
+    await context.client.delete_object(bucket, key, version_id=version_id)
     return {"success": True}
 
 
 @router.post("/{connection_id}/{bucket}/batch-delete")
-def batch_delete(
+async def batch_delete(
     body: BatchDeleteRequest, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     bucket = require_bucket(context)
     if not body.keys:
         raise HTTPException(status_code=400, detail="Keys must be a non-empty array")
-    file_keys = [
-        {
-            "Key": entry.key.strip(),
-            **(
-                {"VersionId": version_id}
-                if (version_id := sanitize_version_id(entry.versionId))
-                else {}
-            ),
-        }
-        for entry in body.keys
-        if entry.key
-        and entry.key.strip()
-        and (not entry.key.strip().endswith("/") or sanitize_version_id(entry.versionId))
-    ]
+    file_keys: list[KeyToDelete] = []
+    for entry in body.keys:
+        if not entry.key:
+            continue
+        key = entry.key.strip()
+        if not key:
+            continue
+        version_id = sanitize_version_id(entry.versionId)
+        if key.endswith("/") and not version_id:
+            continue
+        file_keys.append(KeyToDelete(key=key, version_id=version_id))
     if not file_keys:
         raise HTTPException(status_code=400, detail="No valid file keys provided")
     if len(file_keys) > MAX_BATCH_OPERATIONS:
@@ -357,40 +345,34 @@ def batch_delete(
             status_code=400,
             detail=f"Cannot delete more than {MAX_BATCH_OPERATIONS} objects at once",
         )
-    response = context.client.delete_objects(
-        Bucket=bucket, Delete={"Objects": file_keys, "Quiet": False}
-    )
-    return {
-        "deleted": [
-            {
-                "key": item.get("Key"),
-                **(
-                    {"versionId": item.get("VersionId") or item.get("DeleteMarkerVersionId")}
-                    if item.get("VersionId") or item.get("DeleteMarkerVersionId")
-                    else {}
-                ),
-            }
-            for item in response.get("Deleted", [])
-            if item.get("Key")
-        ],
-        "errors": [
-            {"key": item.get("Key"), "message": item.get("Message") or "Unknown error"}
-            for item in response.get("Errors", [])
-            if item.get("Key")
-        ],
-    }
+    result = await context.client.delete_objects(bucket, file_keys, quiet=False)
+    deleted: list[dict[str, object]] = []
+    for entry in result.deleted:
+        if not entry.key:
+            continue
+        item: dict[str, object] = {"key": entry.key}
+        effective_version = entry.version_id or entry.delete_marker_version_id
+        if effective_version:
+            item["versionId"] = effective_version
+        deleted.append(item)
+    errors = [
+        {"key": err.key, "message": err.message or "Unknown error"}
+        for err in result.errors
+        if err.key
+    ]
+    return {"deleted": deleted, "errors": errors}
 
 
 @router.post("/{connection_id}/{bucket}/folder")
-def create_folder(
+async def create_folder(
     body: FolderRequest, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     folder_path = sanitize_folder_path(body.path)
-    context.client.put_object(
-        Bucket=require_bucket(context),
-        Key=folder_path,
-        Body=b"",
-        ContentType="application/x-directory",
+    await context.client.put_object(
+        require_bucket(context),
+        folder_path,
+        b"",
+        content_type="application/x-directory",
     )
     return {"success": True, "key": folder_path}
 
@@ -400,63 +382,59 @@ def _copy_source(bucket: str, key: str, version_id: str | None = None) -> str:
     return f"{source}?versionId={quote(version_id, safe='')}" if version_id else source
 
 
-def _copy_object_multipart(
-    client: Any,
+async def _copy_object_multipart(
+    client: S3Client,
     bucket: str,
     source_key: str,
     destination_key: str,
     size: int,
     version_id: str | None,
 ) -> None:
-    create_response = client.create_multipart_upload(Bucket=bucket, Key=destination_key)
-    upload_id = create_response.get("UploadId")
-    if not upload_id:
-        raise RuntimeError("Failed to initiate multipart upload")
+    upload_id = await client.create_multipart_upload(bucket, destination_key)
     try:
-        parts: list[dict[str, object]] = []
+        parts: list[MultipartPart] = []
         total_parts = (size + COPY_PART_SIZE - 1) // COPY_PART_SIZE
         for part_number in range(1, total_parts + 1):
             start = (part_number - 1) * COPY_PART_SIZE
             end = min(part_number * COPY_PART_SIZE - 1, size - 1)
-            response = client.upload_part_copy(
-                Bucket=bucket,
-                Key=destination_key,
-                CopySource=_copy_source(bucket, source_key, version_id),
-                UploadId=upload_id,
-                PartNumber=part_number,
-                CopySourceRange=f"bytes={start}-{end}",
+            copy_result = await client.upload_part_copy(
+                bucket,
+                destination_key,
+                upload_id=upload_id,
+                part_number=part_number,
+                copy_source=_copy_source(bucket, source_key, version_id),
+                copy_source_range=f"bytes={start}-{end}",
             )
-            etag = response.get("CopyPartResult", {}).get("ETag")
-            if not etag:
+            if not copy_result.etag:
                 raise RuntimeError(f"Failed to copy part {part_number}")
-            parts.append({"ETag": etag, "PartNumber": part_number})
-        client.complete_multipart_upload(
-            Bucket=bucket, Key=destination_key, UploadId=upload_id, MultipartUpload={"Parts": parts}
+            parts.append(MultipartPart(part_number=part_number, etag=copy_result.etag))
+        await client.complete_multipart_upload(
+            bucket, destination_key, upload_id=upload_id, parts=parts
         )
     except Exception:
-        client.abort_multipart_upload(Bucket=bucket, Key=destination_key, UploadId=upload_id)
+        try:
+            await client.abort_multipart_upload(bucket, destination_key, upload_id=upload_id)
+        except Exception as abort_error:
+            print(f"Failed to abort multipart copy: {abort_error}")
         raise
 
 
-def _copy_object(
-    client: Any,
+async def _copy_object(
+    client: S3Client,
     bucket: str,
     source_key: str,
     destination_key: str,
     version_id: str | None = None,
 ) -> None:
-    head_params: dict[str, object] = {"Bucket": bucket, "Key": source_key}
-    if version_id:
-        head_params["VersionId"] = version_id
-    head = client.head_object(**head_params)
-    size = int(head.get("ContentLength") or 0)
+    head = await client.head_object(bucket, source_key, version_id=version_id)
+    size = head.content_length or 0
     if size > MULTIPART_COPY_THRESHOLD:
-        _copy_object_multipart(client, bucket, source_key, destination_key, size, version_id)
+        await _copy_object_multipart(client, bucket, source_key, destination_key, size, version_id)
     else:
-        client.copy_object(
-            Bucket=bucket,
-            Key=destination_key,
-            CopySource=_copy_source(bucket, source_key, version_id),
+        await client.copy_object(
+            bucket,
+            destination_key,
+            copy_source=_copy_source(bucket, source_key, version_id),
         )
 
 
@@ -473,9 +451,11 @@ def _validate_copy_request(source_key: str | None, destination_key: str | None) 
 
 
 @router.post("/{connection_id}/{bucket}/copy")
-def copy_object(body: CopyRequest, context: S3Context = Depends(get_s3_context)) -> dict[str, bool]:
+async def copy_object(
+    body: CopyRequest, context: S3Context = Depends(get_s3_context)
+) -> dict[str, bool]:
     source_key, destination_key = _validate_copy_request(body.sourceKey, body.destinationKey)
-    _copy_object(
+    await _copy_object(
         context.client,
         require_bucket(context),
         source_key,
@@ -515,7 +495,7 @@ def _validate_batch_operations(
 
 
 @router.post("/{connection_id}/{bucket}/batch-copy")
-def batch_copy(
+async def batch_copy(
     body: BatchCopyRequest, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     operations = _validate_batch_operations(body.operations, "copy")
@@ -524,7 +504,7 @@ def batch_copy(
     errors: list[dict[str, str]] = []
     for operation in operations:
         try:
-            _copy_object(
+            await _copy_object(
                 context.client,
                 bucket,
                 operation.sourceKey,
@@ -540,21 +520,18 @@ def batch_copy(
 
 
 @router.post("/{connection_id}/{bucket}/move")
-def move_object(
+async def move_object(
     body: CopyRequest, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     source_key, destination_key = _validate_copy_request(body.sourceKey, body.destinationKey)
     bucket = require_bucket(context)
     version_id = sanitize_version_id(body.versionId)
-    _copy_object(context.client, bucket, source_key, destination_key, version_id)
+    await _copy_object(context.client, bucket, source_key, destination_key, version_id)
     try:
-        params: dict[str, object] = {"Bucket": bucket, "Key": source_key}
-        if version_id:
-            params["VersionId"] = version_id
-        context.client.delete_object(**params)
+        await context.client.delete_object(bucket, source_key, version_id=version_id)
     except Exception as delete_error:
         try:
-            context.client.delete_object(Bucket=bucket, Key=destination_key)
+            await context.client.delete_object(bucket, destination_key)
         except Exception as rollback_error:
             print(f"Move rollback failed: {rollback_error}")
             raise HTTPException(
@@ -581,7 +558,7 @@ def move_object(
 
 
 @router.post("/{connection_id}/{bucket}/batch-move")
-def batch_move(
+async def batch_move(
     body: BatchCopyRequest, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     operations = _validate_batch_operations(body.operations, "move")
@@ -591,14 +568,13 @@ def batch_move(
     for operation in operations:
         version_id = sanitize_version_id(operation.versionId)
         try:
-            _copy_object(
+            await _copy_object(
                 context.client, bucket, operation.sourceKey, operation.destinationKey, version_id
             )
             try:
-                params: dict[str, object] = {"Bucket": bucket, "Key": operation.sourceKey}
-                if version_id:
-                    params["VersionId"] = version_id
-                context.client.delete_object(**params)
+                await context.client.delete_object(
+                    bucket, operation.sourceKey, version_id=version_id
+                )
                 successful.append(operation.sourceKey)
             except Exception as delete_error:
                 errors.append(
@@ -620,41 +596,40 @@ def batch_move(
 
 
 @router.get("/{connection_id}/{bucket}/metadata")
-def object_metadata(
+async def object_metadata(
     request: Request, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     bucket = require_bucket(context)
     key = validate_object_key(request.query_params.get("key"))
-    params: dict[str, object] = {"Bucket": bucket, "Key": key, "ChecksumMode": "ENABLED"}
     version_id = sanitize_version_id(request.query_params.get("versionId"))
-    if version_id:
-        params["VersionId"] = version_id
     try:
-        response = context.client.head_object(**params)
-    except Exception as error:
-        if "NotFound" in str(error) or "NoSuchKey" in str(error):
+        result = await context.client.head_object(
+            bucket, key, version_id=version_id, checksum_mode=True
+        )
+    except S3Error as error:
+        if error.code in {"NotFound", "NoSuchKey"} or error.status == 404:
             raise HTTPException(status_code=404, detail="Object not found") from error
         raise
     return {
         "key": key,
-        "size": response.get("ContentLength"),
-        "lastModified": isoformat_z(response.get("LastModified")),
-        "contentType": response.get("ContentType"),
-        "etag": response.get("ETag"),
-        "versionId": response.get("VersionId"),
-        "serverSideEncryption": response.get("ServerSideEncryption"),
-        "sseKmsKeyId": response.get("SSEKMSKeyId"),
-        "sseCustomerAlgorithm": response.get("SSECustomerAlgorithm"),
-        "storageClass": response.get("StorageClass"),
+        "size": result.content_length,
+        "lastModified": result.last_modified,
+        "contentType": result.content_type,
+        "etag": result.etag,
+        "versionId": result.version_id,
+        "serverSideEncryption": result.server_side_encryption,
+        "sseKmsKeyId": result.sse_kms_key_id,
+        "sseCustomerAlgorithm": result.sse_customer_algorithm,
+        "storageClass": result.storage_class,
         "vendor": detect_s3_vendor(context.credentials.endpoint),
-        "cacheControl": response.get("CacheControl"),
-        "contentDisposition": response.get("ContentDisposition"),
-        "contentEncoding": response.get("ContentEncoding"),
-        "checksumSHA256": response.get("ChecksumSHA256"),
-        "checksumSHA1": response.get("ChecksumSHA1"),
-        "checksumCRC32": response.get("ChecksumCRC32"),
-        "checksumCRC32C": response.get("ChecksumCRC32C"),
-        "checksumCRC64NVME": response.get("ChecksumCRC64NVME"),
-        "checksumType": response.get("ChecksumType"),
-        "userMetadata": response.get("Metadata"),
+        "cacheControl": result.cache_control,
+        "contentDisposition": result.content_disposition,
+        "contentEncoding": result.content_encoding,
+        "checksumSHA256": result.checksum_sha256,
+        "checksumSHA1": result.checksum_sha1,
+        "checksumCRC32": result.checksum_crc32,
+        "checksumCRC32C": result.checksum_crc32c,
+        "checksumCRC64NVME": result.checksum_crc64nvme,
+        "checksumType": result.checksum_type,
+        "userMetadata": result.metadata,
     }

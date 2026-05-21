@@ -6,6 +6,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
+from s3browser.async_s3 import S3Error
 from s3browser.auth import AUTH_COOKIE_NAME, create_auth_token, verify_auth_token
 from s3browser.config import get_login_password
 from s3browser.db import (
@@ -199,7 +200,7 @@ def status(request: Request, response: Response) -> dict[str, bool]:
 
 
 @router.post("/connections")
-def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
+async def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
     if not body.accessKeyId:
         raise HTTPException(status_code=400, detail="Access key ID is required")
     if not body.profileName or not body.profileName.strip():
@@ -223,7 +224,7 @@ def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
     if body.bucket:
         if not detected_region:
             try:
-                detected_region = get_bucket_region(
+                detected_region = await get_bucket_region(
                     body.accessKeyId, effective_secret, body.bucket, body.endpoint
                 )
             except RuntimeError as error:
@@ -238,9 +239,9 @@ def save_s3_connection(body: ConnectionRequest) -> dict[str, object]:
         endpoint=body.endpoint,
     )
     validation = (
-        validate_credentials(credentials)
+        await validate_credentials(credentials)
         if body.bucket
-        else validate_credentials_only(
+        else await validate_credentials_only(
             body.accessKeyId, effective_secret, detected_region, body.endpoint
         )
     )
@@ -302,30 +303,31 @@ def delete_connection(connection_id: int) -> dict[str, bool]:
 
 
 @router.get("/buckets/{connection_id}")
-def list_buckets(
+async def list_buckets(
     request: Request, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     if request.query_params.get("clear_region_cache") in {"1", "true"}:
         clear_bucket_region_cache()
     try:
-        return {"buckets": list_user_buckets(context.client)}
-    except Exception as error:
-        message = str(error)
-        lower = message.lower()
-        if "signature" in lower or "credential" in lower or "invalidaccesskeyid" in lower:
+        return {"buckets": await list_user_buckets(context.client)}
+    except S3Error as error:
+        code = error.code
+        if code in {"InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken"}:
             raise HTTPException(status_code=401, detail="Authentication failed") from error
-        if "accessdenied" in lower or "forbidden" in lower:
+        if code in {"AccessDenied", "Forbidden"} or error.status == 403:
             raise HTTPException(status_code=403, detail="Access denied") from error
-        raise HTTPException(status_code=500, detail=message or "Failed to list buckets") from error
+        raise HTTPException(
+            status_code=500, detail=str(error) or "Failed to list buckets"
+        ) from error
 
 
 @router.post("/validate-bucket/{connection_id}")
-def validate_bucket_for_connection(
+async def validate_bucket_for_connection(
     body: SelectBucketRequest, context: S3Context = Depends(get_s3_context)
 ) -> dict[str, object]:
     if not body.bucket:
         raise HTTPException(status_code=400, detail="Bucket name is required")
-    validation = validate_bucket(context.client, body.bucket)
+    validation = await validate_bucket(context.client, body.bucket)
     if not validation.get("valid"):
         raise HTTPException(
             status_code=400, detail=str(validation.get("error") or "Invalid bucket")
@@ -334,12 +336,12 @@ def validate_bucket_for_connection(
 
 
 @router.post("/test-connection")
-def test_connection(body: ConnectionRequest) -> dict[str, bool]:
+async def test_connection(body: ConnectionRequest) -> dict[str, bool]:
     if not body.accessKeyId or not body.secretAccessKey:
         raise HTTPException(status_code=400, detail="Missing required credentials")
     region = body.region or "us-east-1"
     validation = (
-        validate_credentials(
+        await validate_credentials(
             S3Credentials(
                 access_key_id=body.accessKeyId,
                 secret_access_key=body.secretAccessKey,
@@ -349,7 +351,7 @@ def test_connection(body: ConnectionRequest) -> dict[str, bool]:
             )
         )
         if body.bucket
-        else validate_credentials_only(
+        else await validate_credentials_only(
             body.accessKeyId, body.secretAccessKey, region, body.endpoint
         )
     )

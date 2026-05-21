@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
+from s3browser.async_s3 import S3Client
 from s3browser.config import SEARCH_WHITELIST_ENV_VAR, get_search_whitelist_hosts
 from s3browser.db import (
     delete_index_database,
@@ -127,34 +127,20 @@ def _is_text_content_type(content_type: str | None) -> bool:
     return lower.startswith("text/") or any(lower.startswith(value) for value in TEXT_APP_TYPES)
 
 
-def _timestamp_seconds(value: object) -> int:
-    if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=UTC)
-        return int(value.timestamp())
-    raise RuntimeError("S3 ListObjectsV2 returned no LastModified")
+async def _head_is_text(client: S3Client, bucket: str, key: str) -> bool:
+    head = await client.head_object(bucket, key)
+    return _is_text_content_type(head.content_type)
 
 
-def _head_is_text(client: Any, bucket: str, key: str) -> bool:
-    head = client.head_object(Bucket=bucket, Key=key)
-    return _is_text_content_type(head.get("ContentType"))
+async def _fetch_text_body(client: S3Client, bucket: str, key: str, max_bytes: int) -> str:
+    response = await client.get_object(bucket, key, range_header=f"bytes=0-{max_bytes - 1}")
+    chunks: list[bytes] = []
+    async for chunk in response.aiter_bytes():
+        chunks.append(chunk)
+    return b"".join(chunks).decode("utf-8", errors="replace")
 
 
-def _fetch_text_body(client: Any, bucket: str, key: str, max_bytes: int) -> str:
-    response = client.get_object(Bucket=bucket, Key=key, Range=f"bytes=0-{max_bytes - 1}")
-    body = response.get("Body")
-    if body is None:
-        raise RuntimeError("S3 returned no response body")
-    try:
-        data = body.read()
-    finally:
-        close = getattr(body, "close", None)
-        if callable(close):
-            close()
-    return bytes(data).decode("utf-8", errors="replace")
-
-
-def index_s3_bucket(
+async def index_s3_bucket(
     connection_id: int, bucket: str | None = None, batch_size: int = DEFAULT_BATCH_SIZE
 ) -> dict[str, int | float]:
     if connection_id <= 0:
@@ -183,8 +169,18 @@ def index_s3_bucket(
         f"Indexing s3://{effective_bucket} for connection {connection.id} "
         f"({connection.profile_name}) at {endpoint_host}"
     )
-    context = create_s3_context_from_connection(connection, effective_bucket)
-    client = context.client
+    context = await create_s3_context_from_connection(connection, effective_bucket)
+    try:
+        return await _index_with_context(
+            context.client, effective_bucket, endpoint_host, batch_size
+        )
+    finally:
+        await context.aclose()
+
+
+async def _index_with_context(
+    client: S3Client, effective_bucket: str, endpoint_host: str, batch_size: int
+) -> dict[str, int | float]:
     indexed_bucket_id = get_or_create_indexed_bucket(endpoint_host, effective_bucket)
     run_started_at = int(time.time())
     start = time.time()
@@ -205,34 +201,32 @@ def index_s3_bucket(
     continuation_token: str | None = None
     page_number = 0
     while True:
-        params: dict[str, object] = {"Bucket": effective_bucket, "MaxKeys": batch_size}
-        if continuation_token:
-            params["ContinuationToken"] = continuation_token
-        response = client.list_objects_v2(**params)
+        response = await client.list_objects_v2(
+            effective_bucket, max_keys=batch_size, continuation_token=continuation_token
+        )
         page_number += 1
-        contents = response.get("Contents", [])
         pending: list[PendingRow] = []
-        for item in contents:
-            key = item.get("Key")
-            if not key:
+        for item in response.contents:
+            if not item.key:
                 raise RuntimeError("S3 ListObjectsV2 returned a Contents row without a Key")
-            size = item.get("Size")
-            row_size = int(size) if size is not None else None
+            row_size = item.size
             needs_body_fetch = False
             needs_head_check = False
-            if not str(key).endswith("/") and row_size != 0:
-                if _has_text_extension(str(key)):
+            if not item.key.endswith("/") and row_size != 0:
+                if _has_text_extension(item.key):
                     if row_size is not None and row_size > MAX_CONTENT_BYTES:
                         totals["bodySkippedSize"] = int(totals["bodySkippedSize"]) + 1
                     else:
                         needs_body_fetch = True
                 elif row_size is None or row_size <= MAX_CONTENT_BYTES:
                     needs_head_check = True
+            if item.last_modified is None:
+                raise RuntimeError("S3 ListObjectsV2 returned no LastModified")
             pending.append(
                 PendingRow(
                     input={
-                        "key": str(key),
-                        "last_modified": _timestamp_seconds(item.get("LastModified")),
+                        "key": item.key,
+                        "last_modified": int(item.last_modified.timestamp()),
                         "size": row_size,
                         "content": None,
                     },
@@ -257,7 +251,7 @@ def index_s3_bucket(
             if row.needs_head_check:
                 started = time.time()
                 try:
-                    is_text = _head_is_text(client, effective_bucket, key)
+                    is_text = await _head_is_text(client, effective_bucket, key)
                 except Exception as error:
                     print(f"  HEAD failed key={key}: {error}")
                     totals["headCheckErrors"] = int(totals["headCheckErrors"]) + 1
@@ -275,7 +269,7 @@ def index_s3_bucket(
             if row.needs_body_fetch:
                 started = time.time()
                 try:
-                    row.input["content"] = _fetch_text_body(
+                    row.input["content"] = await _fetch_text_body(
                         client, effective_bucket, key, MAX_CONTENT_BYTES
                     )
                 except Exception as error:
@@ -297,9 +291,7 @@ def index_s3_bucket(
             f"Page {page_number}: {totals['seen']} keys seen, "
             f"{totals['bodyFetched']} bodies fetched, elapsed {time.time() - start:.1f}s"
         )
-        continuation_token = (
-            response.get("NextContinuationToken") if response.get("IsTruncated") else None
-        )
+        continuation_token = response.next_continuation_token if response.is_truncated else None
         if not continuation_token:
             break
     print(f"Sweeping stale index rows after {totals['seen']} indexed keys...")

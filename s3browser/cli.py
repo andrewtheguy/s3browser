@@ -63,6 +63,8 @@ def parse_bind_address(bind: str | None) -> BindAddress:
 
 
 def run_index(args: argparse.Namespace) -> int:
+    import asyncio
+
     from s3browser.indexing import index_s3_bucket, reset_index
 
     try:
@@ -76,7 +78,9 @@ def run_index(args: argparse.Namespace) -> int:
                         file=sys.stderr,
                     )
                     return 2
-                index_s3_bucket(args.connection, bucket=args.bucket, batch_size=args.batch_size)
+                asyncio.run(
+                    index_s3_bucket(args.connection, bucket=args.bucket, batch_size=args.batch_size)
+                )
     except Exception as error:
         print(error, file=sys.stderr)
         return 1

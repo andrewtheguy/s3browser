@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 
+from s3browser.async_s3.client import GetObjectResponse
 from s3browser.dependencies import get_s3_context
 from s3browser.s3 import S3Context, is_access_denied, is_not_found, require_bucket
 from s3browser.utils import (
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/download", tags=["download"])
 
 
 @router.get("/{connection_id}/{bucket}/url")
-def presigned_url(
+async def presigned_url(
     request: Request,
     context: S3Context = Depends(get_s3_context),
 ) -> dict[str, str]:
@@ -42,38 +43,32 @@ def presigned_url(
     disposition = request.query_params.get("disposition")
     content_type = validate_content_type(request.query_params.get("contentType"))
     filename = extract_file_name(key) or "download"
-    params: dict[str, object] = {"Bucket": bucket, "Key": key}
-    if version_id:
-        params["VersionId"] = version_id
+    response_disposition: str | None = None
     if disposition == "inline":
-        params["ResponseContentDisposition"] = "inline"
+        response_disposition = "inline"
     elif disposition == "attachment":
-        params["ResponseContentDisposition"] = build_content_disposition("attachment", filename)
-    if content_type:
-        params["ResponseContentType"] = content_type
+        response_disposition = build_content_disposition("attachment", filename)
     try:
-        url = context.client.generate_presigned_url("get_object", Params=params, ExpiresIn=ttl)
+        url = context.client.generate_presigned_url(
+            bucket,
+            key,
+            expires_in=ttl,
+            version_id=version_id,
+            response_content_disposition=response_disposition,
+            response_content_type=content_type,
+        )
     except Exception as error:
         print(f"Failed to generate presigned URL: {error}")
         raise HTTPException(status_code=500, detail="Failed to generate presigned URL") from error
     return {"url": url}
 
 
-def _iter_body(body: Any) -> Iterator[bytes]:
-    try:
-        while True:
-            chunk = body.read(64 * 1024)
-            if not chunk:
-                break
-            yield chunk
-    finally:
-        close = getattr(body, "close", None)
-        if callable(close):
-            close()
+def _iter_body(response: GetObjectResponse) -> AsyncIterator[bytes]:
+    return response.aiter_bytes()
 
 
 @router.get("/{connection_id}/{bucket}/object")
-def download_object(
+async def download_object(
     request: Request,
     range_header: str | None = Header(default=None, alias="Range"),
     context: S3Context = Depends(get_s3_context),
@@ -83,13 +78,13 @@ def download_object(
     version_id = sanitize_version_id(request.query_params.get("versionId"))
     disposition = "inline" if request.query_params.get("disposition") == "inline" else "attachment"
     content_type_override = validate_content_type(request.query_params.get("contentType"))
-    params: dict[str, object] = {"Bucket": bucket, "Key": key}
-    if version_id:
-        params["VersionId"] = version_id
-    if range_header:
-        params["Range"] = range_header
     try:
-        response = context.client.get_object(**params)
+        response = await context.client.get_object(
+            bucket,
+            key,
+            version_id=version_id,
+            range_header=range_header,
+        )
     except Exception as error:
         if is_access_denied(error):
             raise HTTPException(status_code=403, detail="Access denied") from error
@@ -97,26 +92,23 @@ def download_object(
             raise HTTPException(status_code=404, detail="Object not found") from error
         print(f"Failed to stream object: {error}")
         raise HTTPException(status_code=500, detail="Failed to stream object") from error
-    body = response.get("Body")
-    if body is None:
-        raise HTTPException(status_code=500, detail="Missing response body")
     filename = extract_file_name(key) or "download"
+    content_type = content_type_override or response.content_type or "application/octet-stream"
     headers: dict[str, str] = {
         "Content-Disposition": "inline"
         if disposition == "inline"
         else build_content_disposition("attachment", filename),
-        "Content-Type": content_type_override
-        or response.get("ContentType")
-        or "application/octet-stream",
-        "Accept-Ranges": response.get("AcceptRanges") or "bytes",
+        "Content-Type": content_type,
+        "Accept-Ranges": response.accept_ranges or "bytes",
     }
-    if response.get("ContentLength") is not None:
-        headers["Content-Length"] = str(response["ContentLength"])
-    if response.get("ContentRange"):
-        headers["Content-Range"] = response["ContentRange"]
+    if response.content_length is not None:
+        headers["Content-Length"] = str(response.content_length)
+    if response.content_range:
+        headers["Content-Range"] = response.content_range
     return StreamingResponse(
-        _iter_body(body),
-        status_code=206 if response.get("ContentRange") else 200,
+        _iter_body(response),
+        status_code=206 if response.content_range else 200,
         headers=headers,
         media_type=headers["Content-Type"],
+        background=BackgroundTask(response.aclose),
     )
