@@ -43,7 +43,17 @@ RUN apt-get -yqq update && \
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin/s3browser /usr/local/bin/s3browser
 
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd --system --gid ${APP_GID} app && \
+    useradd --system --uid ${APP_UID} --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app
+
+USER app
+WORKDIR /home/app
+
 EXPOSE 8170
+
+VOLUME ["/home/app/.s3browser"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["s3browser", "server", "--bind", ":8170"]
