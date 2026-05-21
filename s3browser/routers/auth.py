@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import secrets
 
@@ -167,7 +166,7 @@ def _build_rclone_profile(
 
 
 @router.post("/login")
-def login(body: LoginRequest, response: Response) -> dict[str, bool]:
+def login(body: LoginRequest, request: Request, response: Response) -> dict[str, bool]:
     if not body.password:
         raise HTTPException(status_code=400, detail="Password is required")
     if not secrets.compare_digest(body.password, get_login_password()):
@@ -176,7 +175,7 @@ def login(body: LoginRequest, response: Response) -> dict[str, bool]:
         AUTH_COOKIE_NAME,
         create_auth_token(),
         httponly=True,
-        secure=os.environ.get("ENVIRONMENT") == "production",
+        secure=request.url.scheme == "https",
         samesite="lax",
         path="/",
     )

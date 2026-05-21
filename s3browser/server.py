@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -121,7 +120,7 @@ async def api_auth_middleware(
             AUTH_COOKIE_NAME,
             create_auth_token(),
             httponly=True,
-            secure=os.environ.get("ENVIRONMENT") == "production",
+            secure=request.url.scheme == "https",
             samesite="lax",
             path="/",
         )
