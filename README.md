@@ -71,11 +71,11 @@ s3browser server
 ```bash
 docker pull ghcr.io/andrewtheguy/s3browser:latest
 docker run --rm -p 8170:8170 \
-  -v "$HOME/.s3browser:/root/.s3browser" \
+  -v "$HOME/.s3browser:/home/app/.s3browser" \
   ghcr.io/andrewtheguy/s3browser:latest
 ```
 
-The image entrypoint runs `s3browser server --bind :8170`. Mount `~/.s3browser` so the SQLite DB, encryption key, and login password persist between runs.
+The image runs as a non-root `app` user (UID 1000) with home `/home/app`, and the entrypoint runs `s3browser server --bind :8170`. Mount `~/.s3browser` at `/home/app/.s3browser` so the SQLite DB, encryption key, and login password persist between runs. If your host UID is not 1000, either run with `--user "$(id -u):$(id -g)"` or `chown -R 1000:1000 ~/.s3browser` so the container can write to the mounted volume.
 
 ### From source
 
