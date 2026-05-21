@@ -20,6 +20,7 @@ export function TextPreview({ content, language }: TextPreviewProps) {
         <code
           className={`hljs language-${language}`}
           style={codeStyle}
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: highlight.js sanitizes its own output
           dangerouslySetInnerHTML={{ __html: highlighted }}
         />
       ) : (

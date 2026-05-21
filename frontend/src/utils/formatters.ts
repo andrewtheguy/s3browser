@@ -9,7 +9,7 @@ export function formatFileSize(bytes?: number): string {
     Math.floor(Math.log(bytes) / Math.log(k)),
     units.length - 1
   );
-  const size = bytes / Math.pow(k, i);
+  const size = bytes / k ** i;
 
   return `${size.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }

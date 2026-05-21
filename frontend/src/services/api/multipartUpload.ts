@@ -382,7 +382,7 @@ async function uploadPartWithRetry(
 
       // Wait before retry (exponential backoff with jitter) with abort awareness
       if (attempt < maxRetries - 1) {
-        const delayMs = Math.pow(2, attempt) * 1000;
+        const delayMs = 2 ** attempt * 1000;
         // Add jitter (50%-100% of delayMs) to prevent thundering herd
         const jitterFactor = 0.5 + Math.random() * 0.5;
         const jitteredDelayMs = Math.floor(delayMs * jitterFactor);

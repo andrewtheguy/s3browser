@@ -16,7 +16,7 @@ lint:
 	cd frontend && bun run lint
 
 typecheck:
-	cd frontend && npx tsc -b tsconfig.app.json
+	cd frontend && npx tsc
 
 check:
 	uv run ruff check

@@ -216,7 +216,7 @@ export function useCopyMove() {
           const current = queue.shift();
           if (!current) continue;
 
-          let continuationToken: string | undefined = undefined;
+          let continuationToken: string | undefined ;
           do {
             throwIfAborted(options.signal);
             const result = await listObjects(

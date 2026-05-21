@@ -134,7 +134,7 @@ export function useResolveObjectPlan() {
         }
         const includeFolderVersions = folderPrefixes.get(prefix) ?? includeVersions;
 
-        let continuationToken: string | undefined = undefined;
+        let continuationToken: string | undefined ;
         do {
           throwIfAborted(options.signal);
           const result = await listObjects(

@@ -50,7 +50,9 @@ export function setPresignedUrlTtlOptions(options: readonly unknown[]): void {
     return true;
   });
   currentOptions = Object.freeze(unique.map((opt) => Object.freeze({ ...opt })));
-  listeners.forEach((listener) => listener());
+  listeners.forEach((listener) => {
+    listener();
+  });
 }
 
 function subscribe(listener: () => void): () => void {
