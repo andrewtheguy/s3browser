@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'dist-server', 'server/cli.ts', 'server/cli/**']),
+  globalIgnores(['.venv', 'dist', 'dist-server', 'server', 's3browser/static']),
   // Frontend files (src/)
   {
     files: ['src/**/*.{ts,tsx}'],
@@ -39,30 +39,6 @@ export default defineConfig([
         'error',
         { checksVoidReturn: { attributes: false } },
       ],
-    },
-  },
-  // Server files (server/)
-  {
-    files: ['server/**/*.ts'],
-    extends: [
-      js.configs.recommended,
-      tseslint.configs.recommendedTypeChecked,
-    ],
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.node,
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
-      },
-    },
-    rules: {
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
-      'require-await': 'off',
-      '@typescript-eslint/require-await': 'error',
     },
   },
 ])

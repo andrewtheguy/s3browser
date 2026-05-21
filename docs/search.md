@@ -20,7 +20,7 @@ When a connection isn't allowlisted, the search/index-status API routes refuse w
 ## Building the index
 
 ```sh
-bun run index -- --connection <id> [--bucket <name>] [--batch-size <n>] [--dry-run]
+s3browser index --connection <id> [--bucket <name>] [--batch-size <n>]
 ```
 
 `--connection` is the DB id of a saved connection. `--bucket` defaults to the connection's saved bucket. `--batch-size` controls S3 page/write loop size; DB writes are committed row by row. Run `--help` for the full flag list.

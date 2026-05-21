@@ -252,7 +252,7 @@ export function SearchPage() {
     );
   }
 
-  const indexCommand = `bun run index -- --connection ${connectionId} --bucket ${bucket}`;
+  const indexCommand = `s3browser index --connection ${connectionId} --bucket ${bucket}`;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 

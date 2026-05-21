@@ -31,34 +31,41 @@ Current vendor detection (based on endpoint):
 
 Object encryption reporting varies by vendor. If the object metadata does not include encryption fields, the UI shows `None` for AWS S3 and Backblaze B2, and `Unknown` for other vendors to avoid false positives. This list is intended to grow as vendor-specific behavior is documented.
 
-## Quick Install (Linux & macOS)
+## Install From Source
 
 ```bash
-curl -sSL https://andrewtheguy.github.io/s3browser/install.sh | bash
+git clone https://github.com/andrewtheguy/s3browser.git
+cd s3browser
+bun install
+bun run build:client
+uv tool install .
 ```
 
-To install a specific version:
+After installation, run the app with:
 
 ```bash
-curl -sSL https://andrewtheguy.github.io/s3browser/install.sh | bash -s v0.0.1
+s3browser server
 ```
 
 ## Tech Stack
 
 - **Frontend**: React, TypeScript, Tailwind CSS, Radix UI primitives, lucide-react icons
-- **Backend**: Express, AWS SDK v3, SQLite (bun:sqlite)
-- **Build**: Vite (frontend bundler), Bun (runtime, package manager, standalone compiler)
+- **Backend**: FastAPI, boto3, SQLite, cryptography
+- **Build**: Vite (frontend bundler), Bun (frontend package manager), uv (Python package/tool manager)
 
 ## Getting Started
 
 ### Prerequisites
 
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
 - [Bun](https://bun.sh/) 1.0+
 
 ### Installation
 
 ```bash
 bun install
+uv sync
 ```
 
 ### Configuration
@@ -98,7 +105,7 @@ export S3BROWSER_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 **Optional TOML config** (`~/.s3browser/config.toml`):
 
-Settings other than the encryption key can be put in a TOML file. Environment variables (and any `.env` Bun auto-loads) take precedence over values defined here. See `config.toml.example` for the template.
+Settings other than the encryption key can be put in a TOML file. Environment variables and `.env` values loaded by the Python backend take precedence over values defined here. See `config.toml.example` for the template.
 
 ```toml
 # ~/.s3browser/config.toml
@@ -122,51 +129,49 @@ The frontend runs on `http://localhost:5173` and proxies API requests to the bac
 To bind the dev backend to a different interface, set `HOST`. You can also set `PORT` to change the backend port:
 
 ```bash
-HOST=0.0.0.0 PORT=3001 bun run dev:server
+uv run s3browser server --bind :3001 --reload
 ```
 
 The Vite dev proxy is configured for backend port `3001`; if you run the backend on a different port, update `vite.config.ts` or call the backend directly.
 
-### Production Build
+### Production Build And Tool Install
 
 ```bash
 bun run build
 ```
 
-### Standalone Executable
+This builds the Vite frontend in `dist/` and Python package artifacts in `dist-python/`. The wheel includes the current `dist/` frontend assets so an installed `s3browser` command can serve the full app.
 
-Build a self-contained executable with embedded frontend assets:
-
-```bash
-bun run build:standalone
-```
-
-This creates an `s3browser` executable that can be run from anywhere without dependencies. By default, it builds for the current platform (macOS, Linux, or Windows).
-
-The binary is a multi-command CLI:
+Install the command from the current checkout with uv:
 
 ```bash
-./s3browser server                          # run the HTTP server
-./s3browser server -b :8080                 # bind on all interfaces, port 8080
-./s3browser server --bind 127.0.0.1:3000    # localhost only
-./s3browser server --bind [::1]:3000        # IPv6 localhost
-./s3browser index --connection 1            # crawl + index a saved S3 connection
-./s3browser index --connection 1 --bucket my-bucket --batch-size 500
-./s3browser index --reset                   # delete the search index DB
-./s3browser --help                          # top-level help
-./s3browser --version                       # version info
+uv tool install .
 ```
 
-`./s3browser server` listens on all interfaces on port `8170` by default. Use `--bind 127.0.0.1:8170` for localhost-only access. Run `./s3browser server --help` or `./s3browser index --help` for subcommand-specific options.
+The installed command is a multi-command CLI:
+
+```bash
+s3browser server                          # run the HTTP server
+s3browser server -b :8080                 # bind on all interfaces, port 8080
+s3browser server --bind 127.0.0.1:3000    # localhost only
+s3browser server --bind [::1]:3000        # IPv6 localhost
+s3browser index --connection 1            # crawl + index a saved S3 connection
+s3browser index --connection 1 --bucket my-bucket --batch-size 500
+s3browser index --reset                   # delete the search index DB
+s3browser --help                          # top-level help
+s3browser --version                       # version info
+```
+
+`s3browser server` listens on all interfaces on port `8170` by default. Use `--bind 127.0.0.1:8170` for localhost-only access. Run `s3browser server --help` or `s3browser index --help` for subcommand-specific options.
 
 ### CLI (development)
 
 During development, run the same subcommands without compiling via:
 
 ```bash
-bun run cli server -b :3001
-bun run cli index --connection 1
-bun run cli index --reset
+uv run s3browser server -b :3001 --reload
+uv run s3browser index --connection 1
+uv run s3browser index --reset
 ```
 
 ## Usage
@@ -215,7 +220,7 @@ Persistent app data is stored in `~/.s3browser/`:
 | `login.password` | Login password |
 | `config.toml` | Optional TOML config (all settings except encryption key) |
 
-SQLite may also create `s3browser.db-wal` and `s3browser.db-shm`. The standalone executable uses `s3browser.lock` while running to prevent multiple instances.
+SQLite may also create `s3browser.db-wal` and `s3browser.db-shm`. The server command uses `s3browser.lock` while running to prevent multiple instances.
 
 ## Session Behavior
 

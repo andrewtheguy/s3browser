@@ -1,41 +1,25 @@
-# Build stage
-FROM oven/bun:1.3-alpine AS builder
+FROM oven/bun:1.3-alpine AS frontend-builder
 WORKDIR /app
 
-# Copy package files
 COPY package.json bun.lock ./
-
-# Install all dependencies (including devDependencies for build)
 RUN bun install --frozen-lockfile
+COPY index.html components.json postcss.config.js tailwind.config.js tsconfig*.json vite.config.ts ./
+COPY public ./public
+COPY src ./src
+RUN bun run build:client
 
-# Copy source files
-COPY . .
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS runner
 
-# Build frontend and server
-RUN bun run build
+WORKDIR /app
 
-# Production stage
-FROM oven/bun:1.3-alpine AS runner
+COPY pyproject.toml README.md ./
+COPY s3browser ./s3browser
+COPY --from=frontend-builder /app/dist ./dist
 
-RUN mkdir -p /home/bun/app && chown -R bun:bun /home/bun
+RUN uv tool install .
 
-WORKDIR /home/bun/app
+ENV PATH="/root/.local/bin:${PATH}"
 
-# Copy package files
-COPY --chown=bun:bun package.json bun.lock ./
+EXPOSE 8170
 
-# Install production dependencies only
-USER bun
-RUN bun install --frozen-lockfile --production
-
-# Copy built frontend from builder
-COPY --from=builder --chown=bun:bun /app/dist ./dist
-
-# Copy built server from builder
-COPY --from=builder --chown=bun:bun /app/dist-server ./dist-server
-
-ENV NODE_ENV=production
-
-EXPOSE 3000
-
-CMD ["bun", "run", "start"]
+CMD ["s3browser", "server", "--bind", ":8170"]
