@@ -549,33 +549,20 @@ async def move_object(
     bucket = require_bucket(context)
     version_id = sanitize_version_id(body.versionId)
     await _copy_object(context.client, bucket, source_key, destination_key, version_id)
+    params: dict[str, object] = {"Bucket": bucket, "Key": source_key}
+    if version_id:
+        params["VersionId"] = version_id
     try:
-        params: dict[str, object] = {"Bucket": bucket, "Key": source_key}
-        if version_id:
-            params["VersionId"] = version_id
         await context.client.delete_object(**params)
     except Exception as delete_error:
-        try:
-            await context.client.delete_object(Bucket=bucket, Key=destination_key)
-        except Exception as rollback_error:
-            print(f"Move rollback failed: {rollback_error}")
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "success": False,
-                    "partial": True,
-                    "message": "Move failed: copy succeeded but source delete failed, "
-                    "and rollback failed",
-                    "destinationKey": destination_key,
-                    "error": str(delete_error) or "Delete failed",
-                },
-            ) from delete_error
         raise HTTPException(
             status_code=500,
             detail={
                 "success": False,
-                "message": "Move failed: copy succeeded but source delete failed "
-                "(copy was rolled back)",
+                "message": "Move failed: copy succeeded but source delete failed. "
+                "Destination key now has the data and the source still exists; "
+                "retry the delete or remove the destination to recover.",
+                "destinationKey": destination_key,
                 "error": str(delete_error) or "Delete failed",
             },
         ) from delete_error
