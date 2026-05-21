@@ -89,7 +89,7 @@ def main() -> int:
                 "purpose": "testing-metadata-display",
             },
         )
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:
         print(f"\nUpload failed: {error}", file=sys.stderr)
         return 1
 

@@ -75,6 +75,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:
         print(f"Failed to create test items: {error}", file=sys.stderr)
         sys.exit(1)
