@@ -35,7 +35,7 @@ def _assert_sigv4_query(url: str) -> dict[str, list[str]]:
     return query
 
 
-def test_client_config_ports_js_force_path_style_for_custom_endpoints() -> None:
+def test_client_config_forces_path_style_for_custom_endpoints() -> None:
     config = _client_config("https://objstore.local.168234.xyz")
 
     assert config.signature_version == "s3v4"

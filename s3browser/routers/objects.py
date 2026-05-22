@@ -15,7 +15,9 @@ from s3browser.dependencies import get_s3_context
 from s3browser.s3 import (
     S3Context,
     detect_s3_vendor,
+    error_code,
     get_effective_endpoint_host,
+    http_status_code,
     is_access_denied,
     require_bucket,
 )
@@ -33,6 +35,18 @@ from s3browser.utils import (
 router = APIRouter(prefix="/api/objects", tags=["objects"])
 
 MAX_BATCH_OPERATIONS = 1000
+
+
+def _is_versioning_not_supported(error: object) -> bool:
+    text = str(error).lower()
+    return (
+        error_code(error) == "NotImplemented"
+        or http_status_code(error) == 501
+        or "notimplemented" in text
+        or "not implemented" in text
+    )
+
+
 TEST_SEED_COUNT = 10005
 TEST_SEED_CONCURRENCY = 25
 MULTIPART_COPY_THRESHOLD = 5 * 1024 * 1024 * 1024
@@ -149,7 +163,7 @@ async def list_objects(
         except Exception as error:
             if is_access_denied(error):
                 raise HTTPException(status_code=403, detail="Access denied") from error
-            if "NotImplemented" in str(error):
+            if _is_versioning_not_supported(error):
                 raise HTTPException(
                     status_code=501,
                     detail={"error": "Versioning not supported", "code": "NotImplemented"},

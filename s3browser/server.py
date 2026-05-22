@@ -145,11 +145,20 @@ class SPAStaticFiles(StaticFiles):
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as exc:
-            if exc.status_code == 404:
-                if path.startswith("assets/") or Path(path).suffix:
-                    raise
+            if exc.status_code == 404 and not _is_static_asset_path(path):
                 return await super().get_response("index.html", scope)
             raise
+
+
+def _is_static_asset_path(path: str) -> bool:
+    # Bundled assets live under assets/ — a missing one should stay a 404.
+    if path.startswith("assets/"):
+        return True
+    # Root-level files with a suffix (favicon.ico, vite.svg, robots.txt) are
+    # static assets. Deeper paths with dots in them — e.g. SPA routes that
+    # include a previewed object key like
+    # `connection/2/preview/bucket/path/foo.json` — are SPA routes, not files.
+    return "/" not in path and bool(Path(path).suffix)
 
 
 def _static_directory() -> Path | None:

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from aiobotocore.session import AioSession, get_session
@@ -14,10 +15,14 @@ from fastapi import HTTPException
 
 from s3browser.db import S3Connection, decrypt_connection_secret_key, update_connection_last_used
 
-S3Vendor = str
+S3Vendor = Literal["aws", "b2", "other"]
 
 _session: AioSession = get_session()
+# Force regional STS endpoint (matches JS `useGlobalEndpoint: false`) so AWS callers
+# outside us-east-1 don't hit the global sts.amazonaws.com that only works there.
+_session.set_config_variable("sts_regional_endpoints", "regional")
 _bucket_region_cache: dict[str, str] = {}
+_region_detection_in_flight: dict[str, asyncio.Future[str]] = {}
 
 
 @dataclass(frozen=True)
@@ -40,6 +45,34 @@ class S3Context:
 def clear_bucket_region_cache() -> None:
     _bucket_region_cache.clear()
     print("[s3browser] Bucket region cache cleared")
+
+
+async def _detect_bucket_region_deduped(
+    cache_key: str,
+    access_key_id: str,
+    secret_access_key: str,
+    bucket: str,
+    endpoint: str | None,
+) -> str:
+    existing = _region_detection_in_flight.get(cache_key)
+    if existing is not None:
+        return await existing
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[str] = loop.create_future()
+    _region_detection_in_flight[cache_key] = future
+    try:
+        region = await get_bucket_region(access_key_id, secret_access_key, bucket, endpoint)
+    except BaseException as error:
+        if not future.done():
+            future.set_exception(error)
+        raise
+    else:
+        if not future.done():
+            future.set_result(region)
+        return region
+    finally:
+        if _region_detection_in_flight.get(cache_key) is future:
+            del _region_detection_in_flight[cache_key]
 
 
 def detect_s3_vendor(endpoint: str | None = None) -> S3Vendor:
@@ -89,6 +122,20 @@ def error_code(error: object) -> str:
     if isinstance(error, ClientError):
         return str(error.response.get("Error", {}).get("Code", ""))
     return getattr(error, "name", "") or error.__class__.__name__
+
+
+def http_status_code(error: object) -> int | None:
+    if isinstance(error, ClientError):
+        status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if isinstance(status, int):
+            return status
+    return None
+
+
+def error_message(error: object) -> str:
+    if isinstance(error, ClientError):
+        return str(error.response.get("Error", {}).get("Message") or "")
+    return str(error)
 
 
 def format_error_with_code(error: object) -> str:
@@ -167,8 +214,12 @@ async def create_s3_context_from_connection(
             region = _bucket_region_cache[cache_key]
         else:
             try:
-                region = await get_bucket_region(
-                    connection.access_key_id, secret, effective_bucket, endpoint
+                region = await _detect_bucket_region_deduped(
+                    cache_key,
+                    connection.access_key_id,
+                    secret,
+                    effective_bucket,
+                    endpoint,
                 )
                 _bucket_region_cache[cache_key] = region
             except RuntimeError as error:
