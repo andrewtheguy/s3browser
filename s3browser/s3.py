@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from aiobotocore.session import AioSession, get_session
@@ -15,7 +15,7 @@ from fastapi import HTTPException
 
 from s3browser.db import S3Connection, decrypt_connection_secret_key, update_connection_last_used
 
-S3Vendor = str
+S3Vendor = Literal["aws", "b2", "other"]
 
 _session: AioSession = get_session()
 # Force regional STS endpoint (matches JS `useGlobalEndpoint: false`) so AWS callers
