@@ -10,6 +10,7 @@ Preview functionality is implemented in:
 - `frontend/src/components/PreviewDialog/PreviewPanel.tsx`
 - `frontend/src/components/PreviewDialog/PreviewBody.tsx`
 - `frontend/src/components/PreviewDialog/TextPreview.tsx`
+- `frontend/src/services/api/download.ts`
 - `frontend/src/utils/previewUtils.ts`
 - `s3browser/routers/download.py`
 
@@ -34,11 +35,12 @@ Preview functionality is implemented in:
 - Reason: routing every S3-bound request through one authenticated proxy means there is no scenario where some UI affordances expose S3 directly while others do not, no need for CORS configuration on the bucket, and no presigned URL leaking into browser history, referrers, or developer tools logs from a normal browse session.
 
 5. Rendering behavior by type
-- Text previews render in-app as `<pre><code>` content, with optional syntax highlighting through `highlight.js`.
-- Image, video, and audio previews render in `<iframe sandbox="">` with generated `srcDoc` (strict default sandbox model, no sandbox permissions granted).
-- `pdf` preview does not use an iframe and opens in a new browser tab.
+- Text previews render in-app as `<pre><code>` content, with optional syntax highlighting through `highlight.js`. JSON files can be pretty-formatted before rendering.
+- Image previews render in an iframe with generated `srcDoc` and `sandbox="allow-same-origin"`. The generated document contains only style and image elements; the `<img>` `src` points at the authenticated object proxy.
+- Video and audio previews render through native `<video>` and `<audio>` elements using the authenticated object proxy URL. This keeps browser media controls and range seeking working without embedding S3 URLs.
+- `pdf` preview does not use an iframe and opens in a new browser tab through the authenticated object proxy.
 - Reason: Chrome blocks sandboxed PDF iframes ("This page has been blocked by Chrome"), so PDF preview is intentionally routed to a separate tab.
-- Preview iframes and PDF links use `referrerPolicy="no-referrer"`.
+- Image preview iframes and PDF links use `referrerPolicy="no-referrer"`.
 
 6. DOM construction for generated `srcDoc`
 - Image iframe previews are built using `DOMImplementation.createHTMLDocument` and serialized with `XMLSerializer`.
@@ -52,15 +54,15 @@ Preview functionality is implemented in:
 ## Server-Side Controls (`/api/download/:connectionId/:bucket/...`)
 
 1. Authenticated S3 context required
-- Routes run through `s3Middleware` and `requireBucket`.
+- Routes depend on `get_s3_context` and `require_bucket`.
 - Requests without valid S3 context fail before signing or streaming.
 
 2. Object key validation and traversal defense
-- Rejects array/multi-value keys.
-- Rejects missing keys.
+- Rejects missing or non-string keys.
 - Rejects control characters and backslashes.
 - Rejects absolute paths.
-- Normalizes keys with `path.posix.normalize` and blocks traversal (`..`) and invalid normalized paths.
+- Rejects `..` path segments.
+- Rejects keys longer than 1024 UTF-8 bytes.
 
 3. Version ID sanitization
 - `versionId` is accepted only when it is a single safe string without unsafe characters.
@@ -71,11 +73,12 @@ Preview functionality is implemented in:
 - Out-of-range or malformed values are rejected.
 
 5. Content-Type validation for overrides
-- Applies to `/url`.
+- Applies to `/url` and `/object`.
 - Optional `contentType` is validated for:
 - no control chars
 - basic MIME format compliance
 - max length (256)
+- Invalid overrides are ignored rather than forwarded to S3 or used as override response headers.
 
 6. Content-Disposition safety
 - Applies to `/url` and `/object`.

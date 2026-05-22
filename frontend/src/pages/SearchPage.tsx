@@ -99,12 +99,17 @@ export function SearchPage() {
 
   const queryFromUrl = searchParams.get('q') ?? '';
   const prefixFromUrl = searchParams.get('prefix') ?? '';
+  const extFromUrl = searchParams.get('ext') ?? '';
   const [inputValue, setInputValue] = useState(queryFromUrl);
+  const [extInputValue, setExtInputValue] = useState(extFromUrl);
 
-  // Keep the input in sync if the URL changes externally (back/forward).
+  // Keep the inputs in sync if the URL changes externally (back/forward).
   useEffect(() => {
     setInputValue(queryFromUrl);
   }, [queryFromUrl]);
+  useEffect(() => {
+    setExtInputValue(extFromUrl);
+  }, [extFromUrl]);
 
   // Index status — fetched once when the bucket is ready.
   const [indexStatus, setIndexStatus] = useState<IndexStatusResponse | null>(null);
@@ -166,6 +171,7 @@ export function SearchPage() {
       sort: sortKey,
       dir: sortDir,
       prefix: prefixFromUrl,
+      extension: extFromUrl,
       signal: controller.signal,
     })
       .then((response: SearchObjectsResponse) => {
@@ -192,13 +198,14 @@ export function SearchPage() {
       });
 
     return () => controller.abort();
-  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, prefixFromUrl, offset, sortKey, sortDir, activeSearchEnabled]);
+  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, prefixFromUrl, extFromUrl, offset, sortKey, sortDir, activeSearchEnabled]);
 
-  // Reset to page 1 whenever the prefix scope changes so we don't strand
+  // Reset to page 1 whenever the prefix scope or extension filter changes so we don't strand
   // the user on a now-out-of-range page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: react-to-change idiom; reset offset on filter change
   useEffect(() => {
     setOffset(0);
-  }, [prefixFromUrl]);
+  }, [prefixFromUrl, extFromUrl]);
 
   const clearPrefix = useCallback(() => {
     const next = new URLSearchParams(searchParams);
@@ -206,14 +213,20 @@ export function SearchPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const submitSearch = useCallback((value: string) => {
+  const submitSearch = useCallback((value: string, ext: string) => {
     const trimmed = value.trim();
+    const trimmedExt = ext.trim().replace(/^\.+/, '');
     setOffset(0);
     const next = new URLSearchParams(searchParams);
     if (trimmed) {
       next.set('q', trimmed);
     } else {
       next.delete('q');
+    }
+    if (trimmedExt) {
+      next.set('ext', trimmedExt);
+    } else {
+      next.delete('ext');
     }
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
@@ -292,7 +305,7 @@ export function SearchPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            submitSearch(inputValue);
+            submitSearch(inputValue, extInputValue);
           }}
           className="flex items-center gap-2"
         >
@@ -307,6 +320,14 @@ export function SearchPage() {
               disabled={!activeSearchEnabled}
             />
           </div>
+          <Input
+            placeholder="ext (e.g. pdf)"
+            value={extInputValue}
+            onChange={(e) => setExtInputValue(e.target.value)}
+            className="w-32 font-mono"
+            aria-label="Filter by file extension"
+            disabled={!activeSearchEnabled}
+          />
           <Button type="submit" disabled={!activeSearchEnabled}>Search</Button>
         </form>
 

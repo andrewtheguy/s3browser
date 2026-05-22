@@ -17,7 +17,7 @@ A web-based file manager for AWS S3 and S3-compatible storage services (Backblaz
 - Auto-detect bucket region or specify manually
 - Support for custom S3-compatible endpoints
 - Save and manage multiple S3 connection profiles
-- Experimental full-text search across indexed bucket contents (`s3browser index`)
+- Experimental search across indexed object keys and text-file contents (`s3browser index`)
 
 ## Vendor Support
 
@@ -265,11 +265,12 @@ Persistent app data is stored in `~/.s3browser/`:
 | File | Purpose |
 |------|---------|
 | `s3browser.db` | SQLite database (saved connections) |
+| `s3browser-index.db` | SQLite search index (object keys, metadata, and indexed text contents) |
 | `encryption.key` | Encryption key for S3 credentials |
 | `login.password` | Login password |
 | `config.toml` | Optional TOML config (all settings except encryption key) |
 
-SQLite may also create `s3browser.db-wal` and `s3browser.db-shm`. The server command uses `s3browser.lock` while running to prevent multiple instances.
+SQLite may also create `*-wal` and `*-shm` files for these databases. The server command uses `s3browser.lock` while running to prevent multiple instances; the indexer uses `s3browser-index.lock`.
 
 ## Session Behavior
 
@@ -288,6 +289,7 @@ SQLite may also create `s3browser.db-wal` and `s3browser.db-shm`. The server com
 | Copy / Move | No hard item cap overall in the UI flow; requests are chunked to at most 1,000 operations per request. Objects larger than 5GB are copied with multipart copy using 100MB parts. |
 | Download | All file downloads — single, batch, and every preview type — stream through the authenticated server proxy (`/api/download/:connectionId/:bucket/object`). The browser never receives a direct S3 URL through normal browse/preview/download flows. Batch folder download additionally requires a browser with File System Access API support. |
 | Copy Presigned URL | The "Copy Presigned URL" menu item is the one intentional exception to the proxy-only model: it returns an S3 presigned URL for the user to share. TTL must be between 60 seconds (application-level validation) and 7 days (AWS S3 presigned URL limit), default 1 hour if not provided. |
+| Search | Requires an explicit, allowlisted S3 endpoint host and a local index built with `s3browser index`. The index stores object keys, size/last-modified metadata, and up to 2 MiB of text content per indexed text object in `~/.s3browser/s3browser-index.db`. |
 | Show Versions | Deleted folder detection (folders where all contents are deleted) only works accurately in the first 5,000-item window. Folders in subsequent windows may appear as live even if all their contents are deleted. |
 
 ### Browse window caveats (examples)

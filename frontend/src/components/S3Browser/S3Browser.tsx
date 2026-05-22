@@ -59,6 +59,23 @@ const DOWNLOAD_PREVIEW_LIMIT = 100;
 const DOWNLOAD_CONTINUATION_START_AT = 500;
 const DOWNLOAD_CONTINUATION_EVERY = 10_000;
 
+function formatTtlDuration(ttl: number): string {
+  const days = Math.floor(ttl / 86400);
+  const hours = Math.floor((ttl % 86400) / 3600);
+  const minutes = Math.floor((ttl % 3600) / 60);
+
+  if (days > 0) {
+    return days === 1 ? '1 day' : `${days} days`;
+  }
+  if (hours > 0) {
+    return hours === 1 ? '1 hour' : `${hours} hours`;
+  }
+  if (minutes > 0) {
+    return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+  }
+  return `${ttl} seconds`;
+}
+
 interface S3BrowserProps {
   previewKey?: string | null;
 }
@@ -259,6 +276,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     toast.success('Files uploaded successfully');
   }, [refresh]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: seedTestItemsEnabled is a module-level feature flag (stable)
   const handleSeedTestItems = useCallback(async () => {
     if (!seedTestItemsEnabled) return;
     if (isSeedingTestItems) return;
@@ -286,6 +304,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
   }, [currentPath, isSeedingTestItems, refresh, seedTestItems, seedTestItemsEnabled]);
 
   // Clear selection when path changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: react-to-change idiom; clear selection on path/versions toggle
   useEffect(() => {
     setSelectedIds(new Set());
   }, [currentPath, showVersions]);
@@ -360,6 +379,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     setDownloadDialogOpen(true);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-resolve plan when itemsToDeleteKey changes (items read via ref inside)
   useEffect(() => {
     if (!deleteDialogOpen || deleteMode !== 'batch') {
       setDeletePlan(null);
@@ -442,6 +462,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     showVersions,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-resolve plan when itemsToDownloadKey changes (items read via ref inside)
   useEffect(() => {
     if (!downloadDialogOpen) {
       setDownloadPlan(null);
@@ -785,23 +806,6 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     setCreateFolderDialogOpen(false);
     setNewFolderName('');
   }, []);
-
-  const formatTtlDuration = (ttl: number): string => {
-    const days = Math.floor(ttl / 86400);
-    const hours = Math.floor((ttl % 86400) / 3600);
-    const minutes = Math.floor((ttl % 3600) / 60);
-
-    if (days > 0) {
-      return days === 1 ? '1 day' : `${days} days`;
-    }
-    if (hours > 0) {
-      return hours === 1 ? '1 hour' : `${hours} hours`;
-    }
-    if (minutes > 0) {
-      return minutes === 1 ? '1 minute' : `${minutes} minutes`;
-    }
-    return `${ttl} seconds`;
-  };
 
   const handleCopyUrl = useCallback(async (key: string, ttl: number, versionId?: string) => {
     const result = await copyPresignedUrl(key, ttl, versionId);

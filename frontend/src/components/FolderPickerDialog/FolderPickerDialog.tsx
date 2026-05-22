@@ -97,6 +97,7 @@ export function FolderPickerDialog({
   }, [open, sourceItem, currentSourcePath]);
 
   // Cleanup: abort pending create folder operations when dialog closes or unmounts
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run cleanup when `open` toggles
   useEffect(() => {
     return () => {
       createFolderControllerRef.current?.abort();
