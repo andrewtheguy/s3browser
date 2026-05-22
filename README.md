@@ -39,7 +39,6 @@ Fetches the latest `s3browser-<version>-py3-none-any.whl` from GitHub Releases a
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andrewtheguy/s3browser/main/scripts/install.sh | bash
-s3browser server
 ```
 
 Re-run the command to upgrade to the latest release.
@@ -52,7 +51,6 @@ Released wheels are indexed at `https://andrewtheguy.github.io/s3browser/simple/
 uv tool install \
   --extra-index-url https://andrewtheguy.github.io/s3browser/simple/ \
   's3browser==x.x.x'
-s3browser server
 ```
 
 ### From a released wheel
@@ -61,13 +59,11 @@ Alternatively, grab `s3browser-<version>-py3-none-any.whl` from the [Releases](h
 
 ```bash
 uv tool install ./s3browser-<version>-py3-none-any.whl
-s3browser server
 ```
 
 ### From Docker
 
 ```bash
-docker pull ghcr.io/andrewtheguy/s3browser:latest
 docker run --rm -p 8170:8170 \
   -v "$HOME/.s3browser:/home/app/.s3browser" \
   ghcr.io/andrewtheguy/s3browser:latest
@@ -84,11 +80,15 @@ cd s3browser
 uv tool install .
 ```
 
-After installation, run the app with:
+### Run
+
+After installing via any of the non-Docker methods above, start the server with:
 
 ```bash
 s3browser server
 ```
+
+The Docker image runs `s3browser server` as its entrypoint automatically.
 
 ## Tech Stack
 
