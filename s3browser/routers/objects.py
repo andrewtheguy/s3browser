@@ -38,10 +38,12 @@ MAX_BATCH_OPERATIONS = 1000
 
 
 def _is_versioning_not_supported(error: object) -> bool:
+    text = str(error).lower()
     return (
         error_code(error) == "NotImplemented"
         or http_status_code(error) == 501
-        or "NotImplemented" in str(error)
+        or "notimplemented" in text
+        or "not implemented" in text
     )
 
 

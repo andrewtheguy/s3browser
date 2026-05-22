@@ -112,6 +112,21 @@ def test_versioning_not_supported_matches_substring_fallback() -> None:
     assert _is_versioning_not_supported(RuntimeError("NotImplemented operation")) is True
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "NotImplemented operation",
+        "notimplemented",
+        "NOTIMPLEMENTED",
+        "Not Implemented",
+        "not implemented",
+        "NOT IMPLEMENTED",
+    ],
+)
+def test_versioning_not_supported_substring_match_is_case_insensitive(message: str) -> None:
+    assert _is_versioning_not_supported(RuntimeError(message)) is True
+
+
 def test_versioning_not_supported_returns_false_for_access_denied() -> None:
     assert _is_versioning_not_supported(_client_error("AccessDenied", 403)) is False
 
