@@ -100,9 +100,10 @@ def format_error_with_code(error: object) -> str:
 
 
 def _client_config(endpoint: str | None = None) -> Config:
+    # Match AWS SDK v3 presigning behavior and avoid botocore's legacy SigV2 query URLs.
     if endpoint:
-        return Config(s3={"addressing_style": "path"})
-    return Config()
+        return Config(signature_version="s3v4", s3={"addressing_style": "path"})
+    return Config(signature_version="s3v4")
 
 
 @asynccontextmanager
