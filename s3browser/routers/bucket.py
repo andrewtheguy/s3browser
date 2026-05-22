@@ -1,20 +1,39 @@
 from fastapi import APIRouter, Depends
 
 from s3browser.dependencies import get_s3_context
-from s3browser.s3 import S3Context, require_bucket
+from s3browser.s3 import S3Context, error_code, error_message, http_status_code, require_bucket
 from s3browser.utils import isoformat_z
 
 router = APIRouter(prefix="/api/bucket", tags=["bucket"])
 
+_ENCRYPTION_NOT_SUPPORTED_CODES = {
+    "NotImplemented",
+    "NotImplementedException",
+    "NotImplementedError",
+    "UnsupportedOperation",
+}
+
+_LIFECYCLE_NOT_CONFIGURED_CODES = {"NoSuchLifecycleConfiguration", "NotFound"}
+
 
 def _is_encryption_not_supported(error: object) -> bool:
-    text = str(error).lower()
-    return "notimplemented" in text or "not implemented" in text or "unsupportedoperation" in text
+    if http_status_code(error) == 501:
+        return True
+    if error_code(error) in _ENCRYPTION_NOT_SUPPORTED_CODES:
+        return True
+    message = error_message(error).lower()
+    return "not implemented" in message or "notimplemented" in message or "unimplemented" in message
 
 
 def _is_lifecycle_not_configured(error: object) -> bool:
-    text = str(error).lower()
-    return "nosuchlifecycleconfiguration" in text or "no such lifecycle configuration" in text
+    status = http_status_code(error)
+    code = error_code(error)
+    if status == 404 and code in _LIFECYCLE_NOT_CONFIGURED_CODES:
+        return True
+    message = error_message(error).lower()
+    if status == 404 and not code and "lifecycle" in message:
+        return True
+    return "nosuchlifecycleconfiguration" in message or "no such lifecycle configuration" in message
 
 
 @router.get("/{connection_id}/{bucket}/info")
