@@ -49,7 +49,7 @@ export function S3ConnectionForm({
 }: S3ConnectionFormProps) {
   const navigate = useNavigate();
   const { connect, isLoggedIn, activeConnectionId, credentials: activeCredentials, isConnected } = useS3Client();
-  const { connections, deleteConnection, isLoading: connectionsLoading } = useConnectionHistory(isLoggedIn);
+  const { connections, deleteConnection, isLoading: connectionsLoading, error: connectionsError, refresh: refreshConnections } = useConnectionHistory(isLoggedIn);
 
   // Check if we can continue browsing (have an active connection)
   const canContinueBrowsing = isConnected && activeConnectionId;
@@ -226,6 +226,7 @@ export function S3ConnectionForm({
   // Secret key is optional when using an existing saved connection (unless user wants to change it)
   const isExistingConnection = selectedConnectionId !== null;
   const secretKeyRequired = !isExistingConnection || wantsToChangeSecretKey;
+  const connectionsUnavailable = connectionsLoading || !!connectionsError;
   const isFormValid =
     (autoDetectRegion || formData.bucket || formData.region) &&
     formData.profileName.trim() &&
@@ -281,6 +282,22 @@ export function S3ConnectionForm({
 
       <div className="space-y-2 mb-4">
         <Label htmlFor="connection-select">Saved Connection Profile</Label>
+        {connectionsError && (
+          <Alert variant="destructive" className="mb-2">
+            <AlertDescription className="flex items-center justify-between">
+              <span>Failed to load saved connections: {connectionsError}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void refreshConnections()}
+                disabled={connectionsLoading}
+              >
+                {connectionsLoading ? <Spinner size="sm" /> : 'Retry'}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
         {searchMode ? (
           <div className="space-y-2">
             <div className="flex gap-2">
@@ -364,7 +381,7 @@ export function S3ConnectionForm({
               value={selectedConnectionId !== null ? String(selectedConnectionId) : 'new'}
               onValueChange={handleConnectionChange}
               onOpenChange={handleSelectOpenChange}
-              disabled={connectionsLoading}
+              disabled={connectionsUnavailable}
             >
               <SelectTrigger id="connection-select" className="text-left flex-1">
                 <SelectValue placeholder="Select a profile" />
@@ -402,7 +419,7 @@ export function S3ConnectionForm({
               variant="outline"
               size="icon"
               onClick={() => setSearchMode(true)}
-              disabled={connectionsLoading}
+              disabled={connectionsUnavailable}
             >
               <Search className="h-4 w-4" />
             </Button>
@@ -411,6 +428,7 @@ export function S3ConnectionForm({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <fieldset disabled={connectionsUnavailable} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="profileName">Profile Name</Label>
           <Input
@@ -571,6 +589,7 @@ export function S3ConnectionForm({
         >
           {isLoading ? <Spinner size="sm" className="text-white" /> : 'Connect'}
         </Button>
+        </fieldset>
       </form>
     </>
   );
