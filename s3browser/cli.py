@@ -116,7 +116,8 @@ def main() -> None:
         "--bind",
         help=(
             "Address to bind (e.g. :8170, 127.0.0.1:3000, [::1]:3000, "
-            "unix:/run/s3browser.sock); defaults to the S3BROWSER_BIND env var"
+            "unix:/run/s3browser.sock; socket paths are capped at 108 bytes); "
+            "defaults to the S3BROWSER_BIND env var"
         ),
     )
     server_parser.add_argument(

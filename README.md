@@ -213,7 +213,7 @@ s3browser --help                          # top-level help
 s3browser --version                       # version info
 ```
 
-`s3browser server` listens on all interfaces on port `8170` by default. Use `--bind 127.0.0.1:8170` for localhost-only access, or `--bind unix:/run/s3browser.sock` to listen on a Unix domain socket (handy behind a reverse proxy such as Caddy, which supports Unix sockets on Windows too). When `--bind` is omitted, the bind address falls back to the `S3BROWSER_BIND` environment variable (e.g. `S3BROWSER_BIND=:8080` or `S3BROWSER_BIND=unix:/run/s3browser.sock`); `S3BROWSER_BIND` can also be set in `config.toml`. Run `s3browser server --help` or `s3browser index --help` for subcommand-specific options.
+`s3browser server` listens on all interfaces on port `8170` by default. Use `--bind 127.0.0.1:8170` for localhost-only access, or `--bind unix:/run/s3browser.sock` to listen on a Unix domain socket (handy behind a reverse proxy such as Caddy, which supports Unix sockets on Windows too). Keep socket paths short — the OS caps them at 108 bytes, and a longer path fails at startup with `AF_UNIX path too long`; prefer a location like `/run` or `/tmp`. When `--bind` is omitted, the bind address falls back to the `S3BROWSER_BIND` environment variable (e.g. `S3BROWSER_BIND=:8080` or `S3BROWSER_BIND=unix:/run/s3browser.sock`); `S3BROWSER_BIND` can also be set in `config.toml`. Run `s3browser server --help` or `s3browser index --help` for subcommand-specific options.
 
 ### CLI (development)
 
