@@ -46,7 +46,7 @@ def parse_bind_address(bind: str | None) -> BindAddress:
         if not path:
             raise argparse.ArgumentTypeError(
                 'Invalid bind address "unix:": a socket path is required, '
-                "e.g. unix:/run/s3browser.sock"
+                "e.g. unix:/tmp/s3browser.sock"
             )
         return BindAddress(host=None, port=default_port, uds=path)
     if bind.isdigit():
@@ -114,9 +114,10 @@ def main() -> None:
     server_parser.add_argument(
         "-b",
         "--bind",
+        type=parse_bind_address,
         help=(
             "Address to bind (e.g. :8170, 127.0.0.1:3000, [::1]:3000, "
-            "unix:/run/s3browser.sock; socket paths are capped at 108 bytes); "
+            "unix:/tmp/s3browser.sock; socket paths are capped at 108 bytes); "
             "defaults to the S3BROWSER_BIND env var"
         ),
     )
@@ -145,10 +146,16 @@ def main() -> None:
     if args.cmd == "server":
         from s3browser.server import run
 
-        # Importing s3browser.server triggers config.load_config_file(), so
-        # S3BROWSER_BIND from config.toml is present in os.environ by now.
-        raw_bind = args.bind or os.environ.get("S3BROWSER_BIND")
-        bind = parse_bind_address(raw_bind)
+        # --bind is validated by argparse (type=parse_bind_address), so args.bind
+        # is a BindAddress when supplied (even "" / default) and None otherwise.
+        # Importing s3browser.server triggers config.load_config_file(), so the
+        # S3BROWSER_BIND fallback (used only when --bind was omitted) reflects
+        # config.toml values in os.environ by now.
+        bind = (
+            args.bind
+            if args.bind is not None
+            else parse_bind_address(os.environ.get("S3BROWSER_BIND"))
+        )
         run(host=bind.host, port=bind.port, uds=bind.uds, reload=args.reload)
     elif args.cmd == "index":
         raise SystemExit(run_index(args))
