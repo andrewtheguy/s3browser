@@ -49,6 +49,7 @@ import type { ObjectPlan } from '../../hooks/useResolveObjectPlan';
 import { FEATURES } from '../../config';
 import type { S3Object } from '../../types';
 import type { CopyMoveOperation } from '../../services/api/objects';
+import { buildBatchZipUrl, createBatchZipTicket, type BatchZipEntry } from '../../services/api/download';
 import { getObjectSelectionId } from '../../utils/formatters';
 import { buildBrowseUrl, buildPreviewUrl } from '../../utils/urlEncoding';
 
@@ -74,6 +75,24 @@ function formatTtlDuration(ttl: number): string {
     return minutes === 1 ? '1 minute' : `${minutes} minutes`;
   }
   return `${ttl} seconds`;
+}
+
+// Path of an object relative to the folder currently being viewed, used both as
+// the on-disk path (File System Access API) and the ZIP entry name (fallback).
+function relativeArchiveName(currentPath: string, key: string): string {
+  const relativeKey =
+    currentPath && key.startsWith(currentPath) ? key.slice(currentPath.length) : key;
+  return relativeKey.replace(/^\/+/, '').split('/').filter(Boolean).join('/');
+}
+
+// Suggested archive filename derived from the current folder's basename.
+function deriveArchiveName(currentPath: string): string {
+  const base = currentPath
+    .replace(/\/+$/, '')
+    .split('/')
+    .filter(Boolean)
+    .pop();
+  return base ? `${base}.zip` : 'download.zip';
 }
 
 interface S3BrowserProps {
@@ -109,7 +128,10 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     const win = window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
     return typeof win.showDirectoryPicker === 'function';
   }, []);
-  const batchDownloadEnabled = supportsBatchDownload && !showVersions;
+  // Batch download is offered on all browsers now: Chromium streams into a
+  // chosen directory via the File System Access API, others fall back to a
+  // server-streamed ZIP. Still disabled while viewing versions.
+  const batchDownloadEnabled = !showVersions;
   const {
     copy,
     move,
@@ -632,6 +654,57 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
       return;
     }
 
+    // Fallback for browsers without the File System Access API: ask the server
+    // to stream a single ZIP and let the browser's download manager save it.
+    if (!supportsBatchDownload) {
+      if (!activeConnectionId || !bucket) {
+        toast.error('Missing S3 connection details');
+        return;
+      }
+
+      const seenNames = new Set<string>();
+      const entries: BatchZipEntry[] = [];
+      for (const entry of downloadPlan.fileKeys) {
+        const name = relativeArchiveName(currentPath, entry.key);
+        // Skip empties and collapse duplicate archive paths (the server rejects
+        // duplicates); keeping the first occurrence is good enough here.
+        if (!name || seenNames.has(name)) {
+          continue;
+        }
+        seenNames.add(name);
+        entries.push({ key: entry.key, versionId: entry.versionId, name });
+      }
+
+      if (entries.length === 0) {
+        toast.warning('No objects to download');
+        return;
+      }
+
+      const archiveName = deriveArchiveName(currentPath);
+      setIsDownloadingBatch(true);
+      try {
+        const ticket = await createBatchZipTicket(activeConnectionId, bucket, entries, archiveName);
+        const link = document.createElement('a');
+        link.href = buildBatchZipUrl(activeConnectionId, bucket, ticket);
+        link.download = archiveName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(
+          `Preparing ZIP of ${entries.length} object${entries.length === 1 ? '' : 's'}...`
+        );
+        setSelectedIds(new Set());
+        handleBatchDownloadCancel();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Batch download failed';
+        toast.error(message);
+      } finally {
+        setIsDownloadingBatch(false);
+      }
+      return;
+    }
+
     const win = window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
     if (typeof win.showDirectoryPicker !== 'function') {
       toast.error('Batch download is not supported in this browser');
@@ -728,6 +801,9 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     }
   }, [
     batchDownloadEnabled,
+    supportsBatchDownload,
+    activeConnectionId,
+    bucket,
     downloadPlan,
     getProxyDownloadUrl,
     currentPath,
@@ -1179,6 +1255,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
       <BatchDownloadDialog
         open={downloadDialogOpen}
         items={itemsToDownload}
+        mode={supportsBatchDownload ? 'directory' : 'zip'}
         isDownloading={isDownloadingBatch}
         isResolving={isResolvingDownload}
         previewKeys={downloadPreview?.previewKeys}
