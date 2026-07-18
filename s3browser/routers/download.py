@@ -33,6 +33,11 @@ STREAM_CHUNK_SIZE = 64 * 1024
 MAX_ZIP_ENTRIES = 10000
 # How long a batch-zip ticket stays valid after creation.
 ZIP_TICKET_TTL_SECONDS = 5 * 60
+# Upper bound on outstanding tickets; caps memory under repeated ticket creation.
+MAX_ZIP_TICKETS = 256
+# Reserved archive path used for the best-effort failure manifest. User objects
+# may not claim this name, or a failure could collide with it in the ZIP.
+ERROR_MANIFEST_NAME = "_download-errors.txt"
 
 
 class ZipEntry(BaseModel):
@@ -71,6 +76,11 @@ def _prune_expired_tickets(now: float) -> None:
     expired = [token for token, ticket in _ZIP_TICKETS.items() if ticket.expires_at <= now]
     for token in expired:
         _ZIP_TICKETS.pop(token, None)
+    # Enforce the quota by evicting the tickets closest to expiry, leaving room
+    # for one fresh insertion while keeping the freshest valid tickets intact.
+    while len(_ZIP_TICKETS) >= MAX_ZIP_TICKETS:
+        oldest = min(_ZIP_TICKETS, key=lambda token: _ZIP_TICKETS[token].expires_at)
+        _ZIP_TICKETS.pop(oldest, None)
 
 
 def _validate_zip_entry_name(name: object) -> str:
@@ -83,6 +93,8 @@ def _validate_zip_entry_name(name: object) -> str:
         raise HTTPException(status_code=400, detail="Invalid archive entry name")
     if any(ord(char) <= 0x1F or ord(char) == 0x7F or char == "\\" for char in name):
         raise HTTPException(status_code=400, detail="Invalid character in archive entry name")
+    if name == ERROR_MANIFEST_NAME:
+        raise HTTPException(status_code=400, detail=f"Reserved archive entry name: {name}")
     if len(name.encode("utf-8")) > 1024:
         raise HTTPException(status_code=400, detail="Archive entry name exceeds 1024 bytes")
     return name
@@ -302,7 +314,7 @@ async def _zip_members(
 
     if errors:
         yield (
-            "_download-errors.txt",
+            ERROR_MANIFEST_NAME,
             datetime.now(UTC),
             S_IFREG | 0o600,
             ZIP_64,
