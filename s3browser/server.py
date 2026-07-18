@@ -176,7 +176,13 @@ if static_dir is not None:
     app.mount("/", SPAStaticFiles(directory=static_dir, html=True), name="frontend")
 
 
-def run(host: str | None = None, port: int = 8170, reload: bool = False) -> None:
+def run(
+    host: str | None = None, port: int = 8170, uds: str | None = None, reload: bool = False
+) -> None:
+    if uds is not None:
+        print(f"S3 Browser running on unix socket {uds}")
+        uvicorn.run("s3browser.server:app", uds=uds, reload=reload)
+        return
     bind_host = host or "0.0.0.0"
     display_host = (
         "localhost"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
@@ -14,6 +15,7 @@ from s3browser.paths import INDEX_LOCK_FILE
 class BindAddress:
     host: str | None
     port: int
+    uds: str | None = None
 
 
 def _version() -> str:
@@ -39,6 +41,14 @@ def parse_bind_address(bind: str | None) -> BindAddress:
     default_port = 8170
     if not bind:
         return BindAddress(host=None, port=default_port)
+    if bind.startswith("unix:"):
+        path = bind[len("unix:") :]
+        if not path:
+            raise argparse.ArgumentTypeError(
+                'Invalid bind address "unix:": a socket path is required, '
+                "e.g. unix:/tmp/s3browser.sock"
+            )
+        return BindAddress(host=None, port=default_port, uds=path)
     if bind.isdigit():
         return BindAddress(host=None, port=int(bind))
     if bind.startswith(":") and bind[1:].isdigit():
@@ -102,7 +112,14 @@ def main() -> None:
 
     server_parser = sub.add_parser("server", help="Run the HTTP server with frontend assets")
     server_parser.add_argument(
-        "-b", "--bind", help="Address to bind (e.g. :8170, 127.0.0.1:3000, [::1]:3000)"
+        "-b",
+        "--bind",
+        type=parse_bind_address,
+        help=(
+            "Address to bind (e.g. :8170, 127.0.0.1:3000, [::1]:3000, "
+            "unix:/tmp/s3browser.sock; socket paths are capped at 108 bytes); "
+            "defaults to the S3BROWSER_BIND env var"
+        ),
     )
     server_parser.add_argument(
         "--reload", action="store_true", help="Reload the server when Python files change"
@@ -129,8 +146,17 @@ def main() -> None:
     if args.cmd == "server":
         from s3browser.server import run
 
-        bind = parse_bind_address(args.bind)
-        run(host=bind.host, port=bind.port, reload=args.reload)
+        # --bind is validated by argparse (type=parse_bind_address), so args.bind
+        # is a BindAddress when supplied (even "" / default) and None otherwise.
+        # Importing s3browser.server triggers config.load_config_file(), so the
+        # S3BROWSER_BIND fallback (used only when --bind was omitted) reflects
+        # config.toml values in os.environ by now.
+        bind = (
+            args.bind
+            if args.bind is not None
+            else parse_bind_address(os.environ.get("S3BROWSER_BIND"))
+        )
+        run(host=bind.host, port=bind.port, uds=bind.uds, reload=args.reload)
     elif args.cmd == "index":
         raise SystemExit(run_index(args))
 
