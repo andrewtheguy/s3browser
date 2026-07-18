@@ -8,6 +8,11 @@
 # Values must be quoted strings. Unquoted integers/booleans will be rejected
 # at startup (e.g. S3BROWSER_PRESIGNED_URL_TTLS = 1 is invalid).
 
+# Address the server binds to when `s3browser server` is run without --bind.
+# Same syntax as the --bind flag: ":8080", "127.0.0.1:3000", "[::1]:3000",
+# or a Unix domain socket "unix:/run/s3browser.sock". Defaults to 0.0.0.0:8170.
+# S3BROWSER_BIND = ":8170"
+
 # Login password for the web UI (16+ chars).
 # File fallback: ~/.s3browser/login.password
 # Generate with: openssl rand -hex 24
