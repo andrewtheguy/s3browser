@@ -16,6 +16,12 @@ import type { S3Object } from '../../types';
 interface BatchDownloadDialogProps {
   open: boolean;
   items: S3Object[];
+  /**
+   * 'directory' streams files into a folder chosen via the File System Access
+   * API; 'zip' downloads a single server-generated archive (fallback for
+   * browsers without that API).
+   */
+  mode?: 'directory' | 'zip';
   isDownloading: boolean;
   isResolving?: boolean;
   previewKeys?: string[];
@@ -28,6 +34,7 @@ interface BatchDownloadDialogProps {
 }
 
 function getMessage({
+  mode,
   resolutionError,
   isResolving,
   isDownloading,
@@ -36,6 +43,7 @@ function getMessage({
   folderCount,
   itemsLength,
 }: {
+  mode: 'directory' | 'zip';
   resolutionError: string | null;
   isResolving: boolean;
   isDownloading: boolean;
@@ -51,6 +59,9 @@ function getMessage({
     return 'Gathering objects to download...';
   }
   if (isDownloading) {
+    if (mode === 'zip') {
+      return 'Preparing your ZIP archive...';
+    }
     if (progress) {
       return `Downloading ${progress.completed} of ${progress.total} objects...`;
     }
@@ -65,8 +76,10 @@ function getMessage({
 
   return (
     <>
-      Download <strong>{resolvedTotalKeys} object{resolvedTotalKeys === 1 ? '' : 's'}</strong>? You will be prompted to
-      choose a destination folder.
+      Download <strong>{resolvedTotalKeys} object{resolvedTotalKeys === 1 ? '' : 's'}</strong>?{' '}
+      {mode === 'zip'
+        ? 'They will be bundled into a single ZIP archive and downloaded.'
+        : 'You will be prompted to choose a destination folder.'}
     </>
   );
 }
@@ -74,6 +87,7 @@ function getMessage({
 export function BatchDownloadDialog({
   open,
   items,
+  mode = 'directory',
   isDownloading,
   isResolving = false,
   previewKeys = [],
@@ -95,6 +109,7 @@ export function BatchDownloadDialog({
       : `Download ${resolvedTotalKeys} Object${resolvedTotalKeys === 1 ? '' : 's'}`;
 
   const message = getMessage({
+    mode,
     resolutionError,
     isResolving,
     isDownloading,

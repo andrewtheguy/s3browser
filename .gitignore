@@ -52,3 +52,4 @@ package-lock.json
 tsconfig.server.tsbuildinfo
 
 tmp/
+.claude/settings.local.json

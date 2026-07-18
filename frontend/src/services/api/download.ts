@@ -1,7 +1,17 @@
-import { apiGet, apiGetText } from './client';
+import { apiGet, apiGetText, apiPost } from './client';
 
 interface DownloadUrlResponse {
   url: string;
+}
+
+export interface BatchZipEntry {
+  key: string;
+  versionId?: string;
+  name: string;
+}
+
+interface BatchZipTicketResponse {
+  ticket: string;
 }
 
 function validateDownloadUrlResponse(response: DownloadUrlResponse | null, errorPrefix: string): string {
@@ -86,6 +96,45 @@ export function buildObjectUrl(
   if (disposition) params.append('disposition', disposition);
   if (contentType) params.append('contentType', contentType);
   return `/api/download/${connectionId}/${encodeURIComponent(bucket)}/object?${params.toString()}`;
+}
+
+/**
+ * Requests a single-use ticket for a server-side ZIP of many objects. Used as a
+ * fallback for browsers without the File System Access API. The resolved key
+ * list is POSTed here; the returned ticket is then handed to `buildBatchZipUrl`
+ * for a GET navigation that streams the archive to disk.
+ */
+export async function createBatchZipTicket(
+  connectionId: number,
+  bucket: string,
+  entries: BatchZipEntry[],
+  archiveName?: string,
+  signal?: AbortSignal
+): Promise<string> {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+  if (entries.length === 0) {
+    throw new Error('No objects to download');
+  }
+
+  const endpoint = `/download/${connectionId}/${encodeURIComponent(bucket)}/batch-zip-ticket`;
+  const response = await apiPost<BatchZipTicketResponse>(endpoint, { entries, archiveName }, signal);
+
+  const ticket = response?.ticket;
+  if (typeof ticket !== 'string' || !ticket.trim()) {
+    throw new Error('Failed to prepare download: missing ticket');
+  }
+  return ticket;
+}
+
+export function buildBatchZipUrl(connectionId: number, bucket: string, ticket: string): string {
+  if (!Number.isInteger(connectionId) || connectionId < 1) {
+    throw new Error('Invalid connection ID');
+  }
+  const params = new URLSearchParams();
+  params.append('ticket', ticket);
+  return `/api/download/${connectionId}/${encodeURIComponent(bucket)}/batch-zip?${params.toString()}`;
 }
 
 export async function getObjectText(
