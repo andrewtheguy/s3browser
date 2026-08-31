@@ -1,6 +1,6 @@
 [project]
 name = "s3browser"
-version = "0.1.10"
+version = "0.1.11"
 description = "S3-compatible browser with an installable FastAPI backend"
 readme = "README.md"
 requires-python = ">=3.12"
