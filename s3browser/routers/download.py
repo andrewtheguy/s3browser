@@ -38,6 +38,10 @@ MAX_ZIP_TICKETS = 256
 # Reserved archive path used for the best-effort failure manifest. User objects
 # may not claim this name, or a failure could collide with it in the ZIP.
 ERROR_MANIFEST_NAME = "_download-errors.txt"
+# S3 drops long-lived keep-alive connections mid-body on large batches, which
+# surfaces as a read error partway through an entry. Resume with ranged GETs
+# this many times per entry before giving up and recording it in the manifest.
+MAX_MEMBER_RESUMES = 3
 
 
 class ZipEntry(BaseModel):
@@ -272,15 +276,59 @@ async def create_batch_zip_ticket(
     return {"ticket": token}
 
 
-async def _member_data(body: Any) -> AsyncIterator[bytes]:
-    try:
-        while True:
-            chunk = await body.read(STREAM_CHUNK_SIZE)
-            if not chunk:
-                break
-            yield chunk
-    finally:
-        await _release_body(body)
+async def _member_data(
+    context: S3Context,
+    bucket: str,
+    entry: _ResolvedZipEntry,
+    response: Any,
+    errors: list[str],
+) -> AsyncIterator[bytes]:
+    # A member's local header is already in the output stream by the time its
+    # data is read, so a mid-body failure cannot simply skip the entry. Resume
+    # from the current offset with a ranged GET; if that keeps failing, end the
+    # entry short (the ZIP stays valid via data descriptors) and record it.
+    body = response.get("Body")
+    etag = response.get("ETag")
+    offset = 0
+    resumes = 0
+    while True:
+        error: Exception | None = None
+        try:
+            while True:
+                chunk = await body.read(STREAM_CHUNK_SIZE)
+                if not chunk:
+                    return
+                offset += len(chunk)
+                yield chunk
+        except Exception as caught:  # noqa: BLE001 - resumed or recorded below
+            error = caught
+        finally:
+            await _release_body(body)
+        resumes += 1
+        if resumes > MAX_MEMBER_RESUMES:
+            errors.append(f"{entry.name}: truncated at {offset} bytes: {error}")
+            return
+        print(f"Resuming zip entry {entry.key} at byte {offset}: {error}")
+        params: dict[str, object] = {"Bucket": bucket, "Key": entry.key}
+        if entry.version_id:
+            params["VersionId"] = entry.version_id
+        if offset:
+            params["Range"] = f"bytes={offset}-"
+        # Refuse to resume if the object changed underneath us; mixing bytes
+        # from two versions would silently corrupt the entry's content.
+        if isinstance(etag, str) and etag:
+            params["IfMatch"] = etag
+        try:
+            response = await context.client.get_object(**params)
+        except Exception as retry_error:  # noqa: BLE001 - best-effort per object
+            errors.append(
+                f"{entry.name}: truncated at {offset} bytes; resume failed: {retry_error}"
+            )
+            return
+        body = response.get("Body")
+        if body is None:
+            errors.append(f"{entry.name}: truncated at {offset} bytes; resume returned no body")
+            return
 
 
 async def _zip_members(
@@ -309,7 +357,7 @@ async def _zip_members(
             modified_at,
             S_IFREG | 0o600,
             ZIP_64,
-            _member_data(body),
+            _member_data(context, bucket, entry, response, errors),
         )
 
     if errors:
