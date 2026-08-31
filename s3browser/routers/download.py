@@ -354,5 +354,8 @@ async def download_batch_zip(
         media_type="application/zip",
         headers={
             "Content-Disposition": build_content_disposition("attachment", ticket.archive_name),
+            "Cache-Control": "no-store",
+            # Prevent nginx from buffering the archive when deployed behind it.
+            "X-Accel-Buffering": "no",
         },
     )
