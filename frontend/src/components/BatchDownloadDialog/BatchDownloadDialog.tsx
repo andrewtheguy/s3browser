@@ -16,38 +16,27 @@ import type { S3Object } from '../../types';
 interface BatchDownloadDialogProps {
   open: boolean;
   items: S3Object[];
-  /**
-   * 'directory' streams files into a folder chosen via the File System Access
-   * API; 'zip' downloads a single server-generated archive (fallback for
-   * browsers without that API).
-   */
-  mode?: 'directory' | 'zip';
   isDownloading: boolean;
   isResolving?: boolean;
   previewKeys?: string[];
   totalKeys?: number;
   folderCount?: number;
   resolutionError?: string | null;
-  progress?: { completed: number; total: number } | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 function getMessage({
-  mode,
   resolutionError,
   isResolving,
   isDownloading,
-  progress,
   resolvedTotalKeys,
   folderCount,
   itemsLength,
 }: {
-  mode: 'directory' | 'zip';
   resolutionError: string | null;
   isResolving: boolean;
   isDownloading: boolean;
-  progress?: { completed: number; total: number } | null;
   resolvedTotalKeys: number;
   folderCount: number;
   itemsLength: number;
@@ -59,13 +48,7 @@ function getMessage({
     return 'Gathering objects to download...';
   }
   if (isDownloading) {
-    if (mode === 'zip') {
-      return 'Preparing your ZIP archive...';
-    }
-    if (progress) {
-      return `Downloading ${progress.completed} of ${progress.total} objects...`;
-    }
-    return 'Downloading...';
+    return 'Preparing your ZIP archive...';
   }
   if (resolvedTotalKeys === 0 && folderCount > 0) {
     return 'No objects found under the selected folders.';
@@ -77,9 +60,7 @@ function getMessage({
   return (
     <>
       Download <strong>{resolvedTotalKeys} object{resolvedTotalKeys === 1 ? '' : 's'}</strong>?{' '}
-      {mode === 'zip'
-        ? 'They will be bundled into a single ZIP archive and downloaded.'
-        : 'You will be prompted to choose a destination folder.'}
+      They will be bundled into a single ZIP archive and downloaded.
     </>
   );
 }
@@ -87,14 +68,12 @@ function getMessage({
 export function BatchDownloadDialog({
   open,
   items,
-  mode = 'directory',
   isDownloading,
   isResolving = false,
   previewKeys = [],
   totalKeys,
   folderCount = 0,
   resolutionError = null,
-  progress,
   onConfirm,
   onCancel,
 }: BatchDownloadDialogProps) {
@@ -109,11 +88,9 @@ export function BatchDownloadDialog({
       : `Download ${resolvedTotalKeys} Object${resolvedTotalKeys === 1 ? '' : 's'}`;
 
   const message = getMessage({
-    mode,
     resolutionError,
     isResolving,
     isDownloading,
-    progress,
     resolvedTotalKeys,
     folderCount,
     itemsLength: items.length,

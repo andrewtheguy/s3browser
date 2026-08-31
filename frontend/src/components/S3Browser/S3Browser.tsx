@@ -77,8 +77,8 @@ function formatTtlDuration(ttl: number): string {
   return `${ttl} seconds`;
 }
 
-// Path of an object relative to the folder currently being viewed, used both as
-// the on-disk path (File System Access API) and the ZIP entry name (fallback).
+// Path of an object relative to the folder currently being viewed, used as the
+// entry name in the downloaded ZIP archive.
 function relativeArchiveName(currentPath: string, key: string): string {
   const relativeKey =
     currentPath && key.startsWith(currentPath) ? key.slice(currentPath.length) : key;
@@ -116,21 +116,13 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
   const { remove, removeMany, resolveObjectPlan: resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
-  const { download, getProxyDownloadUrl } = useDownload();
+  const { download } = useDownload();
   const preview = usePreview();
   const { seedTestItems } = useSeedTestItems();
   const { resolveObjectPlan } = useResolveObjectPlan();
   const seedTestItemsEnabled = FEATURES.seedTestItems;
-  const supportsBatchDownload = useMemo(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    const win = window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
-    return typeof win.showDirectoryPicker === 'function';
-  }, []);
-  // Batch download is offered on all browsers now: Chromium streams into a
-  // chosen directory via the File System Access API, others fall back to a
-  // server-streamed ZIP. Still disabled while viewing versions.
+  // Batch download is disabled while viewing versions because the selection
+  // model does not support choosing multiple versions of an object.
   const batchDownloadEnabled = !showVersions;
   const {
     copy,
@@ -162,7 +154,6 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
   const downloadContinuationResolveRef = useRef<((value: boolean) => void) | null>(null);
   const downloadResolveAbortRef = useRef<AbortController | null>(null);
   const [isDownloadingBatch, setIsDownloadingBatch] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<{ completed: number; total: number } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
@@ -628,7 +619,6 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     setDownloadPlan(null);
     setDownloadResolveError(null);
     setDownloadContinuationCount(null);
-    setDownloadProgress(null);
     if (downloadResolveAbortRef.current) {
       downloadResolveAbortRef.current.abort();
       downloadResolveAbortRef.current = null;
@@ -654,158 +644,56 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
       return;
     }
 
-    // Fallback for browsers without the File System Access API: ask the server
-    // to stream a single ZIP and let the browser's download manager save it.
-    if (!supportsBatchDownload) {
-      if (!activeConnectionId || !bucket) {
-        toast.error('Missing S3 connection details');
-        return;
-      }
-
-      const seenNames = new Set<string>();
-      const entries: BatchZipEntry[] = [];
-      for (const entry of downloadPlan.fileKeys) {
-        const name = relativeArchiveName(currentPath, entry.key);
-        // Skip empties and collapse duplicate archive paths (the server rejects
-        // duplicates); keeping the first occurrence is good enough here.
-        if (!name || seenNames.has(name)) {
-          continue;
-        }
-        seenNames.add(name);
-        entries.push({ key: entry.key, versionId: entry.versionId, name });
-      }
-
-      if (entries.length === 0) {
-        toast.warning('No objects to download');
-        return;
-      }
-
-      const archiveName = deriveArchiveName(currentPath);
-      setIsDownloadingBatch(true);
-      try {
-        const ticket = await createBatchZipTicket(activeConnectionId, bucket, entries, archiveName);
-        const link = document.createElement('a');
-        link.href = buildBatchZipUrl(activeConnectionId, bucket, ticket);
-        link.download = archiveName;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success(
-          `Preparing ZIP of ${entries.length} object${entries.length === 1 ? '' : 's'}...`
-        );
-        setSelectedIds(new Set());
-        handleBatchDownloadCancel();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Batch download failed';
-        toast.error(message);
-      } finally {
-        setIsDownloadingBatch(false);
-      }
+    if (!activeConnectionId || !bucket) {
+      toast.error('Missing S3 connection details');
       return;
     }
 
-    const win = window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> };
-    if (typeof win.showDirectoryPicker !== 'function') {
-      toast.error('Batch download is not supported in this browser');
+    const seenNames = new Set<string>();
+    const entries: BatchZipEntry[] = [];
+    for (const entry of downloadPlan.fileKeys) {
+      const name = relativeArchiveName(currentPath, entry.key);
+      // Skip empties and collapse duplicate archive paths (the server rejects
+      // duplicates); keeping the first occurrence is good enough here.
+      if (!name || seenNames.has(name)) {
+        continue;
+      }
+      seenNames.add(name);
+      entries.push({ key: entry.key, versionId: entry.versionId, name });
+    }
+
+    if (entries.length === 0) {
+      toast.warning('No objects to download');
       return;
     }
 
+    const archiveName = deriveArchiveName(currentPath);
     setIsDownloadingBatch(true);
-    setDownloadProgress({ completed: 0, total: totalFiles });
-
     try {
-      const directoryHandle = await win.showDirectoryPicker();
-      if (!directoryHandle) {
-        setDownloadProgress(null);
-        return;
-      }
-
-      const errors: Array<{ key: string; message: string }> = [];
-      let completed = 0;
-
-      for (const entry of downloadPlan.fileKeys) {
-        try {
-          const url = getProxyDownloadUrl(entry.key, entry.versionId);
-          const response = await fetch(url, { credentials: 'include' });
-          if (!response.ok) {
-            throw new Error(`Failed to download ${entry.key}: ${response.status} ${response.statusText}`);
-          }
-
-          const relativeKey = currentPath && entry.key.startsWith(currentPath)
-            ? entry.key.slice(currentPath.length)
-            : entry.key;
-          const cleanedKey = relativeKey.replace(/^\/+/, '');
-          const segments = cleanedKey.split('/').filter(Boolean);
-          const fileName = segments.pop();
-
-          if (!fileName) {
-            continue;
-          }
-
-          let targetDir = directoryHandle;
-          for (const segment of segments) {
-            targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
-          }
-
-          const fileHandle = await targetDir.getFileHandle(fileName, { create: true });
-          const writable = await fileHandle.createWritable();
-          try {
-            if (response.body) {
-              await response.body.pipeTo(writable);
-            } else {
-              const blob = await response.blob();
-              await writable.write(blob);
-              await writable.close();
-            }
-          } catch (err) {
-            try {
-              await writable.abort();
-            } catch {
-              // Ignore abort errors
-            }
-            throw err;
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Download failed';
-          errors.push({ key: entry.key, message });
-        } finally {
-          completed += 1;
-          setDownloadProgress({ completed, total: totalFiles });
-        }
-      }
-
-      if (errors.length > 0) {
-        toast.warning(
-          `Downloaded ${totalFiles - errors.length} of ${totalFiles} objects. ${errors.length} failed.`
-        );
-      } else {
-        toast.success(`Downloaded ${totalFiles} object${totalFiles === 1 ? '' : 's'}.`);
-      }
-
+      const ticket = await createBatchZipTicket(activeConnectionId, bucket, entries, archiveName);
+      const link = document.createElement('a');
+      link.href = buildBatchZipUrl(activeConnectionId, bucket, ticket);
+      link.download = archiveName;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(
+        `Downloading ZIP of ${entries.length} object${entries.length === 1 ? '' : 's'}...`
+      );
       setSelectedIds(new Set());
       handleBatchDownloadCancel();
     } catch (err) {
-      if (
-        err instanceof DOMException &&
-        (err.name === 'AbortError' || err.name === 'NotAllowedError')
-      ) {
-        setDownloadProgress(null);
-        return;
-      }
       const message = err instanceof Error ? err.message : 'Batch download failed';
       toast.error(message);
     } finally {
       setIsDownloadingBatch(false);
-      setDownloadProgress(null);
     }
   }, [
     batchDownloadEnabled,
-    supportsBatchDownload,
     activeConnectionId,
     bucket,
     downloadPlan,
-    getProxyDownloadUrl,
     currentPath,
     handleBatchDownloadCancel,
   ]);
@@ -1255,14 +1143,12 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
       <BatchDownloadDialog
         open={downloadDialogOpen}
         items={itemsToDownload}
-        mode={supportsBatchDownload ? 'directory' : 'zip'}
         isDownloading={isDownloadingBatch}
         isResolving={isResolvingDownload}
         previewKeys={downloadPreview?.previewKeys}
         totalKeys={downloadPreview?.totalKeys}
         folderCount={downloadSelectionFolderCount}
         resolutionError={downloadResolveError}
-        progress={downloadProgress}
         onConfirm={handleBatchDownloadConfirm}
         onCancel={handleBatchDownloadCancel}
       />

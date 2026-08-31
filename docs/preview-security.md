@@ -85,8 +85,8 @@ Preview functionality is implemented in:
 - For signed URLs, `inline` and `attachment` are supported.
 - Attachment filename is sanitized to remove header-unsafe characters before inclusion.
 
-7. Authenticated object proxy for all previews and downloads
-- `/object` streams S3 objects through the authenticated server route and is the only S3-facing surface for browse/preview/download flows. Single downloads, batch downloads, and every preview type (text, image, video, audio, PDF) all go through it.
+7. Authenticated download routes for all previews and downloads
+- `/object` streams single S3 objects through the authenticated server route. Batch downloads use `/batch-zip`, which streams one server-generated ZIP without exposing S3 URLs. Every preview type (text, image, video, audio, PDF) goes through `/object`.
 - It applies the same object key validation and optional `versionId` sanitization as `/url`.
 - Disposition is controlled per request: `disposition=inline` with a per-extension `contentType` override is used for media/PDF previews so the browser renders the response, while downloads default to `disposition=attachment` with a sanitized filename. Text previews ignore `Content-Disposition` and read the response body directly via `fetch`.
 - Supports HTTP `Range` requests (returns `206 Partial Content`) so video and audio previews can seek without the backend buffering the full object.

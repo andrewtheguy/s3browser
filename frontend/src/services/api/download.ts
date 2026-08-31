@@ -99,10 +99,9 @@ export function buildObjectUrl(
 }
 
 /**
- * Requests a single-use ticket for a server-side ZIP of many objects. Used as a
- * fallback for browsers without the File System Access API. The resolved key
- * list is POSTed here; the returned ticket is then handed to `buildBatchZipUrl`
- * for a GET navigation that streams the archive to disk.
+ * Requests a single-use ticket for a server-side ZIP of many objects. The
+ * returned ticket is handed to `buildBatchZipUrl` for a GET navigation so the
+ * browser streams the response directly to its download destination.
  */
 export async function createBatchZipTicket(
   connectionId: number,
