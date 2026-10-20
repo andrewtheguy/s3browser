@@ -416,8 +416,9 @@ async fn delete_object(
     Ok(Json(json!({ "success": true })))
 }
 
-/// Up to 1000 files (or specific versions) in one DeleteObjects call. Folder
-/// keys are skipped unless a version is named.
+/// Up to 1000 files (or specific versions) in one DeleteObjects call. Keys are
+/// used exactly as sent (S3 keys may start or end with spaces); folder keys
+/// are skipped unless a version is named.
 async fn batch_delete(
     State(state): State<AppState>,
     ApiPath(path): ApiPath<BucketPath>,
@@ -432,7 +433,7 @@ async fn batch_delete(
     let objects: Vec<ObjectIdentifier> = entries
         .iter()
         .filter_map(|entry| {
-            let key = entry.key.as_deref()?.trim();
+            let key = entry.key.as_deref()?;
             let version_id = sanitize_version_id(entry.version_id.as_deref());
             if key.is_empty() || (key.ends_with('/') && version_id.is_none()) {
                 return None;

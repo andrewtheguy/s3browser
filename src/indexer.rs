@@ -17,6 +17,9 @@ use crate::session::now_secs;
 
 const MAX_CONTENT_BYTES: i64 = 2 * 1024 * 1024;
 const SLOW_FETCH_MS: u128 = 1000;
+/// Stored as `last_modified` when a HEAD or GET fails, so the next run sees
+/// the object as changed and fetches it again instead of skipping it.
+const REFETCH_LAST_MODIFIED: i64 = 0;
 
 const TEXT_EXTENSIONS: &[&str] = &[
     "txt", "md", "markdown", "rst", "json", "jsonc", "jsonl", "ndjson", "csv", "tsv", "log", "xml", "html", "htm",
@@ -200,6 +203,7 @@ pub async fn index_bucket(context: &S3Context, index_db: &IndexDb, endpoint_host
                     Err(e) => {
                         println!("  HEAD failed key={key}: {e:#}");
                         totals.head_check_errors += 1;
+                        item.row.last_modified = REFETCH_LAST_MODIFIED;
                         continue;
                     }
                     Ok(head) => {
@@ -233,6 +237,7 @@ pub async fn index_bucket(context: &S3Context, index_db: &IndexDb, endpoint_host
                     Err(e) => {
                         println!("  GET failed key={key}: {e:#}");
                         totals.body_fetch_errors += 1;
+                        item.row.last_modified = REFETCH_LAST_MODIFIED;
                         continue;
                     }
                     Ok(bytes) => {

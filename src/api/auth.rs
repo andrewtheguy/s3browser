@@ -1,7 +1,7 @@
 //! `/api/auth`: signing in and out, and saved S3 connections.
 
 use axum::extract::State;
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -242,17 +242,13 @@ async fn list_buckets(
     match list_user_buckets(&context.client).await {
         Ok(buckets) => Ok(Json(json!({ "buckets": buckets }))),
         Err(info) => {
-            let text = info.to_string();
-            let lower = text.to_lowercase();
+            let lower = info.to_string().to_lowercase();
             Err(if ["signature", "credential", "invalidaccesskeyid"].iter().any(|s| lower.contains(s)) {
                 AppError::unauthorized("Authentication failed")
             } else if lower.contains("accessdenied") || lower.contains("forbidden") {
                 AppError::forbidden("Access denied")
             } else {
-                AppError::status(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    if text.is_empty() { "Failed to list buckets".to_string() } else { text },
-                )
+                AppError::failed("Failed to list buckets", info)
             })
         }
     }
@@ -403,7 +399,7 @@ async fn export_connection(
 mod tests {
     use super::*;
     use crate::test_support::TestApp;
-    use axum::http::Method;
+    use axum::http::{Method, StatusCode};
 
     #[test]
     fn profile_and_filename_sanitizing() {

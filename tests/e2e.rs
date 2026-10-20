@@ -483,15 +483,24 @@ async fn upload_list_download_delete() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+    // Keys are used exactly as sent: "pad " is not "pad".
+    fx.put("pad ", b"x".to_vec()).await;
+    fx.put("pad", b"y".to_vec()).await;
+    let (status, body) = server
+        .post_json(&server.bucket_path("objects", bucket, "/batch-delete"), json!({ "keys": [{ "key": "pad " }] }))
+        .await;
+    assert_eq!((status, body), (StatusCode::OK, json!({ "deleted": [{ "key": "pad " }], "errors": [] })));
+    assert_eq!(fx.get("pad").await, b"y");
+
     let (status, body) = server
         .post_json(
             &server.bucket_path("objects", bucket, "/batch-delete"),
-            json!({ "keys": [{ "key": "docs/hello world.txt" }, { "key": "empty/" }] }),
+            json!({ "keys": [{ "key": "docs/hello world.txt" }, { "key": "empty/" }, { "key": "pad" }] }),
         )
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     // Folder markers are skipped unless a version is named.
-    assert_eq!(body["deleted"], json!([{ "key": "docs/hello world.txt" }]));
+    assert_eq!(body["deleted"], json!([{ "key": "docs/hello world.txt" }, { "key": "pad" }]));
     let response = server
         .http
         .delete(server.url(&server.bucket_path("objects", bucket, "?key=empty%2F")))
