@@ -60,7 +60,6 @@ Requires a Rust toolchain, [Bun](https://bun.sh/), and on Linux `clang` + `mold`
 ```bash
 git clone https://github.com/andrewtheguy/s3browser.git
 cd s3browser
-(cd frontend && bun install --frozen-lockfile)
 cargo install --path . --locked
 ```
 
@@ -85,14 +84,7 @@ The Docker image runs `s3browser server` as its entrypoint automatically.
 ### Prerequisites
 
 - A Rust toolchain ([rustup](https://rustup.rs/)); on Linux also `clang` and `mold`
-- [Bun](https://bun.sh/) 1.0+
-
-### Installation
-
-```bash
-(cd frontend && bun install)
-cargo build
-```
+- [Bun](https://bun.sh/) 1.0+ on `PATH`: `build.rs` uses it to build the frontend (running `bun install` first when `frontend/node_modules` is missing)
 
 ### Configuration
 
@@ -145,17 +137,11 @@ The encryption key is intentionally excluded — keep it in `~/.s3browser/encryp
 
 ### Development
 
-Run the backend and the Vite dev server in two terminals from the repo root:
-
 ```bash
-# Terminal 1: backend
 cargo run -- server --bind 127.0.0.1:8170
-
-# Terminal 2: Vite dev server
-cd frontend && bun run dev
 ```
 
-The frontend runs on `http://localhost:5173` with hot reload and proxies `/api` to the backend on `http://127.0.0.1:8170`. Debug builds do not embed the frontend, so use the Vite URL during development.
+Open `http://127.0.0.1:8170`. Every build, debug included, compiles the frontend into the binary, so there is no separate dev server; rerun the command after a frontend change and Cargo rebuilds the bundle.
 
 Checks:
 
@@ -172,7 +158,7 @@ cargo test
 cargo build --release
 ```
 
-`build.rs` runs `bun run build` in `frontend/` and embeds the output, so `target/release/s3browser` is a single self-contained binary. Set `S3BROWSER_PREBUILT_FRONTEND=<dir>` to embed an already-built `dist` directory instead of invoking Bun.
+As in every build, `build.rs` runs `bun run build` in `frontend/` and embeds the output, so `target/release/s3browser` is a single self-contained binary. Set `S3BROWSER_PREBUILT_FRONTEND=<dir>` to embed an already-built `dist` directory instead of invoking Bun.
 
 The binary is a multi-command CLI:
 

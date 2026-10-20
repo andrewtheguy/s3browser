@@ -1,15 +1,11 @@
-//! Build the frontend into Cargo's `OUT_DIR` for a release binary, where
-//! `src/assets.rs` compiles it in.
-//!
-//! Only release builds embed the frontend. Dev builds (`cargo build`, bacon,
-//! clippy, tests, rust-analyzer) skip bun entirely and the UI is served by the
-//! Vite dev server with HMR. When the bundle is staged, this script sets
-//! `cfg(embed_frontend)`, so the Rust side follows exactly what happened here.
+//! Build the frontend into Cargo's `OUT_DIR`, where `src/assets.rs` compiles
+//! it in. Every build embeds it, debug included, so `cargo run -- server`
+//! serves the whole app with no dev server in front.
 //!
 //! Two ways the bundle gets there: `bun run build` writing straight into
-//! `OUT_DIR/frontend-dist`, or `S3BROWSER_PREBUILT_FRONTEND` naming an already
-//! built directory (release CI builds it once for every target).
-//! `S3BROWSER_EMBED_FRONTEND=1` embeds in a non-release build too.
+//! `OUT_DIR/frontend-dist` (after `bun install` when `frontend/node_modules`
+//! is missing), or `S3BROWSER_PREBUILT_FRONTEND` naming an already built
+//! directory (release CI builds it once for every target).
 
 use std::env;
 use std::fs;
@@ -19,21 +15,12 @@ use std::process::Command;
 use anyhow::{Context, Result, bail, ensure};
 
 const PREBUILT_FRONTEND: &str = "S3BROWSER_PREBUILT_FRONTEND";
-const EMBED_FRONTEND: &str = "S3BROWSER_EMBED_FRONTEND";
 
 fn main() -> Result<()> {
-    println!("cargo::rustc-check-cfg=cfg(embed_frontend)");
     // Declaring any rerun directive stops Cargo from rerunning this script on
-    // every change in the package, which would slow down dev rebuilds.
+    // every change in the package, which would slow down rebuilds.
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-env-changed={PREBUILT_FRONTEND}");
-    println!("cargo::rerun-if-env-changed={EMBED_FRONTEND}");
-
-    let release = env::var("PROFILE").context("Cargo did not set PROFILE")? == "release";
-    let forced = env::var_os(EMBED_FRONTEND).is_some_and(|v| !v.is_empty() && v != "0");
-    if !release && !forced {
-        return Ok(());
-    }
 
     let root = PathBuf::from(
         env::var_os("CARGO_MANIFEST_DIR").context("Cargo did not set CARGO_MANIFEST_DIR")?,
@@ -64,7 +51,6 @@ fn main() -> Result<()> {
         "frontend build produced no {}",
         output.join("index.html").display()
     );
-    println!("cargo::rustc-cfg=embed_frontend");
     Ok(())
 }
 
@@ -86,11 +72,14 @@ fn build_frontend(root: &Path, output: &Path) -> Result<()> {
     }
 
     let frontend_dir = root.join("frontend");
-    ensure!(
-        frontend_dir.join("node_modules").is_dir(),
-        "frontend dependencies are not installed — run `bun install --frozen-lockfile` in {}",
-        frontend_dir.display()
-    );
+    if !frontend_dir.join("node_modules").is_dir() {
+        let status = Command::new("bun")
+            .args(["install", "--frozen-lockfile"])
+            .current_dir(&frontend_dir)
+            .status()
+            .context("failed to run `bun install` for the frontend — install Bun: https://bun.sh")?;
+        ensure!(status.success(), "`bun install --frozen-lockfile` for the frontend failed");
+    }
     let status = Command::new("bun")
         .args(["run", "build"])
         .current_dir(&frontend_dir)

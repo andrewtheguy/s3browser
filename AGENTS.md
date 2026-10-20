@@ -4,7 +4,7 @@ Strict no backward compatibility or legacy code path no matter what.
 
 ## Project layout
 
-- Backend: Rust (axum + sqlx/SQLite + aws-sdk-s3) at the repo root (`src/`), one binary `s3browser` with `server` and `index` subcommands. Release builds embed the frontend (`build.rs` → `src/assets.rs`).
+- Backend: Rust (axum + sqlx/SQLite + aws-sdk-s3) at the repo root (`src/`), one binary `s3browser` with `server` and `index` subcommands. Every build, debug included, embeds the frontend (`build.rs` runs `bun run build` → `src/assets.rs`); there is no dev server.
 - Frontend: Vite + React + TypeScript in `frontend/`. Package manager: `bun` (never npm).
 - Search/indexing is documented in `docs/search.md`; preview hardening in `docs/preview-security.md`.
 
@@ -36,15 +36,16 @@ bun run lint --reporter=rdjson   # biome lint
 bun run typecheck                # tsc
 ```
 
-## Dev servers
+## Running locally
 
 Don't run by default, but if you do need to run, use these commands from the repo root:
 
 ```
-cargo run -- server --bind 127.0.0.1:8170   # backend (dev builds don't embed the UI)
+cargo run -- server --bind 127.0.0.1:8170   # whole app at http://127.0.0.1:8170
 cargo run -- index --connection 1           # one-shot S3 → search index crawl
-cd frontend && bun run dev                  # frontend on :5173 (proxies /api → :8170)
 ```
+
+After a frontend change, rerun `cargo run` (or `cargo build`) before checking it in the browser: the bundle is compiled into the binary.
 
 ## Conventions
 
