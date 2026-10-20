@@ -12,7 +12,7 @@ Preview functionality is implemented in:
 - `frontend/src/components/PreviewDialog/TextPreview.tsx`
 - `frontend/src/services/api/download.ts`
 - `frontend/src/utils/previewUtils.ts`
-- `s3browser/routers/download.py`
+- `src/api/download.rs`
 
 ## Client-Side Controls
 

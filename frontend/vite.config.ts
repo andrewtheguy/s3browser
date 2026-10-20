@@ -11,15 +11,16 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../dist',
+    // Cargo's build.rs points this at its OUT_DIR for release builds; a
+    // standalone `bun run build` writes frontend/dist.
+    outDir: process.env.S3BROWSER_FRONTEND_OUT_DIR ?? 'dist',
+    // Vite won't empty an outDir outside the project root by default; stale
+    // content-hashed assets must not linger in Cargo's directory.
     emptyOutDir: true,
   },
   server: {
     proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
+      '/api': 'http://127.0.0.1:8170',
     },
   },
 })

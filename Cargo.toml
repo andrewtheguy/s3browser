@@ -1,0 +1,72 @@
+[package]
+name = "s3browser"
+version = "0.1.11"
+edition = "2024"
+description = "Web file manager for AWS S3 and S3-compatible storage"
+license = "MIT"
+
+[dependencies]
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net", "sync", "time", "fs"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures = "0.3"
+bytes = "1"
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1"
+aws-sdk-sts = "1"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Only used when build.rs sets cfg(embed_frontend): `debug-embed` so a forced
+# embed in a non-release build is really compiled in, `interpolate-folder-path`
+# to read the bundle from Cargo's OUT_DIR.
+rust-embed = { version = "8.11.0", features = ["debug-embed", "interpolate-folder-path"] }
+new_mime_guess = "4"
+clap = { version = "4", features = ["derive"] }
+dotenvy = "0.15"
+toml = "1"
+dirs = "6"
+anyhow = "1"
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+urlencoding = "2.1"
+rand = "0.9"
+base64 = "0.22"
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2"
+# Saved secret access keys: AES-256-GCM under a scrypt-derived key.
+aes-gcm = "0.10"
+scrypt = { version = "0.11", default-features = false }
+# Batch downloads are streamed as a ZIP64 archive written in src/zip.rs.
+flate2 = "1"
+crc32fast = "1"
+
+[build-dependencies]
+anyhow = "1"
+
+[dev-dependencies]
+aws-sdk-s3 = { version = "1", features = ["test-util"] }
+aws-smithy-mocks = "0.2"
+# A response body that fails mid-stream, for the batch ZIP resume tests.
+aws-smithy-types = { version = "1", features = ["http-body-1-x"] }
+http-body = "1"
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies", "stream"] }
+
+# scrypt runs at startup and in every router test; unoptimised it takes seconds.
+[profile.dev.package.scrypt]
+opt-level = 3
+
+[profile.dev.package.salsa20]
+opt-level = 3
+
+[profile.dev.package.pbkdf2]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3

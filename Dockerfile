@@ -1,52 +1,48 @@
-# --- Frontend stage: build static assets with Bun ---
-FROM oven/bun:1.3-alpine AS frontend-builder
-WORKDIR /app
+# Build stage
+FROM rust:1.98-slim-trixie AS builder
+ARG TARGETARCH
 
-COPY frontend ./frontend
-RUN cd frontend && bun install --frozen-lockfile && bun run build
+# Install build dependencies and bun
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    clang \
+    mold \
+    pkg-config \
+    curl \
+    unzip \
+    && curl -fsSL https://bun.sh/install | bash \
+    && rm -rf /var/lib/apt/lists/*
 
-# --- Builder stage: install the s3browser Python project ---
-FROM python:3.12-slim-bookworm AS builder
+ENV PATH="/root/.bun/bin:${PATH}"
 
-RUN apt-get -yqq update && \
-    apt-get install -yq --no-install-recommends ca-certificates && \
-    apt-get autoremove -y && \
-    apt-get clean -y && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
 
-ENV app=/usr/src/app
-WORKDIR $app
+COPY . .
 
-# Copy lock + metadata first for better layer caching
-COPY pyproject.toml uv.lock README.md ./
-# Frontend assets are force-included into s3browser/static by the wheel build (see pyproject.toml)
-COPY --from=frontend-builder /app/dist ./dist
+RUN cd frontend && bun install --frozen-lockfile
 
-ENV UV_PROJECT_ENVIRONMENT="/usr/local/"
-RUN --mount=from=ghcr.io/astral-sh/uv:0.9.11,source=/uv,target=/uv \
-    /uv sync --locked --no-dev --no-editable --no-install-project
+# Build the release binary (build.rs builds and embeds the frontend) with architecture-specific cache mounts
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-v2-${TARGETARCH} \
+    --mount=type=cache,target=/build/target,id=cargo-target-v2-${TARGETARCH} \
+    cargo build --release --locked && \
+    cp target/release/s3browser /s3browser
 
-# Copy application code
-COPY s3browser ./s3browser
+# Shared runtime base: CA roots for S3 over HTTPS, tini as PID 1, and a
+# non-root user whose ~/.s3browser holds the database and secrets.
+FROM debian:trixie-slim AS runtime-base
 
-# Install the project itself (builds & installs the wheel, embedding dist/ as s3browser/static)
-RUN --mount=from=ghcr.io/astral-sh/uv:0.9.11,source=/uv,target=/uv \
-    /uv sync --locked --no-dev --no-editable
+LABEL org.opencontainers.image.source=https://github.com/andrewtheguy/s3browser
 
-# --- Runtime stage: minimal Python image ---
-FROM python:3.12-slim-bookworm
-
-RUN apt-get -yqq update && \
-    apt-get install -yq --no-install-recommends ca-certificates tini && \
-    apt-get autoremove -y && \
-    apt-get clean -y && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin/s3browser /usr/local/bin/s3browser
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
 
 ARG APP_UID=1000
 ARG APP_GID=1000
 RUN groupadd --system --gid ${APP_GID} app && \
-    useradd --system --uid ${APP_UID} --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app
+    useradd --system --uid ${APP_UID} --gid app --create-home --home-dir /home/app --shell /usr/sbin/nologin app && \
+    install -d -m 700 -o app -g app /home/app/.s3browser
 
 USER app
 WORKDIR /home/app
@@ -57,3 +53,14 @@ VOLUME ["/home/app/.s3browser"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["s3browser", "server", "--bind", ":8170"]
+
+# Runtime stage for pre-built binary (used by CI to avoid double build)
+FROM runtime-base AS runtime-prebuilt
+
+# Binary must be passed via build context
+COPY s3browser /usr/local/bin/s3browser
+
+# Runtime stage - minimal image for container deployment (builds from source)
+FROM runtime-base AS runtime
+
+COPY --from=builder /s3browser /usr/local/bin/s3browser

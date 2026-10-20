@@ -1,24 +1,25 @@
-.PHONY: dev build lint typecheck check
+.PHONY: dev build lint typecheck check e2e
 
-# Run backend (uvicorn with reload) and frontend (Vite) together.
-# Ctrl-C kills both.
+# Run the backend and the Vite dev server together. Ctrl-C kills both.
 dev:
 	@trap 'kill 0' INT TERM EXIT; \
-	uv run s3browser server --bind localhost:3001 --reload & \
+	cargo run -- server --bind 127.0.0.1:8170 & \
 	(cd frontend && bun run dev) & \
 	wait
 
+# Release binary with the frontend embedded (build.rs runs `bun run build`).
 build:
-	cd frontend && bun run build
-	uv build --out-dir dist-python
+	cargo build --release
 
 lint:
 	cd frontend && bun run lint
 
 typecheck:
-	cd frontend && npx tsc
+	cd frontend && bun run typecheck
 
 check:
-	uv run ruff check
-	uv run ruff format --check
-	uv run basedpyright
+	cargo clippy --all-targets -- -D warnings
+	cargo test
+
+e2e:
+	./scripts/e2e.sh
