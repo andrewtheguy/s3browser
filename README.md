@@ -145,15 +145,7 @@ The encryption key is intentionally excluded — keep it in `~/.s3browser/encryp
 
 ### Development
 
-Run both servers from the repo root with one command:
-
-```bash
-make dev
-```
-
-That spawns `cargo run -- server --bind 127.0.0.1:8170` and the Vite dev server in `frontend/` concurrently; Ctrl-C tears down both.
-
-If you prefer two terminals:
+Run the backend and the Vite dev server in two terminals from the repo root:
 
 ```bash
 # Terminal 1: backend
@@ -177,7 +169,7 @@ cargo test
 ### Production Build
 
 ```bash
-make build    # cargo build --release
+cargo build --release
 ```
 
 `build.rs` runs `bun run build` in `frontend/` and embeds the output, so `target/release/s3browser` is a single self-contained binary. Set `S3BROWSER_PREBUILT_FRONTEND=<dir>` to embed an already-built `dist` directory instead of invoking Bun.
