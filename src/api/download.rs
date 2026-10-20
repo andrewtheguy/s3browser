@@ -35,6 +35,9 @@ use crate::validate::{
 use crate::zip::ZipWriter;
 
 const STREAM_CHUNK_SIZE: usize = 64 * 1024;
+/// Inline SVG is an image to `<img>`, but a script-capable document when
+/// opened directly; this keeps it inert there.
+const SVG_INLINE_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
 /// Folder downloads can far exceed the delete path's 1000-object cap.
 const MAX_ZIP_ENTRIES: usize = 10_000;
 const ZIP_TICKET_TTL: Duration = Duration::from_secs(5 * 60);
@@ -185,6 +188,21 @@ async fn presigned_url(
     Ok(Json(json!({ "url": request.uri() })))
 }
 
+/// Whether an object may be served inline on this origin: only the passive
+/// types the previews render. Anything else (HTML, XML, scripts) could run
+/// with the app's session, so it is only ever an attachment.
+fn is_inline_safe(content_type: &str) -> bool {
+    let mime = content_type.split(';').next().unwrap_or_default().trim().to_ascii_lowercase();
+    match mime.split_once('/') {
+        Some(("image" | "video" | "audio", subtype)) => !subtype.is_empty(),
+        _ => matches!(mime.as_str(), "application/pdf" | "text/plain"),
+    }
+}
+
+fn is_svg(content_type: &str) -> bool {
+    content_type.split(';').next().unwrap_or_default().trim().eq_ignore_ascii_case("image/svg+xml")
+}
+
 /// Stream one object, passing `Range` through so media seeking works.
 async fn download_object(
     State(state): State<AppState>,
@@ -221,22 +239,30 @@ async fn download_object(
             }
         })?;
 
-    let disposition = if query.disposition.as_deref() == Some("inline") {
+    let mut content_type = validate_content_type(query.content_type.as_deref())
+        .or_else(|| response.content_type().filter(|t| !t.is_empty()).map(str::to_string))
+        .filter(|t| HeaderValue::from_str(t).is_ok())
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let inline = query.disposition.as_deref() == Some("inline") && is_inline_safe(&content_type);
+    let disposition = if inline {
         "inline".to_string()
     } else {
+        if query.disposition.as_deref() == Some("inline") {
+            content_type = "application/octet-stream".to_string();
+        }
         let filename = match extract_file_name(&key) {
             "" => "download",
             name => name,
         };
         build_content_disposition("attachment", filename)
     };
-    let content_type = validate_content_type(query.content_type.as_deref())
-        .or_else(|| response.content_type().filter(|t| !t.is_empty()).map(str::to_string))
-        .and_then(|t| HeaderValue::from_str(&t).ok())
-        .unwrap_or_else(|| HeaderValue::from_static("application/octet-stream"));
     let accept_ranges = response.accept_ranges().filter(|v| !v.is_empty()).unwrap_or("bytes");
     let mut out = HeaderMap::new();
-    out.insert(header::CONTENT_TYPE, content_type);
+    if inline && is_svg(&content_type) {
+        out.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(SVG_INLINE_CSP));
+    }
+    out.insert(header::CONTENT_TYPE, HeaderValue::from_str(&content_type).map_err(anyhow::Error::from)?);
+    out.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     out.insert(
         header::CONTENT_DISPOSITION,
         HeaderValue::from_str(&disposition).map_err(anyhow::Error::from)?,
@@ -463,6 +489,17 @@ mod tests {
     use std::io::{Cursor, Read};
 
     const CONTENT_LEN: usize = 200_000;
+
+    #[test]
+    fn only_passive_types_are_served_inline() {
+        for t in ["image/png", "IMAGE/JPEG", "image/svg+xml", "video/mp4", "audio/mpeg", "application/pdf", "text/plain; charset=utf-8"] {
+            assert!(is_inline_safe(t), "{t}");
+        }
+        for t in ["text/html", "application/xhtml+xml", "text/xml", "application/javascript", "image/", "application/octet-stream"] {
+            assert!(!is_inline_safe(t), "{t}");
+        }
+        assert!(is_svg("Image/SVG+XML; charset=utf-8") && !is_svg("image/png"));
+    }
 
     fn content() -> Vec<u8> {
         (0..CONTENT_LEN).map(|i| (i % 251) as u8).collect()

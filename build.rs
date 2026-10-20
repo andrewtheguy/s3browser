@@ -3,8 +3,7 @@
 //! serves the whole app with no dev server in front.
 //!
 //! Two ways the bundle gets there: `bun run build` writing straight into
-//! `OUT_DIR/frontend-dist` (after `bun install` when `frontend/node_modules`
-//! is missing), or `S3BROWSER_PREBUILT_FRONTEND` naming an already built
+//! `OUT_DIR/frontend-dist` (after a frozen `bun install`), or `S3BROWSER_PREBUILT_FRONTEND` naming an already built
 //! directory (release CI builds it once for every target).
 
 use std::env;
@@ -72,14 +71,15 @@ fn build_frontend(root: &Path, output: &Path) -> Result<()> {
     }
 
     let frontend_dir = root.join("frontend");
-    if !frontend_dir.join("node_modules").is_dir() {
-        let status = Command::new("bun")
-            .args(["install", "--frozen-lockfile"])
-            .current_dir(&frontend_dir)
-            .status()
-            .context("failed to run `bun install` for the frontend — install Bun: https://bun.sh")?;
-        ensure!(status.success(), "`bun install --frozen-lockfile` for the frontend failed");
-    }
+    // Every run, not only when node_modules is missing: this script reruns
+    // when bun.lock changes, and must not build against stale packages. A
+    // frozen install that is already in sync is a quick no-op.
+    let status = Command::new("bun")
+        .args(["install", "--frozen-lockfile"])
+        .current_dir(&frontend_dir)
+        .status()
+        .context("failed to run `bun install` for the frontend — install Bun: https://bun.sh")?;
+    ensure!(status.success(), "`bun install --frozen-lockfile` for the frontend failed");
     let status = Command::new("bun")
         .args(["run", "build"])
         .current_dir(&frontend_dir)

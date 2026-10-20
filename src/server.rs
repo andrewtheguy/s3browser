@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use axum::extract::{DefaultBodyLimit, FromRequest, FromRequestParts, Request, State};
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{any, get};
 use axum::{Json, Router, middleware};
@@ -136,6 +137,10 @@ async fn api_not_found() -> impl IntoResponse {
     AppError::not_found("Not found")
 }
 
+async fn method_not_allowed() -> impl IntoResponse {
+    AppError::status(StatusCode::METHOD_NOT_ALLOWED, "Method not allowed")
+}
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(health))
@@ -147,7 +152,10 @@ pub fn router(state: AppState) -> Router {
         .merge(api::download::routes())
         .merge(api::bucket::routes())
         // Unknown API paths are JSON 404s, not the SPA.
+        .route("/api", any(api_not_found))
+        .route("/api/", any(api_not_found))
         .route("/api/{*rest}", any(api_not_found))
+        .method_not_allowed_fallback(method_not_allowed)
         .fallback(assets::static_handler)
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY))
         .layer(middleware::from_fn_with_state(state.clone(), session::api_auth))

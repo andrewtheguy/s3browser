@@ -18,63 +18,51 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# Messages go to stderr: functions whose stdout is captured by $(...) log too.
 print_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    echo -e "${GREEN}[INFO]${NC} $1" >&2
 }
 
 print_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
-get_latest_release_tag() {
-    local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest"
-    local release_json
-
+fetch_url() {
     if command -v curl >/dev/null 2>&1; then
-        release_json=$(curl -s "$api_url")
+        curl -s "$1"
     elif command -v wget >/dev/null 2>&1; then
-        release_json=$(wget -qO- "$api_url")
+        wget -qO- "$1"
     else
         print_error "Neither curl nor wget is available. Please install one of them."
         exit 1
     fi
-
-    local tag
-    tag=$(echo "$release_json" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
-
-    if [ -z "$tag" ]; then
-        print_error "Could not find a latest release on GitHub"
-        exit 1
-    fi
-
-    echo "$tag"
 }
 
-get_latest_prerelease_tag() {
-    local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=30"
+# The newest release (stable, or prerelease with --prerelease) that ships
+# BINARY_NAME. Older releases published other artifacts, so "latest" alone
+# may have no binary for this platform.
+find_release_tag() {
+    local want_prerelease="$1"
     local releases_json
-
-    if command -v curl >/dev/null 2>&1; then
-        releases_json=$(curl -s "$api_url")
-    elif command -v wget >/dev/null 2>&1; then
-        releases_json=$(wget -qO- "$api_url")
-    else
-        print_error "Neither curl nor wget is available. Please install one of them."
-        exit 1
-    fi
+    releases_json=$(fetch_url "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=30")
 
     local tag
-    tag=$(echo "$releases_json" | awk '
-        /"tag_name"/ {gsub(/[,"]/, "", $2); tag=$2}
-        /"prerelease": *true/ {if(tag!=""){print tag; exit}}
+    tag=$(echo "$releases_json" | awk -v want="$want_prerelease" -v asset="\"name\": \"${BINARY_NAME}\"" '
+        /"tag_name":/ { tag = $0; sub(/.*"tag_name": *"/, "", tag); sub(/".*/, "", tag); pre = "" }
+        /"prerelease":/ { pre = ($0 ~ /true/) ? "true" : "false" }
+        index($0, asset) && tag != "" && pre == want { print tag; exit }
     ')
 
     if [ -z "$tag" ]; then
-        print_error "Could not find any prerelease on GitHub"
+        if [ "$want_prerelease" = true ]; then
+            print_error "Could not find a prerelease on GitHub with ${BINARY_NAME}"
+        else
+            print_error "Could not find a release on GitHub with ${BINARY_NAME}"
+        fi
         exit 1
     fi
 
@@ -85,14 +73,7 @@ get_release_info() {
     local tag="$1"
     local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${tag}"
 
-    if command -v curl >/dev/null 2>&1; then
-        curl -s "$api_url"
-    elif command -v wget >/dev/null 2>&1; then
-        wget -qO- "$api_url"
-    else
-        print_error "Neither curl nor wget is available."
-        return 1
-    fi
+    fetch_url "$api_url"
 }
 
 get_expected_checksum() {
@@ -161,18 +142,22 @@ parse_args() {
         esac
     done
 
-    if [ -z "$RELEASE_TAG" ]; then
-        if [ -n "${RELEASE_TAG_ENV:-}" ]; then
-            RELEASE_TAG="$RELEASE_TAG_ENV"
-        else
-            if [ "$PREFER_PRERELEASE" = true ]; then
-                print_info "Fetching latest prerelease tag from GitHub..."
-                RELEASE_TAG=$(get_latest_prerelease_tag)
-            else
-                print_info "Fetching latest release tag from GitHub..."
-                RELEASE_TAG=$(get_latest_release_tag)
-            fi
-        fi
+    if [ -z "$RELEASE_TAG" ] && [ -n "${RELEASE_TAG_ENV:-}" ]; then
+        RELEASE_TAG="$RELEASE_TAG_ENV"
+    fi
+}
+
+# Runs after get_binary_name: the tag is chosen by which releases ship it.
+resolve_release_tag() {
+    if [ -n "$RELEASE_TAG" ]; then
+        return
+    fi
+    if [ "$PREFER_PRERELEASE" = true ]; then
+        print_info "Finding the newest prerelease with ${BINARY_NAME}..."
+        RELEASE_TAG=$(find_release_tag true)
+    else
+        print_info "Finding the newest release with ${BINARY_NAME}..."
+        RELEASE_TAG=$(find_release_tag false)
     fi
 }
 
@@ -416,12 +401,13 @@ install() {
     else
         print_info "s3browser installer"
     fi
-    print_info "Release: ${RELEASE_TAG}"
     print_info "Repository: ${REPO_OWNER}/${REPO_NAME}"
 
     detect_os
     detect_arch
     get_binary_name
+    resolve_release_tag
+    print_info "Release: ${RELEASE_TAG}"
 
     print_info "Platform detected: ${OS}-${ARCH}"
     print_info "Binary name: ${BINARY_NAME}"

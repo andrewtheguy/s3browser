@@ -476,8 +476,12 @@ mod tests {
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
         let (status, body) = app.authed(Method::GET, "/api/objects/7/b", None).await;
         assert_eq!((status, body), (StatusCode::NOT_FOUND, json!({ "error": "Connection not found" })));
-        let (status, body) = app.authed(Method::GET, "/api/nope", None).await;
-        assert_eq!((status, body), (StatusCode::NOT_FOUND, json!({ "error": "Not found" })));
+        for path in ["/api/nope", "/api", "/api/"] {
+            let (status, body) = app.authed(Method::GET, path, None).await;
+            assert_eq!((status, body), (StatusCode::NOT_FOUND, json!({ "error": "Not found" })), "{path}");
+        }
+        let (status, body) = app.authed(Method::POST, "/api/health", None).await;
+        assert_eq!((status, body), (StatusCode::METHOD_NOT_ALLOWED, json!({ "error": "Method not allowed" })));
     }
 
     #[tokio::test]

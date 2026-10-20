@@ -667,9 +667,11 @@ fn validate_batch(operations: Option<Vec<CopyOperation>>, verb: &str) -> Result<
     Ok(operations)
 }
 
-fn failure_message(error: &anyhow::Error, fallback: &str) -> String {
-    let message = format!("{error:#}");
-    if message.is_empty() { fallback.to_string() } else { message }
+/// Log a per-object failure in full and return the stable message clients
+/// see: upstream S3 text stays in the log.
+fn failure_message(error: &anyhow::Error, message: &'static str, key: &str) -> &'static str {
+    error!("{message} for {key}: {error:#}");
+    message
 }
 
 async fn copy_object(
@@ -700,7 +702,7 @@ async fn batch_copy(
             Ok(()) => successful.push(operation.source_key.clone()),
             Err(e) => errors.push(json!({
                 "sourceKey": operation.source_key,
-                "message": failure_message(&e, "Copy failed"),
+                "message": failure_message(&e, "Copy failed", &operation.source_key),
             })),
         }
     }
@@ -727,7 +729,7 @@ async fn move_object(
                 "message": "Move failed: copy succeeded but source delete failed. Destination key now has the data \
                             and the source still exists; retry the delete or remove the destination to recover.",
                 "destinationKey": destination,
-                "error": failure_message(&e, "Delete failed"),
+                "error": failure_message(&e, "Delete failed", source),
             }),
         ));
     }
@@ -749,7 +751,7 @@ async fn batch_move(
         if let Err(e) = copy(&context.client, bucket, &operation.source_key, &operation.destination_key, version_id).await {
             errors.push(json!({
                 "sourceKey": operation.source_key,
-                "message": failure_message(&e, "Copy failed"),
+                "message": failure_message(&e, "Copy failed", &operation.source_key),
             }));
             continue;
         }
@@ -758,7 +760,11 @@ async fn batch_move(
             Err(e) => errors.push(json!({
                 "sourceKey": operation.source_key,
                 "destinationKey": operation.destination_key,
-                "message": format!("Delete failed after successful copy; destination created: {e:#}"),
+                "message": failure_message(
+                    &e,
+                    "Delete failed after successful copy; destination created",
+                    &operation.source_key,
+                ),
             })),
         }
     }

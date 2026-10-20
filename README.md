@@ -84,7 +84,7 @@ The Docker image runs `s3browser server` as its entrypoint automatically.
 ### Prerequisites
 
 - A Rust toolchain ([rustup](https://rustup.rs/)); on Linux also `clang` and `mold`
-- [Bun](https://bun.sh/) 1.0+ on `PATH`: `build.rs` uses it to build the frontend (running `bun install` first when `frontend/node_modules` is missing)
+- [Bun](https://bun.sh/) 1.0+ on `PATH`: `build.rs` uses it to build the frontend (running a frozen `bun install` first, so dependencies always match `bun.lock`)
 
 ### Configuration
 

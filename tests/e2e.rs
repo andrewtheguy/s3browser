@@ -460,6 +460,33 @@ async fn upload_list_download_delete() {
     );
     assert_eq!(response.bytes().await.unwrap().as_ref(), &big[100..200]);
 
+    // Inline is only for passive types: stored HTML must not render on the
+    // app's origin, so it comes back as an attachment.
+    for (key, content_type) in [("page.html", "text/html"), ("pic.svg", "image/svg+xml")] {
+        fx.s3
+            .put_object()
+            .bucket(bucket)
+            .key(key)
+            .content_type(content_type)
+            .body(ByteStream::from_static(b"<svg><script>alert(1)</script></svg>"))
+            .send()
+            .await
+            .unwrap();
+    }
+    let inline = |key: &str| {
+        let path = server.bucket_path("download", bucket, &format!("/object?key={key}&disposition=inline"));
+        server.http.get(server.url(&path)).send()
+    };
+    let response = inline("page.html").await.unwrap();
+    assert_eq!(response.headers()[header::CONTENT_TYPE], "application/octet-stream");
+    assert!(response.headers()[header::CONTENT_DISPOSITION].to_str().unwrap().starts_with("attachment"));
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+    let response = inline("pic.svg").await.unwrap();
+    assert_eq!(response.headers()[header::CONTENT_DISPOSITION], "inline");
+    assert!(response.headers()[header::CONTENT_SECURITY_POLICY].to_str().unwrap().contains("sandbox"));
+    fx.s3.delete_object().bucket(bucket).key("page.html").send().await.unwrap();
+    fx.s3.delete_object().bucket(bucket).key("pic.svg").send().await.unwrap();
+
     let response = server.download(bucket, "missing.bin", None).await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
