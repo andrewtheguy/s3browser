@@ -1,6 +1,6 @@
 # AI Agent Instructions
 
-Strict no backward compatibility or legacy code path because it is a private project.
+Strict no backward compatibility or legacy code path no matter what.
 
 ## Project layout
 
