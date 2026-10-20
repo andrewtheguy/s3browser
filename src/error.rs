@@ -83,7 +83,11 @@ impl From<QueryRejection> for AppError {
 
 impl From<JsonRejection> for AppError {
     fn from(e: JsonRejection) -> Self {
-        invalid_request(e.body_text())
+        match e {
+            // Not an invalid request: a body past the limit keeps its 413.
+            JsonRejection::BytesRejection(e) => e.into(),
+            e => invalid_request(e.body_text()),
+        }
     }
 }
 
