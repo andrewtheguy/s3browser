@@ -12,7 +12,7 @@ Preview functionality is implemented in:
 - `frontend/src/components/PreviewDialog/TextPreview.tsx`
 - `frontend/src/services/api/download.ts`
 - `frontend/src/utils/previewUtils.ts`
-- `s3browser/routers/download.py`
+- `src/api/download.rs`
 
 ## Client-Side Controls
 
@@ -90,6 +90,11 @@ Preview functionality is implemented in:
 - It applies the same object key validation and optional `versionId` sanitization as `/url`.
 - Disposition is controlled per request: `disposition=inline` with a per-extension `contentType` override is used for media/PDF previews so the browser renders the response, while downloads default to `disposition=attachment` with a sanitized filename. Text previews ignore `Content-Disposition` and read the response body directly via `fetch`.
 - Supports HTTP `Range` requests (returns `206 Partial Content`) so video and audio previews can seek without the backend buffering the full object.
+
+8. Inline allowlist on the app origin
+- `/object` serves `disposition=inline` only for passive types: `image/*`, `video/*`, `audio/*`, `application/pdf`, and `text/plain`. Any other type (HTML, XML, scripts, …), whether from the `contentType` override or the object's stored `Content-Type`, is forced to `attachment` with `application/octet-stream`, so stored content cannot run script with the user's session.
+- Inline SVG additionally gets `Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox`, which keeps it inert if opened directly rather than through `<img>`.
+- Every `/object` response carries `X-Content-Type-Options: nosniff`.
 
 ## Known Residual Risks
 

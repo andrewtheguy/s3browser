@@ -3,194 +3,216 @@ name: Release (Manual)
 on:
   workflow_dispatch:
 
+# The tag comes from Cargo.toml inside the run, so serialize all releases: a
+# queued run then sees the tag the previous one created and stops.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  GHCR_IMAGE: ghcr.io/andrewtheguy/s3browser
 
 jobs:
-  setup:
+  prepare:
     runs-on: ubuntu-latest
     outputs:
-      release_tag: ${{ steps.version.outputs.new }}
-      is_prerelease: ${{ steps.version.outputs.prerelease }}
+      tag: ${{ steps.version.outputs.tag }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Determine version
+      - name: Determine and validate version
         id: version
-        run: |
-          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
-          if [ -z "$version" ]; then
-            echo "::error::Could not parse version from pyproject.toml"
-            exit 1
-          fi
-          tag="v$version"
-          echo "new=$tag" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Abort if tag already exists
-        run: |
-          if git ls-remote --tags origin "refs/tags/${{ steps.version.outputs.new }}" | grep -q .; then
-            echo "::error::Tag ${{ steps.version.outputs.new }} already exists on remote"
-            exit 1
-          fi
-
-      - name: Create draft release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          # Clean up any leftover draft from a previous failed run with the same version.
-          # A draft release doesn't create the git tag on the remote, so a stale draft is the
-          # only thing that can collide here (real published tags are caught by the step above).
-          if gh release view "${{ steps.version.outputs.new }}" --json isDraft --jq '.isDraft' 2>/dev/null | grep -qx true; then
-            echo "Deleting stale draft release ${{ steps.version.outputs.new }}"
-            gh release delete "${{ steps.version.outputs.new }}" --yes
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "Could not determine version from Cargo.toml" >&2
+            exit 1
           fi
-          gh release create "${{ steps.version.outputs.new }}" \
-            --draft \
-            --target "${{ github.sha }}" \
-            --title "Release ${{ steps.version.outputs.new }}" \
-            --generate-notes \
-            ${{ steps.version.outputs.prerelease == 'true' && '--prerelease' || '' }}
 
-  build-wheel:
-    needs: setup
+          TAG="v${VERSION}"
+          echo "Release tag: ${TAG}"
+
+          if gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists. Bump the version in Cargo.toml before releasing." >&2
+            exit 1
+          fi
+
+          IS_PRERELEASE="false"
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            IS_PRERELEASE="true"
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
+
+  # Built once and embedded by every target via S3BROWSER_PREBUILT_FRONTEND.
+  build-frontend:
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.5"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          version: "0.9.11"
-
       - name: Install frontend dependencies
-        run: bun install --frozen-lockfile
-        working-directory: frontend
+        run: cd frontend && bun install --frozen-lockfile
 
       - name: Build frontend
-        run: bun run build
-        working-directory: frontend
+        run: cd frontend && bun run build
 
-      - name: Build wheel and sdist
-        run: uv build --out-dir dist-python
-
-      - name: Upload wheel artifact
+      - name: Upload frontend
         uses: actions/upload-artifact@v4
         with:
-          name: release-python-package
-          path: dist-python/*
-          if-no-files-found: error
+          name: frontend-dist
+          path: frontend/dist
 
-  docker-build:
-    needs: setup
-    runs-on: ${{ matrix.runner }}
+  build-linux:
+    needs: [prepare, build-frontend]
     strategy:
       matrix:
         include:
           - runner: ubuntu-latest
-            arch: amd64
-            platform: linux/amd64
+            arch: x86_64
           - runner: ubuntu-24.04-arm
             arch: arm64
-            platform: linux/arm64
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push Docker image (native ${{ matrix.arch }})
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          platforms: ${{ matrix.platform }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.release_tag }}-${{ matrix.arch }}
-            ${{ needs.setup.outputs.is_prerelease == 'false' && format('{0}/{1}:latest-{2}', env.REGISTRY, env.IMAGE_NAME, matrix.arch) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  docker-manifest:
-    needs: [setup, docker-build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create versioned multi-arch manifest
-        run: |
-          docker buildx imagetools create \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.release_tag }} \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.release_tag }}-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.release_tag }}-arm64
-
-      - name: Create latest multi-arch manifest
-        if: needs.setup.outputs.is_prerelease == 'false'
-        run: |
-          docker buildx imagetools create \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-arm64
-
-  create-release:
-    needs: [setup, build-wheel, docker-manifest]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: release-*
-          path: artifacts
-          merge-multiple: true
-
-      - name: List artifacts
-        run: ls -la artifacts/
-
-      - name: Upload artifacts to draft release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: gh release upload "${{ needs.setup.outputs.release_tag }}" artifacts/* --clobber
-
-      - name: Publish release (remove draft, creates the tag)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: gh release edit "${{ needs.setup.outputs.release_tag }}" --draft=false
-
-  deploy-pages:
-    if: github.ref_name == 'main'
-    needs: create-release
-    uses: ./.github/workflows/pages.yml
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      pages: write
-      id-token: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: tmp/frontend-dist
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang mold pkg-config
+
+      - name: Build
+        env:
+          S3BROWSER_PREBUILT_FRONTEND: tmp/frontend-dist
+        run: cargo build --release --locked
+
+      - name: Rename binary
+        run: mv target/release/s3browser target/release/s3browser-linux-${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: s3browser-linux-${{ matrix.arch }}
+          path: target/release/s3browser-linux-${{ matrix.arch }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image (using pre-built binary)
+        run: |
+          TAG=${{ needs.prepare.outputs.tag }}
+          # Copy binary to build context root for Dockerfile
+          cp target/release/s3browser-linux-${{ matrix.arch }} s3browser
+          docker build --target runtime-prebuilt -t ${{ env.GHCR_IMAGE }}:${TAG}-${{ matrix.arch }} .
+          docker push ${{ env.GHCR_IMAGE }}:${TAG}-${{ matrix.arch }}
+
+  build-macos:
+    needs: [prepare, build-frontend]
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download frontend
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: tmp/frontend-dist
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        env:
+          S3BROWSER_PREBUILT_FRONTEND: tmp/frontend-dist
+        run: cargo build --release --locked
+
+      - name: Rename binary
+        run: mv target/release/s3browser target/release/s3browser-macos-arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: s3browser-macos-arm64
+          path: target/release/s3browser-macos-arm64
+
+  release:
+    needs: [prepare, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: s3browser-*
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.prepare.outputs.tag }}
+          files: artifacts/*
+          generate_release_notes: true
+          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          TAG=${{ needs.prepare.outputs.tag }}
+          docker manifest create ${{ env.GHCR_IMAGE }}:${TAG} \
+            ${{ env.GHCR_IMAGE }}:${TAG}-x86_64 \
+            ${{ env.GHCR_IMAGE }}:${TAG}-arm64
+          docker manifest push ${{ env.GHCR_IMAGE }}:${TAG}
+
+          # Only tag as latest on non-prerelease (main branch) builds
+          if [ "${{ needs.prepare.outputs.is_prerelease }}" = "false" ]; then
+            docker manifest create ${{ env.GHCR_IMAGE }}:latest \
+              ${{ env.GHCR_IMAGE }}:${TAG}-x86_64 \
+              ${{ env.GHCR_IMAGE }}:${TAG}-arm64
+            docker manifest push ${{ env.GHCR_IMAGE }}:latest
+          fi

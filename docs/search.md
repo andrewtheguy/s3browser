@@ -49,9 +49,9 @@ Keys, sizes, last-modified timestamps, and indexed text content are stored unenc
 
 ## Source pointers
 
-- Whitelist + gate: `s3browser/config.py` (`get_search_whitelist_hosts`)
-- Paths: `s3browser/paths.py` (`INDEX_DB_PATH`, `INDEX_LOCK_FILE`)
-- Schema + upsert/sweep/search helpers: `s3browser/db.py`
-- API routes: `s3browser/routers/objects.py`
-- Indexer CLI: `s3browser/cli.py` (`index` subcommand), `s3browser/indexing.py`
+- Whitelist + gate: `src/config.rs` (`Config::search_whitelist_hosts`), `src/server.rs` (`AppState::search_host`)
+- Paths: `src/paths.rs` (`AppPaths::index_db`, `AppPaths::index_lock`)
+- Schema + upsert/sweep/search helpers: `src/db.rs` (`IndexDb`)
+- API routes: `src/api/objects.rs`
+- Indexer CLI: `src/cli.rs` (`index` subcommand), `src/indexer.rs`
 - Search page + Toolbar button: `frontend/src/pages/SearchPage.tsx`, `frontend/src/components/Toolbar/Toolbar.tsx`

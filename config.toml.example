@@ -1,7 +1,8 @@
 # S3 Browser configuration
 # Place this file at ~/.s3browser/config.toml
 #
-# Environment variables (and Bun-auto-loaded .env values) take precedence
+# Environment variables (and values from a .env file in the working
+# directory) take precedence
 # over values defined here. The encryption key is NOT configurable here -
 # set S3BROWSER_ENCRYPTION_KEY env var or write ~/.s3browser/encryption.key.
 #

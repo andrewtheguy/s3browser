@@ -31,35 +31,17 @@ Object encryption reporting varies by vendor. If the object metadata does not in
 
 ## Install
 
-Each manual release publishes a Python wheel (with the frontend assets embedded) and a multi-arch Docker image to GitHub Container Registry.
+Each manual release publishes standalone binaries (Linux x86_64/arm64, macOS arm64, with the frontend embedded) and a multi-arch Docker image to GitHub Container Registry.
 
-### Quick install (latest released wheel)
+### Quick install (latest release binary)
 
-Fetches the latest `s3browser-<version>-py3-none-any.whl` from GitHub Releases and installs it with `uv tool install`. Requires [uv](https://docs.astral.sh/uv/) and `curl`.
+Downloads the binary for your platform from GitHub Releases, verifies its SHA-256 digest, and installs it to `~/.local/bin/s3browser`. Requires `curl` or `wget`.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/andrewtheguy/s3browser/main/scripts/install.sh | bash
 ```
 
-Re-run the command to upgrade to the latest release.
-
-### From the GitHub Pages package index (recommended)
-
-Released wheels are indexed at `https://andrewtheguy.github.io/s3browser/simple/`. Install with [uv](https://docs.astral.sh/uv/):
-
-```bash
-uv tool install \
-  --extra-index-url https://andrewtheguy.github.io/s3browser/simple/ \
-  's3browser==x.x.x'
-```
-
-### From a released wheel
-
-Alternatively, grab `s3browser-<version>-py3-none-any.whl` from the [Releases](https://github.com/andrewtheguy/s3browser/releases) page and install it directly:
-
-```bash
-uv tool install ./s3browser-<version>-py3-none-any.whl
-```
+Re-run the command to upgrade. Pass a tag (`... | bash -s -- v0.2.0`) for a specific release, `--prerelease` for the latest prerelease, or `--download-only` to save the binary in the current directory instead.
 
 ### From Docker
 
@@ -73,11 +55,12 @@ The image runs as a non-root `app` user (UID 1000) with home `/home/app`, and th
 
 ### From source
 
+Requires a Rust toolchain, [Bun](https://bun.sh/), and on Linux `clang` + `mold` (see `.cargo/config.toml`).
+
 ```bash
 git clone https://github.com/andrewtheguy/s3browser.git
 cd s3browser
-(cd frontend && bun install && bun run build)
-uv tool install .
+cargo install --path . --locked
 ```
 
 ### Run
@@ -93,23 +76,15 @@ The Docker image runs `s3browser server` as its entrypoint automatically.
 ## Tech Stack
 
 - **Frontend**: React, TypeScript, Tailwind CSS, Radix UI primitives, lucide-react icons
-- **Backend**: FastAPI, boto3, SQLite, cryptography
-- **Build**: Vite (frontend bundler), Bun (frontend package manager), uv (Python package/tool manager)
+- **Backend**: Rust — axum, aws-sdk-s3, sqlx (SQLite), RustCrypto (scrypt, AES-256-GCM)
+- **Build**: Cargo (a release build embeds the frontend), Vite (frontend bundler), Bun (frontend package manager)
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/)
-- [Bun](https://bun.sh/) 1.0+
-
-### Installation
-
-```bash
-(cd frontend && bun install)
-uv sync
-```
+- A Rust toolchain ([rustup](https://rustup.rs/)); on Linux also `clang` and `mold`
+- [Bun](https://bun.sh/) 1.0+ on `PATH`: `build.rs` uses it to build the frontend (running a frozen `bun install` first, so dependencies always match `bun.lock`)
 
 ### Configuration
 
@@ -148,7 +123,7 @@ export S3BROWSER_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 **Optional TOML config** (`~/.s3browser/config.toml`):
 
-Settings other than the encryption key can be put in a TOML file. Environment variables and `.env` values loaded by the Python backend take precedence over values defined here. See `config.toml.example` for the template.
+Settings other than the encryption key can be put in a TOML file. Environment variables (including a `.env` file in the working directory) take precedence over values defined here. See `config.toml.example` for the template.
 
 ```toml
 # ~/.s3browser/config.toml
@@ -162,43 +137,30 @@ The encryption key is intentionally excluded — keep it in `~/.s3browser/encryp
 
 ### Development
 
-Run both servers from the repo root with one command:
-
 ```bash
-make dev
+cargo run -- server --bind 127.0.0.1:8170
 ```
 
-That spawns `uv run s3browser server --bind localhost:3001 --reload` and the Vite dev server in `frontend/` concurrently; Ctrl-C tears down both.
+Open `http://127.0.0.1:8170`. Every build, debug included, compiles the frontend into the binary, so there is no separate dev server; rerun the command after a frontend change and Cargo rebuilds the bundle.
 
-If you prefer two terminals:
-
-```bash
-# Terminal 1: FastAPI backend with reload
-uv run s3browser server --bind localhost:3001 --reload
-
-# Terminal 2: Vite dev server
-cd frontend && bun run dev
-```
-
-The frontend runs on `http://localhost:5173` and proxies API requests to the backend on `http://localhost:3001`.
-
-The Vite dev proxy is configured for backend port `3001`; if you run the backend on a different port, update `frontend/vite.config.ts` or call the backend directly.
-
-### Production Build And Tool Install
+Checks:
 
 ```bash
-make build
+cargo clippy --all-targets -- -D warnings
+cargo test
+./scripts/e2e.sh                 # real binary against a local Silo S3 server
+(cd frontend && bun run lint && bun run typecheck)
 ```
 
-This runs `bun run build` in `frontend/` (writing the Vite output to `dist/` at the repo root) and then `uv build --out-dir dist-python`. The wheel includes the current `dist/` frontend assets so an installed `s3browser` command can serve the full app.
-
-Install the command from the current checkout with uv:
+### Production Build
 
 ```bash
-uv tool install .
+cargo build --release
 ```
 
-The installed command is a multi-command CLI:
+As in every build, `build.rs` runs `bun run build` in `frontend/` and embeds the output, so `target/release/s3browser` is a single self-contained binary. Set `S3BROWSER_PREBUILT_FRONTEND=<dir>` to embed an already-built `dist` directory instead of invoking Bun.
+
+The binary is a multi-command CLI:
 
 ```bash
 s3browser server                          # run the HTTP server
@@ -213,17 +175,9 @@ s3browser --help                          # top-level help
 s3browser --version                       # version info
 ```
 
-`s3browser server` listens on all interfaces on port `8170` by default. Use `--bind 127.0.0.1:8170` for localhost-only access, or `--bind unix:/tmp/s3browser.sock` to listen on a Unix domain socket (handy behind a reverse proxy such as Caddy, which supports Unix sockets on Windows too). Point the socket at a directory you can write to — `/tmp` and `/run/user/$(id -u)` work without extra setup, whereas a system path like `/run/s3browser.sock` first needs that directory created and owned by the user running the server. Keep socket paths short — the OS caps them at 108 bytes, and a longer path fails at startup with `AF_UNIX path too long`. When `--bind` is omitted, the bind address falls back to the `S3BROWSER_BIND` environment variable (e.g. `S3BROWSER_BIND=:8080` or `S3BROWSER_BIND=unix:/tmp/s3browser.sock`); `S3BROWSER_BIND` can also be set in `config.toml`. Run `s3browser server --help` or `s3browser index --help` for subcommand-specific options.
+`s3browser server` listens on all interfaces on port `8170` by default. Use `--bind 127.0.0.1:8170` for localhost-only access, or `--bind unix:/tmp/s3browser.sock` to listen on a Unix domain socket (handy behind a reverse proxy such as Caddy). Point the socket at a directory you can write to — `/tmp` and `/run/user/$(id -u)` work without extra setup, whereas a system path like `/run/s3browser.sock` first needs that directory created and owned by the user running the server. Keep socket paths short — the OS caps them at 108 bytes. When `--bind` is omitted, the bind address falls back to the `S3BROWSER_BIND` environment variable (e.g. `S3BROWSER_BIND=:8080` or `S3BROWSER_BIND=unix:/tmp/s3browser.sock`); `S3BROWSER_BIND` can also be set in `config.toml`. Run `s3browser server --help` or `s3browser index --help` for subcommand-specific options.
 
-### CLI (development)
-
-During development, run the same subcommands without compiling via:
-
-```bash
-uv run s3browser server -b :3001 --reload
-uv run s3browser index --connection 1
-uv run s3browser index --reset
-```
+Log verbosity follows `RUST_LOG` (default `info`).
 
 ## Usage
 

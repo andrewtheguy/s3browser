@@ -1,33 +1,459 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-REPO="andrewtheguy/s3browser"
+# s3browser installer for Linux and Mac
+# Downloads latest binary from: https://github.com/andrewtheguy/s3browser/releases
+#
+# Usage: ./install.sh [RELEASE_TAG] [--prerelease]
+# Or set RELEASE_TAG environment variable
 
-if ! command -v uv >/dev/null 2>&1; then
-    echo "error: 'uv' is not installed or not on PATH." >&2
-    echo "Install it from https://docs.astral.sh/uv/getting-started/installation/" >&2
-    exit 1
-fi
+set -e
 
-if ! command -v curl >/dev/null 2>&1; then
-    echo "error: 'curl' is required to fetch the latest release metadata." >&2
-    exit 1
-fi
+REPO_OWNER="andrewtheguy"
+REPO_NAME="s3browser"
+DOWNLOAD_ONLY=false
+PREFER_PRERELEASE=false
 
-api_url="https://api.github.com/repos/${REPO}/releases/latest"
-wheel_url=$(
-    curl -fsSL \
-        -H "Accept: application/vnd.github+json" \
-        "${api_url}" \
-    | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*/s3browser-[^"/]*-py3-none-any\.whl"' \
-    | head -n1 \
-    | sed -E 's/.*"(https:[^"]+)"$/\1/'
-)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-if [[ -z "${wheel_url}" ]]; then
-    echo "error: could not find an s3browser-*-py3-none-any.whl asset in the latest release of ${REPO}." >&2
-    exit 1
-fi
+# Messages go to stderr: functions whose stdout is captured by $(...) log too.
+print_info() {
+    echo -e "${GREEN}[INFO]${NC} $1" >&2
+}
 
-echo "Installing ${wheel_url##*/} with uv tool install..."
-uv tool install --force "${wheel_url}"
+print_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+fetch_url() {
+    if command -v curl >/dev/null 2>&1; then
+        curl -s "$1"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$1"
+    else
+        print_error "Neither curl nor wget is available. Please install one of them."
+        exit 1
+    fi
+}
+
+# The newest release (stable, or prerelease with --prerelease) that ships
+# BINARY_NAME. Older releases published other artifacts, so "latest" alone
+# may have no binary for this platform.
+find_release_tag() {
+    local want_prerelease="$1"
+    local releases_json
+    releases_json=$(fetch_url "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=30")
+
+    local tag
+    tag=$(echo "$releases_json" | awk -v want="$want_prerelease" -v asset="\"name\": \"${BINARY_NAME}\"" '
+        /"tag_name":/ { tag = $0; sub(/.*"tag_name": *"/, "", tag); sub(/".*/, "", tag); pre = "" }
+        /"prerelease":/ { pre = ($0 ~ /true/) ? "true" : "false" }
+        index($0, asset) && tag != "" && pre == want { print tag; exit }
+    ')
+
+    if [ -z "$tag" ]; then
+        if [ "$want_prerelease" = true ]; then
+            print_error "Could not find a prerelease on GitHub with ${BINARY_NAME}"
+        else
+            print_error "Could not find a release on GitHub with ${BINARY_NAME}"
+        fi
+        exit 1
+    fi
+
+    echo "$tag"
+}
+
+get_release_info() {
+    local tag="$1"
+    local api_url="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/tags/${tag}"
+
+    fetch_url "$api_url"
+}
+
+get_expected_checksum() {
+    local release_json="$1"
+    local binary_name="$2"
+
+    echo "$release_json" | grep -A40 "\"name\": \"${binary_name}\"" | \
+        grep '"digest"' | head -1 | grep -o 'sha256:[a-f0-9]*' | cut -d: -f2
+}
+
+compute_checksum() {
+    local file="$1"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" | cut -d' ' -f1
+    else
+        print_error "No SHA-256 tool available (need sha256sum or shasum)"
+        return 1
+    fi
+}
+
+verify_checksum() {
+    local file="$1"
+    local expected="$2"
+
+    print_info "Verifying checksum..."
+    local actual
+    actual=$(compute_checksum "$file")
+
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
+    if [ "$expected" = "$actual" ]; then
+        print_info "Checksum verified: ${actual:0:16}..."
+        return 0
+    else
+        print_error "Checksum verification FAILED!"
+        print_error "Expected: $expected"
+        print_error "Actual:   $actual"
+        return 1
+    fi
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --download-only)
+                DOWNLOAD_ONLY=true
+                shift
+                ;;
+            --prerelease)
+                PREFER_PRERELEASE=true
+                shift
+                ;;
+            --help|-h)
+                show_usage
+                exit 0
+                ;;
+            *)
+                RELEASE_TAG="$1"
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$RELEASE_TAG" ] && [ -n "${RELEASE_TAG_ENV:-}" ]; then
+        RELEASE_TAG="$RELEASE_TAG_ENV"
+    fi
+}
+
+# Runs after get_binary_name: the tag is chosen by which releases ship it.
+resolve_release_tag() {
+    if [ -n "$RELEASE_TAG" ]; then
+        return
+    fi
+    if [ "$PREFER_PRERELEASE" = true ]; then
+        print_info "Finding the newest prerelease with ${BINARY_NAME}..."
+        RELEASE_TAG=$(find_release_tag true)
+    else
+        print_info "Finding the newest release with ${BINARY_NAME}..."
+        RELEASE_TAG=$(find_release_tag false)
+    fi
+}
+
+detect_os() {
+    case "$(uname -s)" in
+        Linux*)
+            OS="linux"
+            ;;
+        Darwin*)
+            OS="macos"
+            ;;
+        *)
+            print_error "Unsupported operating system: $(uname -s)"
+            print_error "This script only supports Linux and macOS"
+            exit 1
+            ;;
+    esac
+}
+
+detect_arch() {
+    ARCH=$(uname -m)
+    case $ARCH in
+        x86_64|amd64)
+            ARCH="x86_64"
+            ;;
+        aarch64|arm64)
+            ARCH="arm64"
+            ;;
+        *)
+            print_error "Unsupported architecture: $ARCH"
+            print_error "Supported architectures: x86_64/amd64, aarch64/arm64"
+            exit 1
+            ;;
+    esac
+}
+
+get_binary_name() {
+    case "${OS}-${ARCH}" in
+        "linux-x86_64")
+            BINARY_NAME="s3browser-linux-x86_64"
+            ;;
+        "linux-arm64")
+            BINARY_NAME="s3browser-linux-arm64"
+            ;;
+        "macos-arm64")
+            BINARY_NAME="s3browser-macos-arm64"
+            ;;
+        *)
+            print_error "Unsupported platform: ${OS}-${ARCH}"
+            print_error "Supported platforms:"
+            print_error "  - linux-x86_64 (x86_64 Linux)"
+            print_error "  - linux-arm64 (aarch64 Linux)"
+            print_error "  - macos-arm64 (Apple Silicon Mac)"
+            exit 1
+            ;;
+    esac
+}
+
+download_binary() {
+    local base_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${RELEASE_TAG}"
+    local url="${base_url}/${BINARY_NAME}"
+    local output_path="$1"
+
+    print_info "Downloading ${BINARY_NAME} from ${url}"
+
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -fL -o "$output_path" "$url"; then
+            print_error "Failed to download binary"
+            exit 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! wget -O "$output_path" "$url"; then
+            print_error "Failed to download binary"
+            exit 1
+        fi
+    else
+        print_error "Neither curl nor wget is available. Please install one of them."
+        exit 1
+    fi
+
+    if [ -z "$EXPECTED_CHECKSUM" ]; then
+        print_error "No checksum available. Aborting."
+        rm -f "$output_path"
+        exit 1
+    fi
+    if ! verify_checksum "$output_path" "$EXPECTED_CHECKSUM"; then
+        print_error "Binary integrity check failed. Aborting."
+        rm -f "$output_path"
+        exit 1
+    fi
+}
+
+download_only() {
+    local output_file="./${BINARY_NAME}"
+
+    download_binary "$output_file"
+
+    chmod +x "$output_file"
+
+    print_info "Testing downloaded binary..."
+    local version_info
+    if ! version_info=$("$output_file" --version 2>&1); then
+        print_error "Binary test failed. The downloaded file may be corrupted or incompatible."
+        print_error "Output: $version_info"
+        rm -f "$output_file"
+        exit 1
+    fi
+
+    print_info "Binary test successful: $version_info"
+    print_info "Binary saved to: ${output_file}"
+}
+
+check_profile_has_path() {
+    local profile="$1"
+    local target_dir="$2"
+
+    if [ -z "$profile" ] || [ ! -f "$profile" ]; then
+        return 1
+    fi
+
+    local new_path
+    new_path=$(HOME="$HOME" SHELL="$SHELL" bash -c "source '$profile' 2>/dev/null; echo \"\$PATH\"" 2>/dev/null)
+
+    if [[ ":$new_path:" == *":$target_dir:"* ]]; then
+        return 0
+    fi
+    return 1
+}
+
+find_profile_with_local_bin() {
+    local target_dir="$1"
+    local shell_name
+    shell_name=$(basename "$SHELL")
+
+    local profiles=()
+
+    case "$shell_name" in
+        bash)
+            profiles=("$HOME/.bash_profile" "$HOME/.profile" "$HOME/.bashrc")
+            ;;
+        zsh)
+            profiles=("$HOME/.zprofile" "$HOME/.zshrc")
+            ;;
+        *)
+            profiles=("$HOME/.profile")
+            ;;
+    esac
+
+    for profile in "${profiles[@]}"; do
+        if check_profile_has_path "$profile" "$target_dir"; then
+            echo "$profile"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+download_and_install() {
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    local temp_binary="${temp_dir}/${BINARY_NAME}"
+    local final_path="$HOME/.local/bin/s3browser"
+
+    trap 'rm -rf "$temp_dir"' EXIT
+
+    download_binary "$temp_binary"
+
+    chmod +x "$temp_binary"
+
+    print_info "Testing downloaded binary..."
+    local version_info
+    if ! version_info=$("$temp_binary" --version 2>&1); then
+        print_error "Binary test failed. The downloaded file may be corrupted or incompatible."
+        print_error "Output: $version_info"
+        exit 1
+    fi
+
+    print_info "Binary test successful: $version_info"
+
+    local target_dir="$HOME/.local/bin"
+    mkdir -p "$target_dir"
+
+    if ! mv "$temp_binary" "$final_path"; then
+        print_error "Failed to move binary to final location"
+        exit 1
+    fi
+
+    rm -rf "$temp_dir"
+
+    print_info "Binary installed successfully to ${final_path}"
+
+    if [[ ":$PATH:" != *":$target_dir:"* ]]; then
+        local profile
+        profile=$(find_profile_with_local_bin "$target_dir")
+
+        if [ -n "$profile" ]; then
+            print_warn "${target_dir} is not in your current PATH, but is configured in your profile."
+            print_warn "To use s3browser now, reload your profile:"
+            echo ""
+            echo "    source $profile"
+            echo ""
+            print_warn "Or start a new terminal session."
+        else
+            print_warn "${target_dir} is not in your PATH"
+            print_warn "Add the following line to your shell profile (.bashrc, .zshrc, etc.):"
+            echo ""
+            echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+            echo ""
+            print_warn "Then reload your profile or start a new terminal session."
+        fi
+    fi
+}
+
+show_usage() {
+    echo "Usage: $0 [OPTIONS] [RELEASE_TAG]"
+    echo ""
+    echo "Download and install s3browser binary"
+    echo ""
+    echo "Options:"
+    echo "  --download-only  Download binary to current directory without installing"
+    echo "  --prerelease     Use latest prerelease instead of latest stable release"
+    echo "  -h, --help       Show this help message"
+    echo ""
+    echo "Arguments:"
+    echo "  RELEASE_TAG      GitHub release tag to download (default: latest)"
+    echo ""
+    echo "Examples:"
+    echo "  $0                              # Install latest release"
+    echo "  $0 v0.1.0                       # Install specific release"
+    echo "  $0 --prerelease                 # Install latest prerelease"
+    echo "  $0 --download-only              # Download latest to current directory"
+    echo "  $0 --download-only v0.1.0       # Download specific release"
+    echo ""
+    echo "Supported platforms: Linux (x86_64, arm64), macOS (arm64)"
+}
+
+install() {
+    if [ "$DOWNLOAD_ONLY" = true ]; then
+        print_info "s3browser downloader"
+    else
+        print_info "s3browser installer"
+    fi
+    print_info "Repository: ${REPO_OWNER}/${REPO_NAME}"
+
+    detect_os
+    detect_arch
+    get_binary_name
+    resolve_release_tag
+    print_info "Release: ${RELEASE_TAG}"
+
+    print_info "Platform detected: ${OS}-${ARCH}"
+    print_info "Binary name: ${BINARY_NAME}"
+
+    print_info "Fetching release information..."
+    RELEASE_JSON=$(get_release_info "$RELEASE_TAG")
+
+    if [ -z "$RELEASE_JSON" ] || echo "$RELEASE_JSON" | grep -q '"message": "Not Found"'; then
+        print_error "Could not fetch release info from GitHub. Cannot verify binary integrity."
+        exit 1
+    fi
+
+    EXPECTED_CHECKSUM=$(get_expected_checksum "$RELEASE_JSON" "$BINARY_NAME")
+    if [ -z "$EXPECTED_CHECKSUM" ]; then
+        print_error "No checksum found for ${BINARY_NAME} in release. Cannot verify binary integrity."
+        exit 1
+    fi
+    print_info "Expected checksum: ${EXPECTED_CHECKSUM:0:16}..."
+
+    if [ "$DOWNLOAD_ONLY" = true ]; then
+        download_only
+        print_info "Download completed successfully!"
+    else
+        download_and_install
+        print_info "Installation completed successfully!"
+        print_info "You can now run 's3browser' from your terminal."
+    fi
+}
+
+check_privileges() {
+    if [ "$EUID" -eq 0 ]; then
+        print_warn "Running as root. It's recommended to install as a regular user."
+    fi
+}
+
+main() {
+    parse_args "$@"
+
+    if [ "$DOWNLOAD_ONLY" = true ]; then
+        print_info "Starting s3browser download..."
+    else
+        print_info "Starting s3browser installation..."
+        check_privileges
+    fi
+
+    install
+}
+
+main "$@"
