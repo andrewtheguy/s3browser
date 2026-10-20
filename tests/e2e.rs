@@ -12,7 +12,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use aws_sdk_s3::primitives::ByteStream;
-use aws_sdk_s3::types::{BucketVersioningStatus, VersioningConfiguration};
+use aws_sdk_s3::types::{
+    BucketVersioningStatus, ObjectLockLegalHold, ObjectLockLegalHoldStatus, VersioningConfiguration,
+};
 use rand::Rng;
 use reqwest::StatusCode;
 use reqwest::header;
@@ -56,6 +58,16 @@ struct Fixture {
 
 impl Fixture {
     async fn new() -> Self {
+        Self::create(false).await
+    }
+
+    /// A bucket with object lock (so versioning) on, where a legal hold makes
+    /// S3 refuse to delete one version.
+    async fn with_object_lock() -> Self {
+        Self::create(true).await
+    }
+
+    async fn create(object_lock: bool) -> Self {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let services = Services::from_env();
         let bucket = format!(
@@ -78,7 +90,12 @@ impl Fixture {
             .force_path_style(true)
             .build();
         let s3 = aws_sdk_s3::Client::from_conf(config);
-        s3.create_bucket().bucket(&bucket).send().await.expect("create bucket");
+        s3.create_bucket()
+            .bucket(&bucket)
+            .object_lock_enabled_for_bucket(object_lock)
+            .send()
+            .await
+            .expect("create bucket");
         Self {
             services,
             bucket,
@@ -117,6 +134,45 @@ impl Fixture {
             .send()
             .await
             .unwrap_or_else(|e| panic!("put {key}: {e:?}"));
+    }
+
+    async fn put_typed(&self, key: &str, content_type: Option<&str>, body: &'static [u8]) {
+        self.s3
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .set_content_type(content_type.map(str::to_string))
+            .body(ByteStream::from_static(body))
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("put {key}: {e:?}"));
+    }
+
+    /// Put `key` under a legal hold; returns the held version's ID.
+    async fn put_held(&self, key: &str, body: &'static [u8]) -> String {
+        let response = self
+            .s3
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .object_lock_legal_hold_status(ObjectLockLegalHoldStatus::On)
+            .body(ByteStream::from_static(body))
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("put held {key}: {e:?}"));
+        response.version_id().expect("versioned bucket").to_string()
+    }
+
+    async fn release(&self, key: &str, version_id: &str) {
+        self.s3
+            .put_object_legal_hold()
+            .bucket(&self.bucket)
+            .key(key)
+            .version_id(version_id)
+            .legal_hold(ObjectLockLegalHold::builder().status(ObjectLockLegalHoldStatus::Off).build())
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("release {key}: {e:?}"));
     }
 
     async fn get(&self, key: &str) -> Vec<u8> {
@@ -297,7 +353,10 @@ fn urlencode(value: &str) -> String {
 }
 
 async fn send_json(request: reqwest::RequestBuilder) -> (StatusCode, Value) {
-    let response = request.send().await.unwrap();
+    send_json_response(request.send().await.unwrap()).await
+}
+
+async fn send_json_response(response: reqwest::Response) -> (StatusCode, Value) {
     let status = response.status();
     let body = response.text().await.unwrap();
     let value = serde_json::from_str(&body).unwrap_or_else(|_| panic!("non-JSON body ({status}): {body}"));
@@ -460,33 +519,6 @@ async fn upload_list_download_delete() {
     );
     assert_eq!(response.bytes().await.unwrap().as_ref(), &big[100..200]);
 
-    // Inline is only for passive types: stored HTML must not render on the
-    // app's origin, so it comes back as an attachment.
-    for (key, content_type) in [("page.html", "text/html"), ("pic.svg", "image/svg+xml")] {
-        fx.s3
-            .put_object()
-            .bucket(bucket)
-            .key(key)
-            .content_type(content_type)
-            .body(ByteStream::from_static(b"<svg><script>alert(1)</script></svg>"))
-            .send()
-            .await
-            .unwrap();
-    }
-    let inline = |key: &str| {
-        let path = server.bucket_path("download", bucket, &format!("/object?key={key}&disposition=inline"));
-        server.http.get(server.url(&path)).send()
-    };
-    let response = inline("page.html").await.unwrap();
-    assert_eq!(response.headers()[header::CONTENT_TYPE], "application/octet-stream");
-    assert!(response.headers()[header::CONTENT_DISPOSITION].to_str().unwrap().starts_with("attachment"));
-    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
-    let response = inline("pic.svg").await.unwrap();
-    assert_eq!(response.headers()[header::CONTENT_DISPOSITION], "inline");
-    assert!(response.headers()[header::CONTENT_SECURITY_POLICY].to_str().unwrap().contains("sandbox"));
-    fx.s3.delete_object().bucket(bucket).key("page.html").send().await.unwrap();
-    fx.s3.delete_object().bucket(bucket).key("pic.svg").send().await.unwrap();
-
     let response = server.download(bucket, "missing.bin", None).await;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
@@ -575,8 +607,11 @@ async fn copy_and_move() {
         )
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["successful"], json!(["b.txt"]));
-    assert_eq!(body["errors"].as_array().unwrap().len(), 1, "{body}");
+    // A failure names its object and keeps the upstream S3 text in the log.
+    assert_eq!(
+        body,
+        json!({ "successful": ["b.txt"], "errors": [{ "sourceKey": "missing.txt", "message": "Copy failed" }] })
+    );
 
     let (status, body) = server
         .post_json(
@@ -739,6 +774,381 @@ async fn index_and_search() {
     assert!(stderr(&output).contains("is not in S3BROWSER_SEARCH_WHITELIST_HOSTS"), "{}", stderr(&output));
     let (status, _) = server.get_json(&format!("/api/objects/{other}/{bucket}/search?q=fox")).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+    drop(server);
+    fx.cleanup().await;
+}
+
+/// Stored content that would run script if a browser rendered it.
+const ACTIVE: &[u8] = b"<html><script>fetch('/api/auth/connections')</script></html>";
+/// `SVG_INLINE_CSP` in `src/api/download.rs`.
+const SVG_CSP: &str = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
+const OCTET_STREAM: &str = "application/octet-stream";
+
+/// How a download response tells the browser to treat its body: content type,
+/// disposition and CSP. Every one must also forbid sniffing.
+fn rendering(response: &reqwest::Response) -> (String, String, Option<String>) {
+    let headers = response.headers();
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    let text = |name: header::HeaderName| headers.get(name).map(|v| v.to_str().unwrap().to_string());
+    (
+        text(header::CONTENT_TYPE).unwrap(),
+        text(header::CONTENT_DISPOSITION).unwrap(),
+        text(header::CONTENT_SECURITY_POLICY),
+    )
+}
+
+fn attachment(name: &str) -> String {
+    format!("attachment; filename=\"{name}\"; filename*=UTF-8''{name}")
+}
+
+#[tokio::test]
+#[ignore = "needs Silo; run scripts/e2e.sh"]
+async fn inline_downloads_only_render_passive_types() {
+    let fx = Fixture::new().await;
+    let active = [
+        ("page.html", Some("text/html")),
+        ("upper.html", Some("TEXT/HTML; charset=utf-8")),
+        ("page.xhtml", Some("application/xhtml+xml")),
+        ("feed.xml", Some("text/xml")),
+        ("app.js", Some("application/javascript")),
+        ("untyped", None),
+    ];
+    let passive = [
+        ("pic.png", "image/png"),
+        ("doc.pdf", "application/pdf"),
+        ("clip.mp4", "video/mp4"),
+        ("song.mp3", "audio/mpeg"),
+        ("note.txt", "text/plain; charset=utf-8"),
+    ];
+    for (key, content_type) in active {
+        fx.put_typed(key, content_type, ACTIVE).await;
+    }
+    for (key, content_type) in passive {
+        fx.put_typed(key, Some(content_type), ACTIVE).await;
+    }
+    fx.put_typed("pic.svg", Some("image/svg+xml"), ACTIVE).await;
+    let server = fx.server().await;
+    let bucket = fx.bucket.as_str();
+    let inline = |key: &str, content_type: Option<&str>| {
+        let override_type = content_type.map(|t| format!("&contentType={}", urlencode(t))).unwrap_or_default();
+        let path = server.bucket_path(
+            "download",
+            bucket,
+            &format!("/object?key={}&disposition=inline{override_type}", urlencode(key)),
+        );
+        server.http.get(server.url(&path))
+    };
+
+    // Stored active content never renders on the app's origin, however its
+    // type is spelled, yet its bytes still download intact.
+    for (key, _) in active {
+        let response = inline(key, None).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{key}");
+        assert_eq!(rendering(&response), (OCTET_STREAM.into(), attachment(key), None), "{key}");
+        assert_eq!(response.bytes().await.unwrap().as_ref(), ACTIVE, "{key}");
+    }
+    // A ranged read, as media seeking sends, is held to the same rule.
+    let response = inline("page.html", None).header(header::RANGE, "bytes=0-5").send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(rendering(&response), (OCTET_STREAM.into(), attachment("page.html"), None));
+    assert_eq!(response.bytes().await.unwrap().as_ref(), &ACTIVE[..6]);
+
+    for (key, content_type) in passive {
+        let response = inline(key, None).send().await.unwrap();
+        assert_eq!(rendering(&response), (content_type.into(), "inline".into(), None), "{key}");
+    }
+    let response = inline("pic.svg", None).send().await.unwrap();
+    assert_eq!(rendering(&response), ("image/svg+xml".into(), "inline".into(), Some(SVG_CSP.into())));
+
+    // The `contentType` override passes the same allowlist: it cannot make a
+    // passive object active, and the CSP follows the type actually served.
+    for override_type in ["text/html", "TEXT/HTML", "application/xhtml+xml", "text/html; charset=utf-8"] {
+        let response = inline("note.txt", Some(override_type)).send().await.unwrap();
+        assert_eq!(
+            rendering(&response),
+            (OCTET_STREAM.into(), attachment("note.txt"), None),
+            "{override_type}"
+        );
+    }
+    let response = inline("page.html", Some("text/plain")).send().await.unwrap();
+    assert_eq!(rendering(&response), ("text/plain".into(), "inline".into(), None));
+    let response = inline("page.html", Some("image/svg+xml")).send().await.unwrap();
+    assert_eq!(rendering(&response), ("image/svg+xml".into(), "inline".into(), Some(SVG_CSP.into())));
+    // A malformed override is ignored, not forwarded: the stored HTML type
+    // decides, and nothing is injected into the response headers.
+    let response = inline("page.html", Some("image/png\r\nx-injected: 1")).send().await.unwrap();
+    assert!(response.headers().get("x-injected").is_none());
+    assert_eq!(rendering(&response), (OCTET_STREAM.into(), attachment("page.html"), None));
+
+    // A plain download is an attachment and keeps the stored type.
+    let response = server.download(bucket, "page.html", None).await;
+    assert_eq!(rendering(&response), ("text/html".into(), attachment("page.html"), None));
+    drop(server);
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+#[ignore = "needs Silo; run scripts/e2e.sh"]
+async fn api_routing_failures_are_json() {
+    let fx = Fixture::new().await;
+    let server = fx.server().await;
+    let bucket = fx.bucket.as_str();
+    let objects = server.bucket_path("objects", bucket, "");
+
+    // Unknown API paths are JSON 404s, never the SPA's index.html.
+    let not_found = (StatusCode::NOT_FOUND, json!({ "error": "Not found" }));
+    let unknown = format!("{objects}/nope");
+    for path in ["/api", "/api/", "/api/nope", "/api/objects", "/api/objects/1", "/api/auth/nope/deeper", &unknown] {
+        assert_eq!(server.get_json(path).await, not_found, "GET {path}");
+        assert_eq!(server.post_json(path, json!({})).await, not_found, "POST {path}");
+    }
+
+    // A known path with the wrong method is a JSON 405.
+    let not_allowed = (StatusCode::METHOD_NOT_ALLOWED, json!({ "error": "Method not allowed" }));
+    for request in [
+        server.http.delete(server.url("/api/health")),
+        server.http.put(server.url(&objects)),
+        server.http.get(server.url(&format!("{objects}/batch-delete"))),
+        server.http.post(server.url(&server.bucket_path("download", bucket, "/object?key=a"))),
+    ] {
+        assert_eq!(send_json(request).await, not_allowed);
+    }
+
+    // Bad route parameters.
+    let (status, body) = server.get_json(&format!("/api/objects/abc/{bucket}")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(body["error"].as_str().unwrap().starts_with("Invalid request: "), "{body}");
+    assert_eq!(
+        server.get_json(&format!("/api/objects/0/{bucket}")).await,
+        (StatusCode::BAD_REQUEST, json!({ "error": "Valid connection ID is required" }))
+    );
+    assert_eq!(
+        server.get_json(&format!("/api/objects/{}/{bucket}", server.connection + 1000)).await,
+        (StatusCode::NOT_FOUND, json!({ "error": "Connection not found" }))
+    );
+
+    // Bodies that are not the expected JSON are 422s with a JSON error.
+    let batch_delete = server.url(&format!("{objects}/batch-delete"));
+    for request in [
+        server.http.post(&batch_delete).header(header::CONTENT_TYPE, "application/json").body("{"),
+        server.http.post(&batch_delete).body(r#"{"keys": []}"#),
+        server.http.post(&batch_delete).json(&json!({ "keys": "a.txt" })),
+        server.http.post(server.url(&format!("{objects}/batch-copy"))).json(&json!({ "operations": [{}] })),
+    ] {
+        let (status, body) = send_json(request).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert!(body["error"].as_str().unwrap().starts_with("Invalid request: "), "{body}");
+    }
+
+    // A body past the 32 MiB request limit is a JSON 413. One byte over, so
+    // the server has read it all when it answers and the write cannot break.
+    let oversized = || vec![b' '; 32 * 1024 * 1024 + 1];
+    let path = server.bucket_path("upload", bucket, "/single?key=huge.bin");
+    for request in [
+        server.http.post(server.url(&path)).body(oversized()),
+        server.http.post(&batch_delete).header(header::CONTENT_TYPE, "application/json").body(oversized()),
+    ] {
+        let (status, body) = send_json(request).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{body}");
+        assert!(body["error"].is_string(), "{body}");
+    }
+    assert_eq!(fx.keys().await, Vec::<String>::new());
+
+    // Without a valid session every protected path, known or not, is a 401
+    // that clears the cookie; only the exempt endpoints answer.
+    let anonymous = reqwest::Client::new();
+    let forged = "s3browser_auth_token=e30.e30.forged";
+    for (path, cookie) in [("/api/nope", None), (objects.as_str(), None), (objects.as_str(), Some(forged))] {
+        let mut request = anonymous.get(server.url(path));
+        if let Some(cookie) = cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        let response = request.send().await.unwrap();
+        let cleared = response.headers()[header::SET_COOKIE].to_str().unwrap().to_string();
+        assert!(cleared.starts_with("s3browser_auth_token=\"\"") && cleared.contains("Max-Age=0"), "{cleared}");
+        assert_eq!(
+            send_json_response(response).await,
+            (StatusCode::UNAUTHORIZED, json!({ "error": "Not authenticated" })),
+            "{path}"
+        );
+    }
+    let (status, _) = send_json(anonymous.get(server.url("/api/health"))).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Outside `/api/` is the SPA, except missing static files.
+    for path in ["/", "/connection/1/browse/b/", "/connection/1/preview/b/data.json", "/api-docs"] {
+        let response = anonymous.get(server.url(path)).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "text/html; charset=utf-8", "{path}");
+    }
+    for path in ["/assets/missing.js", "/missing.ico"] {
+        let response = anonymous.get(server.url(path)).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+    }
+    drop(server);
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+#[ignore = "needs Silo; run scripts/e2e.sh"]
+async fn batch_errors_name_each_failed_object() {
+    let fx = Fixture::with_object_lock().await;
+    let held = fx.put_held("held.txt", b"held").await;
+    for key in ["a.txt", "b.txt", "c.txt"] {
+        fx.put(key, key.as_bytes().to_vec()).await;
+    }
+    let server = fx.server().await;
+    let bucket = fx.bucket.as_str();
+    let post = {
+        let server = &server;
+        move |rest: &str, body: Value| {
+            let path = server.bucket_path("objects", bucket, rest);
+            async move { server.post_json(&path, body).await }
+        }
+    };
+
+    // Request-level problems refuse the whole batch before any S3 call, even
+    // when earlier entries are valid.
+    let operations = |n: usize| -> Vec<Value> {
+        (0..n).map(|i| json!({ "sourceKey": format!("k{i}"), "destinationKey": format!("d{i}") })).collect()
+    };
+    let keys: Vec<Value> = (0..1001).map(|i| json!({ "key": format!("k{i}") })).collect();
+    let cases = [
+        ("/batch-delete", json!({}), "Keys must be a non-empty array"),
+        ("/batch-delete", json!({ "keys": [] }), "Keys must be a non-empty array"),
+        ("/batch-delete", json!({ "keys": [{ "key": "dir/" }, { "key": "" }, {}] }), "No valid file keys provided"),
+        ("/batch-delete", json!({ "keys": keys }), "Cannot delete more than 1000 objects at once"),
+        ("/batch-copy", json!({ "operations": [] }), "Operations must be a non-empty array"),
+        ("/batch-copy", json!({ "operations": operations(1001) }), "Cannot copy more than 1000 objects at once"),
+        ("/batch-move", json!({ "operations": operations(1001) }), "Cannot move more than 1000 objects at once"),
+        (
+            "/batch-copy",
+            json!({ "operations": [{ "sourceKey": "a.txt", "destinationKey": "" }] }),
+            "Each operation must have sourceKey and destinationKey",
+        ),
+        (
+            "/batch-move",
+            json!({ "operations": [{ "sourceKey": "a.txt", "destinationKey": "a.txt" }] }),
+            "sourceKey and destinationKey must differ for operation with key \"a.txt\"",
+        ),
+        (
+            "/batch-copy",
+            json!({ "operations": [
+                { "sourceKey": "a.txt", "destinationKey": "ok/a.txt" },
+                { "sourceKey": "a.txt", "destinationKey": "../a.txt" },
+            ] }),
+            "Invalid destinationKey \"../a.txt\": Invalid object key",
+        ),
+        (
+            "/batch-move",
+            json!({ "operations": [
+                { "sourceKey": "a.txt", "destinationKey": "ok/a.txt" },
+                { "sourceKey": "/a.txt", "destinationKey": "ok/b.txt" },
+            ] }),
+            "Invalid sourceKey \"/a.txt\": Invalid object key",
+        ),
+    ];
+    for (rest, body, error) in cases {
+        assert_eq!(post(rest, body).await, (StatusCode::BAD_REQUEST, json!({ "error": error })), "{rest} {error}");
+    }
+    assert_eq!(fx.keys().await, ["a.txt", "b.txt", "c.txt", "held.txt"]);
+
+    // Per-object failures are reported one by one with a stable message; the
+    // upstream S3 text stays in the server log.
+    let (status, body) = post(
+        "/batch-copy",
+        json!({ "operations": [
+            { "sourceKey": "a.txt", "destinationKey": "copies/a.txt" },
+            { "sourceKey": "a.txt", "destinationKey": "copies/old.txt", "versionId": "8a5c3b7e-0d2f-4e1a-9b6c-3f4d5e6a7b8c" },
+            { "sourceKey": "missing.txt", "destinationKey": "copies/missing.txt" },
+        ] }),
+    )
+    .await;
+    assert_eq!(
+        (status, body),
+        (
+            StatusCode::OK,
+            json!({
+                "successful": ["a.txt"],
+                "errors": [
+                    { "sourceKey": "a.txt", "message": "Copy failed" },
+                    { "sourceKey": "missing.txt", "message": "Copy failed" },
+                ],
+            })
+        )
+    );
+
+    // A move whose delete is refused (the held version) reports that its
+    // copy now exists; one whose copy fails reports no destination.
+    let (status, body) = post(
+        "/batch-move",
+        json!({ "operations": [
+            { "sourceKey": "held.txt", "destinationKey": "moved/held.txt", "versionId": held },
+            { "sourceKey": "missing.txt", "destinationKey": "moved/missing.txt" },
+            { "sourceKey": "b.txt", "destinationKey": "moved/b.txt" },
+        ] }),
+    )
+    .await;
+    assert_eq!(
+        (status, body),
+        (
+            StatusCode::OK,
+            json!({
+                "successful": ["b.txt"],
+                "errors": [
+                    {
+                        "sourceKey": "held.txt",
+                        "destinationKey": "moved/held.txt",
+                        "message": "Delete failed after successful copy; destination created",
+                    },
+                    { "sourceKey": "missing.txt", "message": "Copy failed" },
+                ],
+            })
+        )
+    );
+    assert_eq!(fx.get("moved/held.txt").await, b"held");
+    assert_eq!(fx.get("held.txt").await, b"held");
+
+    // The single move reports the same half-done state as a 500.
+    let (status, body) = post(
+        "/move",
+        json!({ "sourceKey": "held.txt", "destinationKey": "again/held.txt", "versionId": held }),
+    )
+    .await;
+    assert_eq!(
+        (status, body),
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({
+                "success": false,
+                "message": "Move failed: copy succeeded but source delete failed. Destination key now has the data \
+                            and the source still exists; retry the delete or remove the destination to recover.",
+                "destinationKey": "again/held.txt",
+                "error": "Delete failed",
+            })
+        )
+    );
+
+    // DeleteObjects refuses the held version and still deletes the rest.
+    // Without a version the delete is a delete marker, named in the result.
+    let (status, body) = post(
+        "/batch-delete",
+        json!({ "keys": [{ "key": "held.txt", "versionId": held }, { "key": "c.txt" }, { "key": "dir/" }] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let deleted = body["deleted"].as_array().unwrap();
+    assert_eq!(deleted.len(), 1, "{body}");
+    assert_eq!(deleted[0]["key"], "c.txt", "{body}");
+    assert!(deleted[0]["versionId"].as_str().is_some_and(|v| !v.is_empty()), "{body}");
+    let errors = body["errors"].as_array().unwrap();
+    assert_eq!(errors.len(), 1, "{body}");
+    assert_eq!(errors[0]["key"], "held.txt", "{body}");
+    let message = errors[0]["message"].as_str().unwrap();
+    assert!(!message.is_empty() && message != "Unknown error", "{body}");
+    assert_eq!(fx.get("held.txt").await, b"held");
+
+    fx.release("held.txt", &held).await;
     drop(server);
     fx.cleanup().await;
 }
