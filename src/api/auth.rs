@@ -9,7 +9,9 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::ClearRegionCacheQuery;
-use crate::db::{S3Connection, SaveConnection, SaveError};
+use std::collections::HashMap;
+
+use crate::db::{RecentBucket, S3Connection, SaveConnection, SaveError};
 use crate::error::AppError;
 use crate::s3::{DEFAULT_REGION, S3Credentials, detect_vendor, list_user_buckets, normalize_endpoint};
 use crate::server::{ApiJson, ApiPath, ApiQuery, AppState, s3_context};
@@ -67,7 +69,11 @@ fn non_empty(value: &Option<String>) -> Option<&str> {
     value.as_deref().filter(|v| !v.is_empty())
 }
 
-fn connection_json(state: &AppState, connection: &S3Connection) -> Value {
+fn connection_json(state: &AppState, connection: &S3Connection, recent_buckets: &[RecentBucket]) -> Value {
+    let recent: Vec<Value> = recent_buckets
+        .iter()
+        .map(|r| json!({ "name": r.bucket, "lastUsedAt": r.last_used_at }))
+        .collect();
     json!({
         "id": connection.id,
         "profileName": connection.profile_name,
@@ -78,6 +84,7 @@ fn connection_json(state: &AppState, connection: &S3Connection) -> Value {
         "autoDetectRegion": connection.auto_detect_region,
         "lastUsedAt": connection.last_used_at * 1000,
         "searchEnabled": state.search_host(Some(&connection.endpoint)).is_some(),
+        "recentBuckets": recent,
     })
 }
 
@@ -131,14 +138,17 @@ async fn validate_keys(state: &AppState, access_key_id: &str, secret: &str, regi
     result.map_err(|e| AppError::unauthorized(if e.is_empty() { "Invalid credentials".to_string() } else { e }))
 }
 
-async fn save_connection(State(state): State<AppState>, ApiJson(body): ApiJson<ConnectionRequest>) -> Result<Json<Value>, AppError> {
+/// The keys and region a connection request resolves to: the body's own
+/// values, falling back to the stored secret of the connection being edited
+/// and to the bucket's detected region.
+struct ResolvedConnection {
+    access_key_id: String,
+    secret: String,
+    region: String,
+}
+
+async fn resolve_connection(state: &AppState, body: &ConnectionRequest) -> Result<ResolvedConnection, AppError> {
     let access_key_id = non_empty(&body.access_key_id).ok_or_else(|| AppError::bad_request("Access key ID is required"))?;
-    let profile_name = body
-        .profile_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .ok_or_else(|| AppError::bad_request("Profile name is required"))?;
     let existing = match body.connection_id {
         Some(id) if id <= 0 => return Err(AppError::bad_request("Invalid connection ID")),
         Some(id) => Some(
@@ -155,8 +165,7 @@ async fn save_connection(State(state): State<AppState>, ApiJson(body): ApiJson<C
         (None, Some(existing)) => state.db.decrypt_secret(existing)?,
         (None, None) => return Err(AppError::bad_request("Secret access key is required for new connections")),
     };
-    let bucket = non_empty(&body.bucket);
-    let region = match (non_empty(&body.region), bucket) {
+    let region = match (non_empty(&body.region), non_empty(&body.bucket)) {
         (Some(region), _) => region.to_string(),
         (None, Some(bucket)) => state
             .s3
@@ -165,14 +174,34 @@ async fn save_connection(State(state): State<AppState>, ApiJson(body): ApiJson<C
             .map_err(AppError::bad_request)?,
         (None, None) => DEFAULT_REGION.to_string(),
     };
-    validate_keys(&state, access_key_id, &secret, &region, &body).await?;
+    Ok(ResolvedConnection {
+        access_key_id: access_key_id.to_string(),
+        secret,
+        region,
+    })
+}
+
+async fn save_connection(State(state): State<AppState>, ApiJson(body): ApiJson<ConnectionRequest>) -> Result<Json<Value>, AppError> {
+    let profile_name = body
+        .profile_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .ok_or_else(|| AppError::bad_request("Profile name is required"))?;
+    let ResolvedConnection {
+        access_key_id,
+        secret,
+        region,
+    } = resolve_connection(&state, &body).await?;
+    let bucket = non_empty(&body.bucket);
+    validate_keys(&state, &access_key_id, &secret, &region, &body).await?;
     let saved = state
         .db
         .save_connection(SaveConnection {
             id: body.connection_id,
             profile_name,
             endpoint: body.endpoint.as_deref().unwrap_or_default(),
-            access_key_id,
+            access_key_id: &access_key_id,
             secret_access_key: non_empty(&body.secret_access_key),
             bucket,
             region: Some(&region),
@@ -198,12 +227,16 @@ async fn list_connections(State(state): State<AppState>, ApiQuery(query): ApiQue
     if query.requested() {
         state.s3.regions.clear();
     }
+    let mut recent: HashMap<i64, Vec<RecentBucket>> = HashMap::new();
+    for row in state.db.recent_buckets().await? {
+        recent.entry(row.connection_id).or_default().push(row);
+    }
     let connections: Vec<Value> = state
         .db
         .connections()
         .await?
         .iter()
-        .map(|c| connection_json(&state, c))
+        .map(|c| connection_json(&state, c, recent.get(&c.id).map_or(&[][..], Vec::as_slice)))
         .collect();
     Ok(Json(json!({ "connections": connections })))
 }
@@ -217,7 +250,8 @@ async fn get_connection(State(state): State<AppState>, ApiPath(connection_id): A
         .connection(connection_id)
         .await?
         .ok_or_else(|| AppError::not_found("Connection not found"))?;
-    Ok(Json(connection_json(&state, &connection)))
+    let recent = state.db.recent_buckets_for(connection_id).await?;
+    Ok(Json(connection_json(&state, &connection, &recent)))
 }
 
 async fn delete_connection(State(state): State<AppState>, ApiPath(connection_id): ApiPath<i64>) -> Result<Json<Value>, AppError> {
@@ -269,12 +303,15 @@ async fn validate_bucket(
     Ok(Json(json!({ "success": true, "bucket": bucket })))
 }
 
+/// Check keys without saving anything. With `connectionId` and no secret, the
+/// stored secret of that connection is used, so an edit form can test first.
 async fn test_connection(State(state): State<AppState>, ApiJson(body): ApiJson<ConnectionRequest>) -> Result<Json<Value>, AppError> {
-    let (Some(access_key_id), Some(secret)) = (non_empty(&body.access_key_id), non_empty(&body.secret_access_key)) else {
-        return Err(AppError::bad_request("Missing required credentials"));
-    };
-    let region = non_empty(&body.region).unwrap_or(DEFAULT_REGION);
-    validate_keys(&state, access_key_id, secret, region, &body).await?;
+    let ResolvedConnection {
+        access_key_id,
+        secret,
+        region,
+    } = resolve_connection(&state, &body).await?;
+    validate_keys(&state, &access_key_id, &secret, &region, &body).await?;
     Ok(Json(json!({ "success": true })))
 }
 
@@ -428,7 +465,10 @@ mod tests {
     async fn login_sets_a_session_cookie_that_unlocks_the_api() {
         let app = TestApp::new().await;
         let (status, body) = app.request(Method::GET, "/api/auth/connections", None).await;
-        assert_eq!((status, body), (StatusCode::UNAUTHORIZED, json!({ "error": "Not authenticated" })));
+        assert_eq!(
+            (status, body),
+            (StatusCode::UNAUTHORIZED, json!({ "error": "Not authenticated", "code": "NotAuthenticated" }))
+        );
 
         let (status, body) = app.request(Method::POST, "/api/auth/login", Some(json!({ "password": "nope" }))).await;
         assert_eq!((status, body), (StatusCode::UNAUTHORIZED, json!({ "error": "Invalid password" })));
@@ -470,6 +510,17 @@ mod tests {
             (status, body),
             (StatusCode::BAD_REQUEST, json!({ "error": "Secret access key is required for new connections" }))
         );
+        let (status, body) = app
+            .authed(Method::POST, "/api/auth/test-connection", Some(json!({ "accessKeyId": "AK" })))
+            .await;
+        assert_eq!(
+            (status, body),
+            (StatusCode::BAD_REQUEST, json!({ "error": "Secret access key is required for new connections" }))
+        );
+        let (status, body) = app
+            .authed(Method::POST, "/api/auth/test-connection", Some(json!({ "accessKeyId": "AK", "connectionId": 42 })))
+            .await;
+        assert_eq!((status, body), (StatusCode::NOT_FOUND, json!({ "error": "Connection not found" })));
         let (status, _) = app
             .authed(Method::POST, "/api/auth/connections/1/export", Some(json!({ "format": "s3cmd" })))
             .await;
@@ -516,5 +567,39 @@ mod tests {
         assert_eq!(body["connections"][0]["profileName"], "prod box");
         assert_eq!(body["connections"][0]["searchEnabled"], false);
         assert!(body["connections"][0].get("secretAccessKey").is_none());
+    }
+
+    #[tokio::test]
+    async fn connections_carry_their_recent_buckets() {
+        let app = TestApp::new().await;
+        let first = app.save_connection("first", "http://127.0.0.1:9000").await;
+        let second = app.save_connection("second", "http://127.0.0.1:9000").await;
+        let (status, body) = app.authed(Method::GET, &format!("/api/auth/connections/{}", first.id), None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["recentBuckets"], json!([]));
+
+        app.state.db.touch(first.id, Some("photos"), 1_000).await.unwrap();
+        app.state.db.touch(first.id, Some("logs"), 2_000).await.unwrap();
+        app.state.db.touch(second.id, Some("backups"), 3_000).await.unwrap();
+
+        let (_, body) = app.authed(Method::GET, &format!("/api/auth/connections/{}", first.id), None).await;
+        assert_eq!(
+            body["recentBuckets"],
+            json!([{ "name": "logs", "lastUsedAt": 2_000 }, { "name": "photos", "lastUsedAt": 1_000 }])
+        );
+
+        let (_, body) = app.authed(Method::GET, "/api/auth/connections", None).await;
+        let by_name = |name: &str| {
+            body["connections"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["profileName"] == name)
+                .unwrap()["recentBuckets"]
+                .clone()
+        };
+        assert_eq!(by_name("first")[0]["name"], "logs");
+        assert_eq!(by_name("first")[1]["name"], "photos");
+        assert_eq!(by_name("second"), json!([{ "name": "backups", "lastUsedAt": 3_000 }]));
     }
 }

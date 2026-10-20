@@ -1,4 +1,9 @@
+import { emitUnauthorized } from './session-events';
+
 const API_BASE = '/api';
+
+/** The `code` the session middleware sends when the login cookie is missing or expired. */
+export const NOT_AUTHENTICATED_CODE = 'NotAuthenticated';
 
 export interface ApiError {
   error: string;
@@ -72,6 +77,9 @@ export async function apiRequest<T>(
       }
     } catch {
       // Failed to parse error response, use default message
+    }
+    if (response.status === 401 && errorCode === NOT_AUTHENTICATED_CODE) {
+      emitUnauthorized();
     }
     throw new ApiHttpError(errorMessage, response.status, errorCode);
   }

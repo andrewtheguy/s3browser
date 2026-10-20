@@ -207,7 +207,7 @@ export function DeleteDialog({
             disabled={isDeleting || isResolving || Boolean(resolutionError)}
           >
             {isDeleting ? (
-              <Spinner size="sm" className="text-white" />
+              <Spinner size="sm" className="text-destructive-foreground" />
             ) : (
               'Delete'
             )}

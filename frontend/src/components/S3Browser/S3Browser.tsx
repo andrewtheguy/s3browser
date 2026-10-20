@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 import {
   Upload,
   FolderPlus,
@@ -34,7 +34,7 @@ import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDial
 import { CopyMoveDialog } from '../CopyMoveDialog';
 import { BucketInfoDialog } from '../BucketInfoDialog';
 import { ManualCopyDialog } from '../ManualCopyDialog/ManualCopyDialog';
-import { useBrowserContext, useS3ClientContext } from '../../contexts';
+import { useBrowserContext } from '../../contexts';
 import {
   useDelete,
   useUpload,
@@ -44,6 +44,7 @@ import {
   useCopyMove,
   useSeedTestItems,
   useResolveObjectPlan,
+  useBucketRoute,
 } from '../../hooks';
 import type { ObjectPlan } from '../../hooks/useResolveObjectPlan';
 import { FEATURES } from '../../config';
@@ -110,9 +111,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     bucketVersioningStatus,
   } = useBrowserContext();
   const navigate = useNavigate();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const { activeConnectionId, credentials } = useS3ClientContext();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
   const { remove, removeMany, resolveObjectPlan: resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
@@ -1031,8 +1030,8 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
   }, [previewKey, preview.item]);
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      <div className="flex-1 flex flex-col mx-0 my-4 sm:m-4 bg-card rounded-lg border shadow-sm overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <div className="flex-1 flex flex-col min-h-0 mx-0 my-0 sm:m-4 bg-card sm:rounded-lg sm:border sm:shadow-sm overflow-hidden">
         <Toolbar
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}

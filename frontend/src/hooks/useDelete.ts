@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useParams } from 'react-router';
-import { useS3ClientContext } from '../contexts';
+import { useBucketRoute } from './useBucketRoute';
 import { deleteObject, deleteObjects } from '../services/api';
 import { useResolveObjectPlan } from './useResolveObjectPlan';
 
@@ -45,16 +44,14 @@ function buildDeleteBatches(keys: Array<{ key: string; versionId?: string }>): A
 }
 
 export function useDelete() {
-  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { resolveObjectPlan } = useResolveObjectPlan();
 
   const remove = useCallback(
     async (key: string, versionId?: string): Promise<void> => {
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -71,7 +68,7 @@ export function useDelete() {
         setIsDeleting(false);
       }
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   const removeMany = useCallback(
@@ -85,7 +82,7 @@ export function useDelete() {
         return { deleted: [], errors: [] };
       }
 
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -123,7 +120,7 @@ export function useDelete() {
         setIsDeleting(false);
       }
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   return {

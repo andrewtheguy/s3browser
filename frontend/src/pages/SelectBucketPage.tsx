@@ -1,28 +1,253 @@
-import { useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
-import { BucketSelector } from '../components/BucketSelector';
+import { useEffect, useState, type FormEvent } from 'react';
+import { AlertCircle, ChevronRight, Pin, RefreshCw, Search } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { toast } from 'sonner';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { BucketIcon } from '@/components/ui/bucket-icon';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
+import { CenteredLoader } from '../components/CenteredLoader';
+import { describeEndpoint } from '../components/ConnectionCard';
+import { PageContainer } from '../components/PageContainer';
+import { useConnectionRoute } from '../hooks/useConnectionRoute';
+import { refreshBuckets, useBucketsQuery, useValidateBucketMutation } from '../queries/buckets';
+import { useConnectionQuery } from '../queries/connections';
+import { ApiHttpError } from '../services/api/client';
+import { formatRelativeTime } from '../utils/relativeTime';
+import { CONNECTIONS_URL, buildBrowseUrl, buildConnectionEditUrl } from '../utils/urlEncoding';
+
+const rowClass =
+  'flex min-h-11 items-center gap-3 px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none';
+
+interface BucketRowProps {
+  connectionId: number;
+  name: string;
+  trailing?: string;
+  pinned?: boolean;
+}
+
+function BucketRow({ connectionId, name, trailing, pinned = false }: BucketRowProps) {
+  return (
+    <li>
+      <Link to={buildBrowseUrl(connectionId, name, '')} className={rowClass}>
+        <BucketIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
+        {pinned && (
+          <Badge variant="outline" className="shrink-0 gap-1 font-normal">
+            <Pin className="h-3 w-3" />
+            default
+          </Badge>
+        )}
+        {trailing && <span className="shrink-0 text-xs text-muted-foreground">{trailing}</span>}
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </Link>
+    </li>
+  );
+}
 
 export function SelectBucketPage() {
-  const { connectionId: urlConnectionId } = useParams<{ connectionId: string }>();
+  const connectionId = useConnectionRoute();
   const navigate = useNavigate();
-
-  const parsedId = urlConnectionId ? parseInt(urlConnectionId, 10) : NaN;
-  const connectionId = !isNaN(parsedId) && parsedId > 0 ? parsedId : null;
+  const { data: connection } = useConnectionQuery(connectionId);
+  const bucketsQuery = useBucketsQuery(connectionId);
+  const validate = useValidateBucketMutation(connectionId);
+  const [filter, setFilter] = useState('');
+  const [manualName, setManualName] = useState('');
+  const [manualOpen, setManualOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
-    document.title = 'Select Bucket - s3browser';
-  }, []);
+    document.title = `${connection?.profileName ?? 'Buckets'} - s3browser`;
+  }, [connection?.profileName]);
 
-  useEffect(() => {
-    if (!connectionId) {
-      console.error('Invalid URL: missing or invalid connection ID');
-      void navigate('/', { replace: true });
-    }
-  }, [connectionId, navigate]);
-
-  if (!connectionId) {
-    return null;
+  if (!connection) {
+    return <CenteredLoader />;
   }
 
-  return <BucketSelector connectionId={connectionId} />;
+  const accessDenied =
+    bucketsQuery.isError && bucketsQuery.error instanceof ApiHttpError && bucketsQuery.error.status === 403;
+  const listEmpty = bucketsQuery.isSuccess && bucketsQuery.data.length === 0;
+  const showManual = manualOpen || accessDenied || listEmpty;
+
+  const recents = connection.recentBuckets.filter((r) => r.name !== connection.bucket);
+  const hasRecentSection = Boolean(connection.bucket) || recents.length > 0;
+
+  const buckets = bucketsQuery.data ?? [];
+  const needle = filter.trim().toLowerCase();
+  const filteredBuckets = needle ? buckets.filter((b) => b.name.toLowerCase().includes(needle)) : buckets;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshBuckets(connectionId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to refresh buckets');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleManualSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    const name = manualName.trim();
+    if (!name) return;
+    try {
+      await validate.mutateAsync(name);
+      void navigate(buildBrowseUrl(connectionId, name, ''));
+    } catch {
+      // validate.error is rendered inline.
+    }
+  };
+
+  return (
+    <PageContainer className="max-w-2xl">
+      <div className="mb-5">
+        <h1 className="truncate text-2xl font-bold">{connection.profileName}</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">{describeEndpoint(connection)}</p>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <Link to={buildConnectionEditUrl(connectionId)} className="text-primary underline-offset-4 hover:underline">
+            Edit connection
+          </Link>
+          <Link to={CONNECTIONS_URL} className="text-primary underline-offset-4 hover:underline">
+            Change connection
+          </Link>
+        </div>
+      </div>
+
+      {hasRecentSection && (
+        <section className="mb-6">
+          <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Recent</h2>
+          <ul className="divide-y rounded-lg border bg-card">
+            {connection.bucket && <BucketRow connectionId={connectionId} name={connection.bucket} pinned />}
+            {recents.map((recent) => (
+              <BucketRow
+                connectionId={connectionId}
+                key={recent.name}
+                name={recent.name}
+                trailing={formatRelativeTime(recent.lastUsedAt)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="mb-6">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            All buckets
+            {bucketsQuery.isSuccess && buckets.length > 0 && (
+              <span className="font-normal">
+                {' '}
+                ({needle ? `${filteredBuckets.length} of ${buckets.length}` : buckets.length})
+              </span>
+            )}
+          </h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11"
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing || bucketsQuery.isPending}
+            aria-label="Refresh bucket list"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+
+        {bucketsQuery.isPending ? (
+          <ul className="divide-y rounded-lg border" aria-busy="true">
+            {[0, 1, 2, 3].map((i) => (
+              <li key={i} className="flex min-h-11 items-center px-3">
+                <Skeleton className="h-4 w-48" />
+              </li>
+            ))}
+          </ul>
+        ) : accessDenied ? (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Cannot list buckets</AlertTitle>
+            <AlertDescription>These keys may not list buckets. Open one by name below.</AlertDescription>
+          </Alert>
+        ) : bucketsQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Could not list buckets</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span>{bucketsQuery.error.message}</span>
+              <Button variant="outline" size="sm" onClick={() => void handleRefresh()} disabled={isRefreshing}>
+                <RefreshCw className="h-4 w-4" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : listEmpty ? (
+          <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+            No buckets are visible to these keys.
+          </p>
+        ) : (
+          <>
+            {buckets.length > 5 && (
+              <div className="relative mb-2">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Filter buckets…"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  className="h-11 pl-9"
+                  aria-label="Filter buckets"
+                />
+              </div>
+            )}
+            {filteredBuckets.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">No buckets match "{filter.trim()}".</p>
+            ) : (
+              <ul className="divide-y rounded-lg border bg-card">
+                {filteredBuckets.map((bucket) => (
+                  <BucketRow
+                    connectionId={connectionId}
+                    key={bucket.name}
+                    name={bucket.name}
+                    trailing={bucket.creationDate ? new Date(bucket.creationDate).toLocaleDateString() : undefined}
+                  />
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
+      <section>
+        {showManual ? (
+          <form onSubmit={(event) => void handleManualSubmit(event)} className="space-y-2">
+            <h2 className="text-sm font-semibold text-muted-foreground">Open a bucket by name</h2>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                placeholder="my-bucket-name"
+                value={manualName}
+                onChange={(event) => {
+                  validate.reset();
+                  setManualName(event.target.value);
+                }}
+                required
+                autoComplete="off"
+                className="h-11 flex-1"
+                aria-label="Bucket name"
+              />
+              <Button type="submit" className="h-11" disabled={!manualName.trim() || validate.isPending}>
+                {validate.isPending ? <Spinner size="sm" className="text-primary-foreground" /> : 'Open'}
+              </Button>
+            </div>
+            {validate.isError && <p className="text-sm text-destructive">{validate.error.message}</p>}
+          </form>
+        ) : (
+          <Button variant="link" className="h-11 px-0" onClick={() => setManualOpen(true)}>
+            Open a bucket by name…
+          </Button>
+        )}
+      </section>
+    </PageContainer>
+  );
 }

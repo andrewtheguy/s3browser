@@ -1,21 +1,18 @@
 import { useCallback } from 'react';
-import { useParams } from 'react-router';
-import { useS3ClientContext } from '../contexts';
+import { useBucketRoute } from './useBucketRoute';
 import { buildObjectUrl } from '../services/api';
 
 export function useDownload() {
-  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
 
   const ensureS3Connection = useCallback((): { connectionId: number; bucket: string } => {
-    if (!isConnected || !activeConnectionId || !bucket) {
+    if (!activeConnectionId || !bucket) {
       throw new Error(
-        `Missing S3 connection details: isConnected=${isConnected} | activeConnectionId=${activeConnectionId} | bucket=${bucket}`
+        `Missing S3 connection details: activeConnectionId=${activeConnectionId} | bucket=${bucket}`
       );
     }
     return { connectionId: activeConnectionId, bucket };
-  }, [isConnected, activeConnectionId, bucket]);
+  }, [activeConnectionId, bucket]);
 
   const getProxyDownloadUrl = useCallback(
     (key: string, versionId?: string): string => {

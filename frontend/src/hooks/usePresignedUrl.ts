@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useParams } from 'react-router';
-import { useS3ClientContext } from '../contexts';
+import { useBucketRoute } from './useBucketRoute';
 import { getPresignedUrl } from '../services/api/download';
 
 export interface CopyPresignedUrlResult {
@@ -10,9 +9,7 @@ export interface CopyPresignedUrlResult {
 }
 
 export function usePresignedUrl() {
-  const { activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
   const [isLoading, setIsLoading] = useState(false);
 
   const copyPresignedUrl = useCallback(

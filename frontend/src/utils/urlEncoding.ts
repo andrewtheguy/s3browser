@@ -64,10 +64,43 @@ export function buildPreviewUrl(connectionId: number, bucket: string, key: strin
 }
 
 /**
- * Build a select-bucket URL for a given connection
+ * The bucket page of a connection: recent buckets, the full list, or a name typed by hand.
  */
 export function buildSelectBucketUrl(connectionId: number): string {
-  return `/connection/${connectionId}/browse`;
+  return `/connection/${connectionId}`;
+}
+
+export const CONNECTIONS_URL = '/';
+export const CONNECTION_NEW_URL = '/connection/new';
+export const LOGIN_URL = '/login';
+
+export function buildConnectionEditUrl(connectionId: number): string {
+  return `/connection/${connectionId}/edit`;
+}
+
+/**
+ * The login page, remembering where to return to afterwards.
+ */
+export function buildLoginUrl(next?: string): string {
+  if (!next || next === '/' || !isSafeReturnPath(next)) return LOGIN_URL;
+  return `${LOGIN_URL}?next=${encodeURIComponent(next)}`;
+}
+
+/**
+ * Only same-origin paths may be used as a post-login redirect; protocol-relative
+ * `//host` and absolute URLs are rejected.
+ */
+export function isSafeReturnPath(path: string): boolean {
+  return path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\');
+}
+
+/**
+ * Parse the `:connectionId` route param; null when missing or not a positive integer.
+ */
+export function parseConnectionId(raw: string | undefined): number | null {
+  if (!raw || !/^\d+$/.test(raw)) return null;
+  const id = Number.parseInt(raw, 10);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
 /**

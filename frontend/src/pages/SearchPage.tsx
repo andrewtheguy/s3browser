@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useS3ClientContext } from '../contexts';
+import { PageContainer } from '../components/PageContainer';
+import { useBucketRoute } from '../hooks/useBucketRoute';
+import { useConnectionQuery } from '../queries/connections';
+import { formatRelativeTime } from '../utils/relativeTime';
 import { buildBrowseUrl, buildPreviewUrl } from '../utils/urlEncoding';
 import { formatDate, formatFileSize } from '../utils/formatters';
 import {
@@ -31,70 +34,15 @@ import type { S3Object } from '../types';
 
 const PAGE_SIZE = 100;
 
-function formatRelative(iso: string | null): string {
-  if (!iso) return 'never';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return 'unknown';
-  const elapsedSec = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (elapsedSec < 60) return `${elapsedSec}s ago`;
-  if (elapsedSec < 3600) return `${Math.floor(elapsedSec / 60)}m ago`;
-  if (elapsedSec < 86_400) return `${Math.floor(elapsedSec / 3600)}h ago`;
-  return `${Math.floor(elapsedSec / 86_400)}d ago`;
-}
-
 export function SearchPage() {
-  const { connectionId: urlConnectionId, bucket } = useParams<{
-    connectionId: string;
-    bucket: string;
-  }>();
-  const { isConnected, credentials, selectBucket, activeConnectionId, activeSearchEnabled } = useS3ClientContext();
+  const { connectionId, bucket } = useBucketRoute();
+  const { data: connection } = useConnectionQuery(connectionId);
+  const activeSearchEnabled = connection?.searchEnabled ?? false;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const parsedConnectionId = urlConnectionId ? parseInt(urlConnectionId, 10) : NaN;
-  const connectionId = !Number.isNaN(parsedConnectionId) && parsedConnectionId > 0 ? parsedConnectionId : null;
-
-  const [selectingBucket, setSelectingBucket] = useState(false);
-  const [bucketError, setBucketError] = useState<string | null>(null);
-  const selectingRef = useRef(false);
-
-  // Bucket selection mirrors BrowsePage so AuthGuard releases us with a matching bucket.
-  const doSelectBucket = useCallback((bucketName: string) => {
-    if (selectingRef.current) return;
-    selectingRef.current = true;
-    setSelectingBucket(true);
-    setBucketError(null);
-    try {
-      const success = selectBucket(bucketName);
-      if (!success) {
-        setBucketError(`Failed to access bucket: ${bucketName}`);
-        setTimeout(() => void navigate('/', { replace: true }), 2000);
-      }
-    } catch (err) {
-      setBucketError(err instanceof Error ? err.message : 'Failed to select bucket');
-      setTimeout(() => void navigate('/', { replace: true }), 2000);
-    } finally {
-      setSelectingBucket(false);
-      selectingRef.current = false;
-    }
-  }, [selectBucket, navigate]);
-
   useEffect(() => {
-    if (isConnected && bucket && bucket !== credentials?.bucket && !selectingRef.current) {
-      doSelectBucket(bucket);
-    }
-  }, [isConnected, bucket, credentials?.bucket, doSelectBucket]);
-
-  useEffect(() => {
-    if (!connectionId || !bucket) {
-      void navigate('/', { replace: true });
-    }
-  }, [connectionId, bucket, navigate]);
-
-  useEffect(() => {
-    if (bucket) {
-      document.title = `Search ${bucket} - s3browser`;
-    }
+    document.title = `Search ${bucket} - s3browser`;
   }, [bucket]);
 
   const queryFromUrl = searchParams.get('q') ?? '';
@@ -114,7 +62,6 @@ export function SearchPage() {
   // Index status — fetched once when the bucket is ready.
   const [indexStatus, setIndexStatus] = useState<IndexStatusResponse | null>(null);
   useEffect(() => {
-    if (!connectionId || !bucket || credentials?.bucket !== bucket) return;
     if (!activeSearchEnabled) return;
     const controller = new AbortController();
     getIndexStatus(connectionId, bucket, controller.signal)
@@ -124,7 +71,7 @@ export function SearchPage() {
         console.error('Failed to load index status', err);
       });
     return () => controller.abort();
-  }, [connectionId, bucket, credentials?.bucket, activeSearchEnabled]);
+  }, [connectionId, bucket, activeSearchEnabled]);
 
   // Search state
   const [results, setResults] = useState<S3Object[]>([]);
@@ -150,7 +97,6 @@ export function SearchPage() {
 
   // Run a search whenever the URL query, pagination offset, or sort changes.
   useEffect(() => {
-    if (!connectionId || !bucket || credentials?.bucket !== bucket) return;
     if (!activeSearchEnabled) return;
     if (!queryFromUrl.trim()) {
       setResults([]);
@@ -198,7 +144,7 @@ export function SearchPage() {
       });
 
     return () => controller.abort();
-  }, [connectionId, bucket, credentials?.bucket, queryFromUrl, prefixFromUrl, extFromUrl, offset, sortKey, sortDir, activeSearchEnabled]);
+  }, [connectionId, bucket, queryFromUrl, prefixFromUrl, extFromUrl, offset, sortKey, sortDir, activeSearchEnabled]);
 
   // Reset to page 1 whenever the prefix scope or extension filter changes so we don't strand
   // the user on a now-out-of-range page.
@@ -231,46 +177,12 @@ export function SearchPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  if (selectingBucket) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <Spinner size="lg" />
-        <div>Connecting to bucket: {bucket}</div>
-      </div>
-    );
-  }
-
-  if (bucketError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{bucketError}</AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
-  if (
-    connectionId === null ||
-    !bucket ||
-    !credentials?.bucket ||
-    credentials.bucket !== bucket ||
-    activeConnectionId !== connectionId
-  ) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
   const indexCommand = `s3browser index --connection ${connectionId} --bucket ${bucket}`;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
 
   return (
-    <div className="container mx-auto p-4 max-w-6xl">
+    <PageContainer className="max-w-6xl">
       <div className="mb-4 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold flex flex-wrap items-center gap-2">
@@ -335,7 +247,7 @@ export function SearchPage() {
           <div className="text-xs text-muted-foreground">
             {indexStatus?.lastIndexedAt ? (
               <>
-                Index: {indexStatus.objectCount?.toLocaleString() ?? '?'} keys · updated {formatRelative(indexStatus.lastIndexedAt)}
+                Index: {indexStatus.objectCount?.toLocaleString() ?? '?'} keys · updated {formatRelativeTime(new Date(indexStatus.lastIndexedAt).getTime())}
               </>
             ) : (
               <>Index not built yet for this bucket.</>
@@ -494,6 +406,6 @@ export function SearchPage() {
           )}
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }

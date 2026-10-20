@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router';
 import {
   Dialog,
   DialogContent,
@@ -24,26 +23,16 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { useBrowserContext, useS3ClientContext } from '../../contexts';
+import { useBrowserContext } from '../../contexts';
+import { useBucketRoute } from '../../hooks/useBucketRoute';
+import { useConnectionQuery } from '../../queries/connections';
+import { downloadTextFile } from '../../utils/download';
 import { getBucketInfo, type BucketInfo, type LifecycleRule } from '../../services/api/bucket';
-import { exportConnectionProfile, getConnection } from '../../services/api/auth';
+import { exportConnectionProfile } from '../../services/api/auth';
 
 interface BucketInfoDialogProps {
   open: boolean;
   onClose: () => void;
-}
-
-function downloadTextFile(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 function LifecycleRuleDetails({ rule }: { rule: LifecycleRule }) {
@@ -108,13 +97,11 @@ function LifecycleRuleDetails({ rule }: { rule: LifecycleRule }) {
 }
 
 export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
-  const { activeConnectionId, credentials } = useS3ClientContext();
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
+  const { data: connection } = useConnectionQuery(activeConnectionId);
   const { versioningSupported, bucketVersioningStatus } = useBrowserContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
 
   const [info, setInfo] = useState<BucketInfo | null>(null);
-  const [profileName, setProfileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<null | 'aws' | 'rclone'>(null);
@@ -128,75 +115,34 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
   }, []);
 
   useEffect(() => {
-    if (!open || !activeConnectionId || !bucket) {
+    if (!open) {
       setInfo(null);
-      setProfileName(null);
       setError(null);
       setIsLoading(false);
       return;
     }
-
     const abortController = new AbortController();
     setIsLoading(true);
     setError(null);
-
-    void (async () => {
-      let connectionError: Error | null = null;
-      let bucketError: Error | null = null;
-
-      try {
-        const connectionPromise = getConnection(activeConnectionId, abortController.signal);
-        const bucketPromise = getBucketInfo(activeConnectionId, bucket, abortController.signal);
-
-        const [connectionResult, bucketResult] = await Promise.allSettled([connectionPromise, bucketPromise]);
-
-        if (connectionResult.status === 'rejected') {
-          connectionError = connectionResult.reason instanceof Error
-            ? connectionResult.reason
-            : new Error('Failed to load connection');
-        }
-
-        if (bucketResult.status === 'rejected') {
-          bucketError = bucketResult.reason instanceof Error
-            ? bucketResult.reason
-            : new Error('Failed to load bucket info');
-        }
-
+    getBucketInfo(activeConnectionId, bucket, abortController.signal)
+      .then((result) => {
+        if (!abortController.signal.aborted) setInfo(result);
+      })
+      .catch((err: unknown) => {
         if (!abortController.signal.aborted) {
-          if (connectionError) {
-            setError(`Failed to load connection: ${connectionError.message}`);
-          } else if (bucketError) {
-            setError(`Failed to load bucket info: ${bucketError.message}`);
-          } else {
-            setInfo((bucketResult as PromiseFulfilledResult<BucketInfo>).value);
-            setProfileName((connectionResult as PromiseFulfilledResult<Awaited<ReturnType<typeof getConnection>>>).value.profileName);
-          }
+          setError(`Failed to load bucket info: ${err instanceof Error ? err.message : 'unknown error'}`);
         }
-      } catch (err) {
-        if (!abortController.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Failed to load data');
-        }
-      } finally {
-        if (!abortController.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      abortController.abort();
-    };
+      })
+      .finally(() => {
+        if (!abortController.signal.aborted) setIsLoading(false);
+      });
+    return () => abortController.abort();
   }, [open, activeConnectionId, bucket]);
 
   const handleExportProfile = async (format: 'aws' | 'rclone') => {
-    if (!activeConnectionId) {
-      toast.error('No active connection available');
-      return;
-    }
-
     setExportingFormat(format);
     try {
-      const response = await exportConnectionProfile(activeConnectionId, format, bucket || undefined);
+      const response = await exportConnectionProfile(activeConnectionId, format, bucket);
       if (!isMountedRef.current) {
         return;
       }
@@ -215,8 +161,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
     }
   };
 
-  const showExportSection = Boolean(activeConnectionId);
-  const showSeparator = showExportSection && (isLoading || !!error || !!info);
+  const showSeparator = isLoading || !!error || !!info;
   const exportBusy = exportingFormat !== null;
   const versionSupportState: { label: string; variant: 'default' | 'outline' | 'secondary' } =
     bucketVersioningStatus === 'disabled'
@@ -249,7 +194,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                       Profile
                     </TableCell>
                     <TableCell className="break-all">
-                      {profileName ?? '—'}
+                      {connection?.profileName ?? '—'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
@@ -257,7 +202,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                       Endpoint
                     </TableCell>
                     <TableCell className="break-all">
-                      {credentials?.endpoint || 'AWS S3 (default)'}
+                      {connection?.endpoint || 'AWS S3 (default)'}
                     </TableCell>
                   </TableRow>
                   <TableRow>
@@ -278,7 +223,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                           {info.versioning?.status || 'Disabled'}
                         </Badge>
                         {info.versioning?.mfaDelete === 'Enabled' && (
-                          <Badge variant="outline" className="text-yellow-600">
+                          <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400">
                             MFA Delete
                           </Badge>
                         )}
@@ -302,7 +247,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                     <TableCell>
                       {info.encryptionError ? (
                         <div>
-                          <Badge variant="outline" className="text-yellow-600">Unknown</Badge>
+                          <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400">Unknown</Badge>
                           <p className="text-xs text-muted-foreground mt-1">
                             {info.encryptionError}
                           </p>
@@ -362,8 +307,6 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
             </>
           ) : null}
 
-          {showExportSection && (
-            <>
               {showSeparator && <Separator />}
               <div className="space-y-2">
                 <h3 className="text-sm font-medium">Export Profiles</h3>
@@ -395,8 +338,6 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                   </Button>
                 </div>
               </div>
-            </>
-          )}
         </div>
         <DialogFooter>
           <Button onClick={onClose}>Close</Button>

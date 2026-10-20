@@ -8,9 +8,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 import type { S3Object, BrowserContextValue } from '../types';
-import { useS3ClientContext } from './useS3ClientContext';
+import { useBucketRoute } from '../hooks/useBucketRoute';
 import { listObjects, ApiHttpError, getBucketInfo, listLiveFolders } from '../services/api';
 import { getPathSegments, sortObjects } from '../utils/formatters';
 import { BROWSE_WINDOW_LIMIT } from '../config/browse';
@@ -31,8 +31,7 @@ type BrowserAction =
   | { type: 'FETCH_START'; windowStart: number; windowIndex: number; windowTokens: Array<string | null> }
   | { type: 'FETCH_SUCCESS'; objects: S3Object[] }
   | { type: 'FETCH_ERROR'; error: string }
-  | { type: 'FETCH_LIMIT_REACHED'; objects: S3Object[]; message: string; continuationToken: string | null }
-  | { type: 'RESET' };
+  | { type: 'FETCH_LIMIT_REACHED'; objects: S3Object[]; message: string; continuationToken: string | null };
 
 function reducer(state: BrowserState, action: BrowserAction): BrowserState {
   switch (action.type) {
@@ -77,8 +76,6 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
         limitMessage: action.message,
         limitContinuationToken: action.continuationToken,
       };
-    case 'RESET':
-      return initialState;
     default:
       return state;
   }
@@ -151,17 +148,14 @@ export function BrowserProvider({
   // null = checking, true = supported, false = not supported
   const [versioningSupported, setVersioningSupported] = useState<boolean | null>(null);
   const [bucketVersioningStatus, setBucketVersioningStatus] = useState<'enabled' | 'suspended' | 'disabled' | null>(null);
-  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
   const navigate = useNavigate();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastFetchedPathRef = useRef<string | null>(null);
   const lastFetchedVersionsRef = useRef<boolean | null>(null);
   const versioningCheckRef = useRef<number>(0);
 
-  // Get bucket from URL params or credentials
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
 
   const buildLimitMessage = useCallback((windowStart: number, count: number) => {
     if (count === 0) {
@@ -179,7 +173,7 @@ export function BrowserProvider({
       windowIndex: number,
       windowTokens: Array<string | null>
     ) => {
-      if (!isConnected || !activeConnectionId || !bucket) return;
+      if (!activeConnectionId || !bucket) return;
 
       // Abort any in-flight request
       if (abortControllerRef.current) {
@@ -320,7 +314,7 @@ export function BrowserProvider({
         }
       }
     },
-    [activeConnectionId, bucket, buildLimitMessage, isConnected, showVersions]
+    [activeConnectionId, bucket, buildLimitMessage, showVersions]
   );
 
   const navigateTo = useCallback(
@@ -362,22 +356,9 @@ export function BrowserProvider({
     await fetchObjectsWindow(currentPath, startToken, prevIndex, state.windowTokens);
   }, [currentPath, fetchObjectsWindow, state.windowIndex, state.windowTokens]);
 
-  // Reset when disconnected
-  useEffect(() => {
-    if (!isConnected) {
-      dispatch({ type: 'RESET' });
-      lastFetchedPathRef.current = null;
-      lastFetchedVersionsRef.current = null;
-      setShowVersions(false);
-      setVersioningSupported(null);
-      setBucketVersioningStatus(null);
-      versioningCheckRef.current++;
-    }
-  }, [isConnected]);
-
   // Fetch bucket versioning status to disable versions when versioning is disabled
   useEffect(() => {
-    if (!isConnected || !activeConnectionId || !bucket) {
+    if (!activeConnectionId || !bucket) {
       setBucketVersioningStatus(null);
       return;
     }
@@ -411,11 +392,11 @@ export function BrowserProvider({
     return () => {
       abortController.abort();
     };
-  }, [isConnected, activeConnectionId, bucket]);
+  }, [activeConnectionId, bucket]);
 
   // Probe versioning support when connected
   useEffect(() => {
-    if (!isConnected || !activeConnectionId || !bucket) {
+    if (!activeConnectionId || !bucket) {
       return;
     }
 
@@ -458,7 +439,7 @@ export function BrowserProvider({
     return () => {
       abortController.abort();
     };
-  }, [isConnected, activeConnectionId, bucket]);
+  }, [activeConnectionId, bucket]);
 
   // Abort pending requests on unmount
   useEffect(() => {
@@ -477,22 +458,19 @@ export function BrowserProvider({
 
   // Fetch objects when path changes (URL-driven)
   useEffect(() => {
-    if (isConnected && lastFetchedPathRef.current !== currentPath) {
+    if (lastFetchedPathRef.current !== currentPath) {
       void fetchObjectsWindow(currentPath, undefined, 0, [null]);
     }
-  }, [isConnected, currentPath, fetchObjectsWindow]);
+  }, [currentPath, fetchObjectsWindow]);
 
   useEffect(() => {
-    if (!isConnected) {
-      return;
-    }
     if (
       lastFetchedVersionsRef.current !== null &&
       lastFetchedVersionsRef.current !== showVersions
     ) {
       void fetchObjectsWindow(currentPath, undefined, 0, [null]);
     }
-  }, [currentPath, fetchObjectsWindow, isConnected, showVersions]);
+  }, [currentPath, fetchObjectsWindow, showVersions]);
 
   const toggleShowVersions = useCallback(() => {
     setShowVersions((prev) => !prev);

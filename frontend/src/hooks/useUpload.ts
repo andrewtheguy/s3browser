@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useParams } from 'react-router';
-import { useS3ClientContext } from '../contexts';
+import { useBucketRoute } from './useBucketRoute';
 import { createFolder } from '../services/api';
 import {
   uploadSingleFile,
@@ -37,9 +36,7 @@ const UPLOAD_LOCK_HEARTBEAT_MS = 30 * 1000;
 const UPLOAD_LOCK_CHANNEL = 's3browser-upload-lock-channel';
 
 export function useUpload() {
-  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [pendingResumable, setPendingResumable] = useState<PersistedUpload[]>([]);
   const [completedStats, setCompletedStats] = useState<CompletedStats>({ count: 0, size: 0 });
@@ -707,7 +704,7 @@ export function useUpload() {
       if (!existingLock && typeof window !== 'undefined') {
         writeUploadLock();
       }
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -772,7 +769,6 @@ export function useUpload() {
       activeConnectionId,
       bucket,
       enqueueUploadIds,
-      isConnected,
       isLockStale,
       normalizePrefix,
       normalizeRelativePath,
@@ -910,14 +906,14 @@ export function useUpload() {
 
   const createNewFolder = useCallback(
     async (folderName: string, prefix: string = ''): Promise<void> => {
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
       const folderPath = prefix + folderName;
       await createFolder(activeConnectionId, bucket, folderPath);
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   const hasActiveUploads = uploads.some((u) => u.status === 'uploading' || u.status === 'pending');

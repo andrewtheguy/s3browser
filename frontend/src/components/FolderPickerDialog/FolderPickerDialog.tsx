@@ -34,8 +34,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useS3ClientContext } from '../../contexts';
-import { useParams } from 'react-router';
+import { useBucketRoute } from '../../hooks/useBucketRoute';
 import { listObjects, createFolder } from '../../services/api';
 import type { S3Object } from '../../types';
 
@@ -63,9 +62,7 @@ export function FolderPickerDialog({
   onConfirm,
   onCancel,
 }: FolderPickerDialogProps) {
-  const { activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
 
   const [browsePath, setBrowsePath] = useState('');
   const [folders, setFolders] = useState<S3Object[]>([]);
@@ -381,7 +378,7 @@ export function FolderPickerDialog({
 
           {/* Validation error */}
           {validationError && validationError !== 'Name cannot be empty' && !validationError.includes('cannot contain') && (
-            <Alert className="mx-6 mt-3 border-yellow-500 bg-yellow-50 text-yellow-800">
+            <Alert className="mx-6 mt-3 border-yellow-500 bg-yellow-50 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
               <AlertDescription>{validationError}</AlertDescription>
             </Alert>
           )}
