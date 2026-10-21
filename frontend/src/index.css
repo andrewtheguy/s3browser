@@ -1,54 +1,104 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Palette taken from the logo (public/favicon.svg): navy chrome, bucket-orange accent. */
 :root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(222.2 84% 4.9%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(222.2 84% 4.9%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(222.2 84% 4.9%);
-  --primary: hsl(222.2 47.4% 11.2%);
-  --primary-foreground: hsl(210 40% 98%);
-  --secondary: hsl(210 40% 96.1%);
-  --secondary-foreground: hsl(222.2 47.4% 11.2%);
-  --muted: hsl(210 40% 96.1%);
-  --muted-foreground: hsl(215.4 16.3% 46.9%);
-  --accent: hsl(210 40% 96.1%);
-  --accent-foreground: hsl(222.2 47.4% 11.2%);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(210 40% 98%);
-  --border: hsl(214.3 31.8% 91.4%);
-  --input: hsl(214.3 31.8% 91.4%);
-  --ring: hsl(222.2 84% 4.9%);
+  --brand: #141e45;
+  --brand-2: #0d406b;
+  --brand-3: #146185;
+  --brand-foreground: #e8edf7;
+  --brand-muted: #aebcd9;
+
+  --background: #f6f7fb;
+  --foreground: #0f1733;
+  --card: #ffffff;
+  --card-foreground: #0f1733;
+  --popover: #ffffff;
+  --popover-foreground: #0f1733;
+  --primary: #f29926;
+  --primary-foreground: #141e45;
+  /* Orange that is readable as text; plain primary is only 2.2:1 on white. */
+  --primary-ink: #b4530a;
+  --secondary: #edf0f7;
+  --secondary-foreground: #141e45;
+  --muted: #eef1f7;
+  --muted-foreground: #5a6582;
+  --accent: #eaeef7;
+  --accent-foreground: #141e45;
+  --destructive: #dc2e3a;
+  --destructive-foreground: #ffffff;
+  --success: #1a7f45;
+  --success-foreground: #ffffff;
+  --warning: #8a6100;
+  --warning-foreground: #ffffff;
+  --info: #1f6fd1;
+  --info-foreground: #ffffff;
+  --border: #dde2ec;
+  --input: #cdd4e3;
+  --ring: #d9650f;
+  --overlay: rgb(11 17 40 / 0.55);
+
+  --file-image: #0e8f7e;
+  --file-video: #c2367a;
+  --file-audio: #7a4fd6;
+  --file-pdf: #d13b30;
+  --file-document: #2b66d0;
+  --file-spreadsheet: #1e8a4c;
+  --file-archive: #93652a;
+  --file-code: #0e7490;
+
   color-scheme: light;
 }
 
 .dark {
-  --background: hsl(222.2 84% 4.9%);
-  --foreground: hsl(210 40% 98%);
-  --card: hsl(222.2 84% 6.5%);
-  --card-foreground: hsl(210 40% 98%);
-  --popover: hsl(222.2 84% 6.5%);
-  --popover-foreground: hsl(210 40% 98%);
-  --primary: hsl(210 40% 98%);
-  --primary-foreground: hsl(222.2 47.4% 11.2%);
-  --secondary: hsl(217.2 32.6% 17.5%);
-  --secondary-foreground: hsl(210 40% 98%);
-  --muted: hsl(217.2 32.6% 17.5%);
-  --muted-foreground: hsl(215 20.2% 65.1%);
-  --accent: hsl(217.2 32.6% 17.5%);
-  --accent-foreground: hsl(210 40% 98%);
-  --destructive: hsl(0 62.8% 50%);
-  --destructive-foreground: hsl(210 40% 98%);
-  --border: hsl(217.2 32.6% 17.5%);
-  --input: hsl(217.2 32.6% 17.5%);
-  --ring: hsl(212.7 26.8% 83.9%);
+  --background: #0b1128;
+  --foreground: #e6ebf5;
+  --card: #111a36;
+  --card-foreground: #e6ebf5;
+  --popover: #131d3c;
+  --popover-foreground: #e6ebf5;
+  --primary: #f29926;
+  --primary-foreground: #141e45;
+  --primary-ink: #ffb84d;
+  --secondary: #1b2747;
+  --secondary-foreground: #e6ebf5;
+  --muted: #18223f;
+  --muted-foreground: #97a3bf;
+  --accent: #1e2a4d;
+  --accent-foreground: #e6ebf5;
+  --destructive: #f0606a;
+  --destructive-foreground: #0b1128;
+  --success: #4cc38a;
+  --success-foreground: #0b1128;
+  --warning: #e8b931;
+  --warning-foreground: #0b1128;
+  --info: #6aa8f0;
+  --info-foreground: #0b1128;
+  --border: #243055;
+  --input: #2e3b66;
+  --ring: #f29926;
+  --overlay: rgb(3 6 16 / 0.72);
+
+  --file-image: #3cc9b4;
+  --file-video: #f071a8;
+  --file-audio: #a98bf5;
+  --file-pdf: #f2706a;
+  --file-document: #73a3f5;
+  --file-spreadsheet: #5bc98a;
+  --file-archive: #d5a86a;
+  --file-code: #4fc3de;
+
   color-scheme: dark;
 }
 
 @theme inline {
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-muted: var(--brand-muted);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -57,6 +107,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-ink: var(--primary-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -65,10 +116,34 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius: 0.5rem;
+  --color-overlay: var(--overlay);
+  --color-file-image: var(--file-image);
+  --color-file-video: var(--file-video);
+  --color-file-audio: var(--file-audio);
+  --color-file-pdf: var(--file-pdf);
+  --color-file-document: var(--file-document);
+  --color-file-spreadsheet: var(--file-spreadsheet);
+  --color-file-archive: var(--file-archive);
+  --color-file-code: var(--file-code);
+  --radius: 0.625rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@theme {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @layer base {
@@ -76,7 +151,10 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  ::selection {
+    @apply bg-primary/30;
   }
 }
 
@@ -85,13 +163,4 @@ body,
 #root {
   height: 100%;
   width: 100%;
-}
-
-html,
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }

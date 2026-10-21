@@ -223,7 +223,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                           {info.versioning?.status || 'Disabled'}
                         </Badge>
                         {info.versioning?.mfaDelete === 'Enabled' && (
-                          <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400">
+                          <Badge variant="warning">
                             MFA Delete
                           </Badge>
                         )}
@@ -247,7 +247,7 @@ export function BucketInfoDialog({ open, onClose }: BucketInfoDialogProps) {
                     <TableCell>
                       {info.encryptionError ? (
                         <div>
-                          <Badge variant="outline" className="text-yellow-600 dark:text-yellow-400">Unknown</Badge>
+                          <Badge variant="warning">Unknown</Badge>
                           <p className="text-xs text-muted-foreground mt-1">
                             {info.encryptionError}
                           </p>

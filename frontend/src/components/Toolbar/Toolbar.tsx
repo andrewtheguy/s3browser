@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router';
 import {
   Upload,
   FolderPlus,
-  Home,
   RefreshCw,
   Trash2,
   Download,
@@ -13,6 +12,7 @@ import {
   MoreVertical,
   Search,
 } from 'lucide-react';
+import { BucketIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -39,6 +39,9 @@ import { useBrowserContext } from '../../contexts';
 import { useBucketRoute } from '../../hooks/useBucketRoute';
 import { useConnectionQuery } from '../../queries/connections';
 import { buildSearchUrl } from '../../utils/urlEncoding';
+
+const currentCrumbClass =
+  'font-semibold text-foreground underline decoration-primary decoration-2 underline-offset-[5px]';
 
 const SEED_TEST_ITEM_COUNT = 10005;
 const seedEnv = import.meta.env as { MODE?: string; VITE_FEATURE_SEED_TEST_ITEMS?: string };
@@ -143,7 +146,7 @@ export function Toolbar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 shrink-0"
+                  className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"
                   onClick={onBucketInfoClick}
                   aria-label="Bucket settings"
                 >
@@ -152,23 +155,23 @@ export function Toolbar({
               </TooltipTrigger>
               <TooltipContent>Bucket settings</TooltipContent>
             </Tooltip>
-            <div className="min-w-0 flex-1 overflow-x-auto py-1 [scrollbar-width:thin]">
+            <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border bg-muted/40 px-2.5 py-1.5 [scrollbar-width:thin]">
               <Breadcrumb>
                 <BreadcrumbList className="flex-nowrap">
                   <BreadcrumbItem>
                     {pathSegments.length === 0 && !previewFileName ? (
-                      <BreadcrumbPage className="flex items-center font-medium" title={`${bucket} root`}>
-                        <Home className="h-4 w-4" aria-hidden="true" />
-                        <span className="sr-only">Root</span>
+                      <BreadcrumbPage className={`flex items-center ${currentCrumbClass}`} title={`${bucket} root`}>
+                        <BucketIcon className="h-4 w-4" />
+                        <span className="ml-1.5 whitespace-nowrap">{bucket}</span>
                       </BreadcrumbPage>
                     ) : (
                       <BreadcrumbLink
-                        className="flex cursor-pointer items-center"
+                        className="flex cursor-pointer items-center hover:text-primary-ink"
                         onClick={() => handleBreadcrumbClick(-1)}
                         title={`${bucket} root`}
                       >
-                        <Home className="h-4 w-4" aria-hidden="true" />
-                        <span className="sr-only">Root</span>
+                        <BucketIcon className="h-4 w-4" />
+                        <span className="ml-1.5 whitespace-nowrap">{bucket}</span>
                       </BreadcrumbLink>
                     )}
                   </BreadcrumbItem>
@@ -182,7 +185,7 @@ export function Toolbar({
                         <BreadcrumbSeparator />
                         <BreadcrumbItem className="whitespace-nowrap">
                           {isLast ? (
-                            <BreadcrumbPage className="font-medium">{segment}</BreadcrumbPage>
+                            <BreadcrumbPage className={currentCrumbClass}>{segment}</BreadcrumbPage>
                           ) : (
                             <BreadcrumbLink className="cursor-pointer" onClick={() => handleBreadcrumbClick(index)}>
                               {segment}
@@ -197,7 +200,7 @@ export function Toolbar({
                     <>
                       <BreadcrumbSeparator />
                       <BreadcrumbItem className="whitespace-nowrap">
-                        <BreadcrumbPage className="font-medium">{previewFileName}</BreadcrumbPage>
+                        <BreadcrumbPage className={currentCrumbClass}>{previewFileName}</BreadcrumbPage>
                       </BreadcrumbItem>
                     </>
                   )}
@@ -214,6 +217,7 @@ export function Toolbar({
                   <Button
                     variant="outline"
                     size="icon"
+                    className="h-11 w-11"
                     onClick={onBatchDownload}
                     disabled={isDownloading}
                   >
@@ -230,7 +234,7 @@ export function Toolbar({
                   <Button
                     variant="outline"
                     size="icon"
-                    className="text-destructive border-destructive hover:bg-destructive/10"
+                    className="h-11 w-11 border-destructive text-destructive hover:bg-destructive/10"
                     onClick={onBatchDelete}
                     disabled={isDeleting}
                   >
@@ -244,7 +248,7 @@ export function Toolbar({
             {/* More menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="h-11 w-11">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>

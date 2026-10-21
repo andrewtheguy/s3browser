@@ -25,7 +25,7 @@ export function HighlightedText({ text, query }: HighlightedTextProps) {
     out.push(
       <mark
         key={segKey++}
-        className="bg-yellow-200 text-foreground dark:bg-yellow-700 rounded px-0.5"
+        className="rounded-sm bg-primary/25 px-0.5 text-foreground dark:bg-primary/30"
       >
         {text.slice(j, j + nlen)}
       </mark>

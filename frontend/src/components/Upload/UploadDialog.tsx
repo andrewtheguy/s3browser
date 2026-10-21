@@ -144,7 +144,7 @@ export function UploadDialog({
               <Separator className="my-4" />
               <Accordion type="single" collapsible>
                 <AccordionItem value="pending-uploads">
-                  <AccordionTrigger className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+                  <AccordionTrigger className="text-sm font-medium text-warning">
                     Resumable Uploads ({filteredResumable.length})
                   </AccordionTrigger>
                   <AccordionContent>
@@ -157,7 +157,7 @@ export function UploadDialog({
                         <p className="text-xs text-muted-foreground mb-2">
                           These uploads resume automatically while this tab stays open.
                         </p>
-                        <ScrollArea className="max-h-[200px] rounded-md border border-yellow-200 bg-yellow-50/50 dark:border-yellow-900 dark:bg-yellow-950/30">
+                        <ScrollArea className="max-h-[200px] rounded-md border border-warning/30 bg-warning/5">
                           <ul className="p-2 space-y-2">
                             {filteredResumable.map((pending) => (
                               <li
@@ -165,7 +165,7 @@ export function UploadDialog({
                                 className="flex items-center justify-between gap-2 bg-background rounded p-2"
                               >
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <Upload className="h-4 w-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                                  <Upload className="h-4 w-4 text-warning flex-shrink-0" />
                                   <div className="min-w-0">
                                     <p className="text-sm truncate max-w-[120px] sm:max-w-[200px] md:max-w-[280px]">
                                       {pending.key || pending.fileName}

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { ChevronRight, Cloud, Download, MoreVertical, Pencil, Pin, Server, Trash2 } from 'lucide-react';
+import { ChevronRight, Download, MoreVertical, Pencil, Pin, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { BucketIcon } from '@/components/ui/bucket-icon';
+import { BucketIcon, CloudBucketIcon, EndpointIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -44,12 +44,16 @@ function BucketChip({ to, children, pinned = false }: { to: string; children: st
     <Link
       to={to}
       className={cn(
-        'inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border px-3 text-sm hover:bg-accent hover:text-accent-foreground',
-        pinned && 'border-primary/40 bg-primary/5',
+        'inline-flex h-9 max-w-full items-center gap-1.5 rounded-full border bg-background px-3 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
+        pinned && 'border-primary/50 bg-primary/10',
       )}
       title={children}
     >
-      {pinned ? <Pin className="h-3.5 w-3.5 shrink-0" /> : <BucketIcon className="h-3.5 w-3.5 shrink-0" />}
+      {pinned ? (
+        <Pin className="h-3.5 w-3.5 shrink-0 text-primary-ink" />
+      ) : (
+        <BucketIcon className="h-3.5 w-3.5 text-muted-foreground" />
+      )}
       <span className="truncate">{children}</span>
     </Link>
   );
@@ -78,21 +82,20 @@ export function ConnectionCard({ connection }: { connection: ServerSavedConnecti
   };
 
   return (
-    <li className="rounded-lg border bg-card text-card-foreground shadow-sm">
+    <li className="rounded-xl border bg-card text-card-foreground shadow-xs transition-colors hover:border-primary/40">
       <div className="flex items-stretch">
         <Link
           to={connectionOpenUrl(connection)}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-l-lg px-4 py-3 hover:bg-accent/60"
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-l-xl px-4 py-3 transition-colors hover:bg-accent/60"
         >
-          {connection.endpoint ? (
-            <Server className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          ) : (
-            <Cloud className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          )}
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-brand to-brand-2 text-brand-foreground shadow-xs">
+            {connection.endpoint ? <EndpointIcon /> : <CloudBucketIcon />}
+          </span>
           <div className="min-w-0 flex-1">
-            <div className="truncate font-medium">{connection.profileName}</div>
+            <div className="truncate font-semibold">{connection.profileName}</div>
             <div className="truncate text-xs text-muted-foreground">
-              {describeEndpoint(connection)} · Last used {formatRelativeTime(connection.lastUsedAt)}
+              <span className="font-mono">{describeEndpoint(connection)}</span> · Last used{' '}
+              {formatRelativeTime(connection.lastUsedAt)}
             </div>
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />

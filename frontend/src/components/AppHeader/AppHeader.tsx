@@ -1,7 +1,9 @@
-import { ChevronRight, Cloud, LogOut, Monitor, Moon, Server, Settings, Sun } from 'lucide-react';
+import { ChevronRight, LogOut, Monitor, Moon, Settings, Sun } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { BucketIcon } from '@/components/ui/bucket-icon';
+import { BrandMark, Wordmark } from '@/components/BrandMark';
+import { BucketIcon, CloudBucketIcon, EndpointIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +26,8 @@ import {
 } from '../../utils/urlEncoding';
 
 const crumbClass =
-  'flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-sm hover:bg-accent hover:text-accent-foreground max-w-[9rem] sm:max-w-xs';
+  'flex h-9 min-w-0 max-w-[9rem] items-center gap-1.5 rounded-md px-2 text-sm text-brand-muted transition-colors hover:bg-white/10 hover:text-brand-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:max-w-xs';
+const currentCrumbClass = 'font-medium text-brand-foreground';
 
 export function AppHeader() {
   const params = useParams<{ connectionId?: string; bucket?: string }>();
@@ -41,29 +44,38 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-1 border-b bg-background/95 px-2 backdrop-blur sm:px-4">
+    <header className="sticky top-0 z-40 flex h-12 shrink-0 items-center gap-1 border-b-2 border-primary bg-linear-to-r from-brand to-brand-2 px-2 text-brand-foreground sm:px-4">
       <nav aria-label="Location" className="flex min-w-0 flex-1 items-center gap-0.5">
         <Link
           to={CONNECTIONS_URL}
-          className="flex h-10 shrink-0 items-center gap-2 rounded px-1.5 font-semibold hover:bg-accent"
+          className="flex h-10 shrink-0 items-center gap-2 rounded-md px-1.5 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          aria-label="s3browser"
         >
-          <Cloud className="h-5 w-5 text-primary" />
-          <span className="hidden sm:inline">s3browser</span>
+          <BrandMark />
+          <Wordmark className={cn(connectionId !== null && 'hidden sm:inline')} accentClassName="text-primary" />
         </Link>
         {connectionId !== null && (
           <>
-            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <Link to={buildSelectBucketUrl(connectionId)} className={crumbClass} title={connection?.profileName}>
-              <Server className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <ChevronRight className="h-4 w-4 shrink-0 text-brand-muted/60" aria-hidden="true" />
+            <Link
+              to={buildSelectBucketUrl(connectionId)}
+              className={cn(crumbClass, !bucket && currentCrumbClass)}
+              title={connection?.profileName}
+            >
+              {connection && !connection.endpoint ? (
+                <CloudBucketIcon className="h-4 w-4" />
+              ) : (
+                <EndpointIcon className="h-4 w-4" />
+              )}
               <span className="truncate">{connection?.profileName ?? '…'}</span>
             </Link>
           </>
         )}
         {connectionId !== null && bucket && (
           <>
-            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <Link to={buildBrowseUrl(connectionId, bucket, '')} className={crumbClass} title={bucket}>
-              <BucketIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <ChevronRight className="h-4 w-4 shrink-0 text-brand-muted/60" aria-hidden="true" />
+            <Link to={buildBrowseUrl(connectionId, bucket, '')} className={cn(crumbClass, currentCrumbClass)} title={bucket}>
+              <BucketIcon className="h-4 w-4" />
               <span className="truncate">{bucket}</span>
             </Link>
           </>
@@ -72,7 +84,12 @@ export function AppHeader() {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="Settings">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 text-brand-foreground hover:bg-white/10 hover:text-brand-foreground focus-visible:ring-primary focus-visible:ring-offset-brand"
+            aria-label="Settings"
+          >
             <Settings className="h-5 w-5" />
           </Button>
         </DropdownMenuTrigger>

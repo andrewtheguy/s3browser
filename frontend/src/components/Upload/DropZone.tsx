@@ -395,7 +395,7 @@ export function DropZone({ onFilesSelected, disabled = false }: DropZoneProps) {
           <Upload
             className={cn(
               "mx-auto h-12 w-12 mb-2",
-              isDragging ? "text-primary" : "text-muted-foreground"
+              isDragging ? "text-primary-ink" : "text-muted-foreground"
             )}
           />
           <h3 className="text-lg font-semibold mb-1">

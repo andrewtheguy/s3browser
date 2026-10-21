@@ -185,13 +185,13 @@ export function SearchPage() {
     <PageContainer className="max-w-6xl">
       <div className="mb-4 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold tracking-tight flex flex-wrap items-center gap-2">
             <span>
               Search <span className="text-muted-foreground">in {bucket}</span>
             </span>
             {prefixFromUrl && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm font-mono font-semibold text-primary">
-                <span className="text-primary/70">scope:</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm font-mono font-semibold text-primary-ink">
+                <span className="opacity-70">scope:</span>
                 <span className="break-all">{prefixFromUrl}</span>
                 <button
                   type="button"
@@ -257,7 +257,7 @@ export function SearchPage() {
       </div>
 
       {!activeSearchEnabled && (
-        <Alert className="mb-3">
+        <Alert variant="info" className="mb-3">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             Search is disabled for this connection because its S3 endpoint host is not in
@@ -268,7 +268,7 @@ export function SearchPage() {
       )}
 
       {indexMissing && (
-        <Alert className="mb-3">
+        <Alert variant="info" className="mb-3">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             No index exists for this bucket yet. Build one by running:

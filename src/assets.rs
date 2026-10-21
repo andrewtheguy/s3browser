@@ -11,7 +11,7 @@ struct StaticAssets;
 
 /// Whether a missing path is a static file (404) rather than an SPA route
 /// (index.html). Bundled assets live under `assets/`; root-level names with
-/// an extension (`favicon.ico`, `vite.svg`) are files. Deeper paths with dots
+/// an extension (`favicon.ico`, `favicon.svg`) are files. Deeper paths with dots
 /// are SPA routes that embed object keys, like
 /// `connection/2/preview/bucket/path/foo.json`.
 fn is_static_asset_path(path: &str) -> bool {
@@ -42,7 +42,7 @@ mod tests {
             "assets/index-abc123.js",
             "assets/main.css",
             "favicon.ico",
-            "vite.svg",
+            "favicon.svg",
             "robots.txt",
             "manifest.json",
         ] {

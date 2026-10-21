@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { memo, useMemo, type CSSProperties, type ReactElement } from 'react';
 import { List } from 'react-window';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -178,12 +179,12 @@ export const UploadProgress = memo(function UploadProgress({
       <div className="mt-4">
         {/* Completed uploads summary */}
         {completedStats.count > 0 && (
-          <div className="flex items-center gap-2 mb-3 p-2 bg-green-50 dark:bg-green-950/30 rounded-md border border-green-200 dark:border-green-900">
-            <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-            <span className="text-sm text-green-700 dark:text-green-400">
+          <Alert variant="success" className="mb-3 py-2">
+            <CheckCircle className="h-4 w-4" />
+            <AlertDescription>
               {completedStats.count} file{completedStats.count !== 1 ? 's' : ''} completed ({formatFileSize(completedStats.size)})
-            </span>
-          </div>
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Active uploads list */}

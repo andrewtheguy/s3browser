@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  Folder,
   File,
   Image,
   Video,
@@ -17,6 +16,7 @@ import {
   Info,
   MoreVertical,
 } from 'lucide-react';
+import { FolderIcon } from '@/components/icons';
 import { TableRow, TableCell } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -58,7 +58,7 @@ interface FileListItemProps {
 }
 
 const iconMap: Record<FileIconType, React.ElementType> = {
-  folder: Folder,
+  folder: FolderIcon,
   image: Image,
   video: Video,
   audio: Music,
@@ -71,19 +71,26 @@ const iconMap: Record<FileIconType, React.ElementType> = {
   file: File,
 };
 
-const iconColors: Record<FileIconType, string> = {
-  folder: 'text-yellow-500',
-  image: 'text-green-500',
-  video: 'text-red-500',
-  audio: 'text-purple-500',
-  pdf: 'text-red-600',
-  document: 'text-blue-500',
-  spreadsheet: 'text-green-600',
-  archive: 'text-amber-700',
-  code: 'text-teal-500',
-  text: 'text-slate-500',
-  file: 'text-slate-400',
+/** Tile background + glyph colour per file type. */
+const iconTones: Record<FileIconType, string> = {
+  folder: 'bg-primary/12 text-primary-ink',
+  image: 'bg-file-image/12 text-file-image',
+  video: 'bg-file-video/12 text-file-video',
+  audio: 'bg-file-audio/12 text-file-audio',
+  pdf: 'bg-file-pdf/12 text-file-pdf',
+  document: 'bg-file-document/12 text-file-document',
+  spreadsheet: 'bg-file-spreadsheet/12 text-file-spreadsheet',
+  archive: 'bg-file-archive/12 text-file-archive',
+  code: 'bg-file-code/12 text-file-code',
+  text: 'bg-muted text-muted-foreground',
+  file: 'bg-muted text-muted-foreground',
 };
+
+/** Orange rule on the row's first cell (box-shadow on <tr> is unreliable). */
+const leadingRuleClass =
+  'shadow-[inset_3px_0_0_transparent] transition-shadow group-hover:shadow-[inset_3px_0_0_var(--color-primary)] group-data-[state=selected]:shadow-[inset_3px_0_0_var(--color-primary)]';
+
+const tagClass = 'ml-2 inline-block rounded-sm px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide';
 
 export function FileListItem({
   item,
@@ -104,7 +111,7 @@ export function FileListItem({
 }: FileListItemProps) {
   const iconType = getFileIconType(item.name, item.isFolder);
   const IconComponent = iconMap[iconType];
-  const iconColor = iconColors[iconType];
+  const iconTone = iconTones[iconType];
   const isPreviousVersion = showVersions && item.isLatest === false;
   const isDeleteMarker = showVersions && item.isDeleteMarker === true;
   // Folders can always be navigated (even if deleted), but deleted files can't be previewed
@@ -144,14 +151,14 @@ export function FileListItem({
         data-state={isSelected ? 'selected' : undefined}
         className={cn(
           "group",
-          isInteractive ? "cursor-pointer hover:bg-muted/50" : "cursor-default",
-          isSelected && "bg-muted",
+          isInteractive ? "cursor-pointer hover:bg-accent/60" : "cursor-default",
+          isSelected && "bg-primary/8 hover:bg-primary/12",
           (isPreviousVersion || isDeleteMarker) && "text-muted-foreground"
         )}
       >
         {selectionMode && (
           <TableCell
-            className="w-14 px-2"
+            className={cn("w-14 px-2", leadingRuleClass)}
             onClick={(e) => {
               e.stopPropagation();
               if (isSelectable && onSelect) {
@@ -166,7 +173,7 @@ export function FileListItem({
                 role="checkbox"
                 aria-checked={isSelected}
                 aria-label={`Select ${item.name}${item.isFolder ? '/' : ''}`}
-                className="flex h-8 w-full items-center justify-center rounded-md hover:bg-muted/70 transition-colors group-hover:bg-muted/50"
+                className="flex h-9 w-full items-center justify-center rounded-md transition-colors hover:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleCheckboxToggle(!isSelected);
@@ -183,8 +190,10 @@ export function FileListItem({
             )}
           </TableCell>
         )}
-        <TableCell className="w-12">
-          <IconComponent className={cn("h-6 w-6", iconColor)} />
+        <TableCell className={cn("w-14 pr-0", !selectionMode && leadingRuleClass)}>
+          <span className={cn("flex h-9 w-9 items-center justify-center rounded-lg", iconTone)}>
+            <IconComponent className="h-5 w-5" />
+          </span>
         </TableCell>
         <TableCell className="min-w-[120px]">
           <Tooltip>
@@ -198,10 +207,10 @@ export function FileListItem({
                 {item.name}
                 {item.isFolder && '/'}
                 {isPreviousVersion && (
-                  <span className="ml-2 text-xs text-muted-foreground">previous version</span>
+                  <span className={cn(tagClass, "bg-muted text-muted-foreground")}>previous version</span>
                 )}
                 {isDeleteMarker && (
-                  <span className="ml-2 text-xs text-muted-foreground">deleted</span>
+                  <span className={cn(tagClass, "bg-destructive/10 text-destructive")}>deleted</span>
                 )}
               </span>
             </TooltipTrigger>
@@ -211,18 +220,18 @@ export function FileListItem({
           </Tooltip>
         </TableCell>
         <TableCell className="w-[72px] sm:w-[100px]">
-          <span className="block text-sm text-muted-foreground truncate">
+          <span className="block truncate font-mono text-xs tabular-nums text-muted-foreground">
             {formatFileSize(item.size)}
           </span>
         </TableCell>
         <TableCell className="w-[120px] sm:w-[180px]">
-          <span className="block text-sm text-muted-foreground truncate">
+          <span className="block truncate text-sm tabular-nums text-muted-foreground">
             {formatDate(item.lastModified)}
           </span>
         </TableCell>
         {showVersions && (
           <TableCell className="min-w-[160px]">
-            <span className="block text-sm text-muted-foreground truncate">
+            <span className="block truncate font-mono text-xs text-muted-foreground">
               {item.versionId ?? '-'}
             </span>
           </TableCell>

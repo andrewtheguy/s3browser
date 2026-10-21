@@ -1031,7 +1031,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <div className="flex-1 flex flex-col min-h-0 mx-0 my-0 sm:m-4 bg-card sm:rounded-lg sm:border sm:shadow-sm overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 mx-0 my-0 sm:m-4 bg-card sm:rounded-xl sm:border sm:shadow-xs overflow-hidden">
         <Toolbar
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}
@@ -1088,13 +1088,14 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
             </div>
           )}
           <TooltipProvider>
-            <div className="flex sm:hidden items-center justify-between p-2 border-t bg-card">
+            <div className="flex sm:hidden items-center justify-between p-2 border-t bg-card/95 backdrop-blur">
               <div className="flex flex-wrap gap-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant={selectionMode ? 'default' : 'outline'}
                       size="icon"
+                      className="h-11 w-11"
                       onClick={handleToggleSelection}
                       aria-label={selectionMode ? 'Cancel selection' : 'Select items'}
                     >
@@ -1105,7 +1106,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={handleCreateFolderClick}>
+                    <Button variant="ghost" size="icon" className="h-11 w-11" onClick={handleCreateFolderClick} aria-label="New folder">
                       <FolderPlus className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
@@ -1113,7 +1114,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="default" size="icon" onClick={handleUploadClick}>
+                    <Button variant="default" size="icon" className="h-11 w-11" onClick={handleUploadClick} aria-label="Upload">
                       <Upload className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
@@ -1121,7 +1122,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
                 </Tooltip>
               </div>
               {showVersions && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                <div className="flex items-center gap-1.5 rounded-full bg-info/10 px-2.5 py-1 text-xs font-medium text-info">
                   <History className="h-3.5 w-3.5" />
                   <span>All versions</span>
                 </div>

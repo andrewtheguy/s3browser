@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, ArrowUpDown, FolderX } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { EmptyFolderIcon } from '@/components/icons';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { useBrowserContext } from '../../contexts';
 import { useDownload } from '../../hooks';
 import { BROWSE_WINDOW_LIMIT } from '../../config/browse';
+import { EmptyState } from '../EmptyState';
 import { FileListItem } from './FileListItem';
 import type { S3Object } from '../../types';
 import { getObjectSelectionId } from '../../utils/formatters';
@@ -264,9 +266,9 @@ export function FileList({
         return <ArrowUpDown className="h-3.5 w-3.5" />;
       }
       return sortConfig.direction === 'asc' ? (
-        <ArrowUp className="h-3.5 w-3.5" />
+        <ArrowUp className="h-3.5 w-3.5 text-primary-ink" />
       ) : (
-        <ArrowDown className="h-3.5 w-3.5" />
+        <ArrowDown className="h-3.5 w-3.5 text-primary-ink" />
       );
     },
     [sortConfig]
@@ -287,7 +289,7 @@ export function FileList({
           <TableHeader>
             <TableRow>
               {selectionMode && <TableHead className="w-14 px-2" />}
-              <TableHead className="w-12" />
+              <TableHead className="w-14 pr-0" />
               <TableHead className="min-w-[120px]">Name</TableHead>
               <TableHead className="w-[72px] sm:w-[100px]">Size</TableHead>
               <TableHead className="w-[120px] sm:w-[180px]">Last Modified</TableHead>
@@ -303,8 +305,8 @@ export function FileList({
                     <Skeleton className="w-5 h-5" />
                   </TableCell>
                 )}
-                <TableCell>
-                  <Skeleton className="w-6 h-6 rounded-full" />
+                <TableCell className="pr-0">
+                  <Skeleton className="h-9 w-9 rounded-lg" />
                 </TableCell>
                 <TableCell>
                   <Skeleton className="w-3/5 h-4" />
@@ -330,20 +332,20 @@ export function FileList({
 
   if (objects.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-        <FolderX className="h-16 w-16 mb-4 opacity-50" />
-        <h3 className="text-lg font-semibold">This folder is empty</h3>
-        <p className="text-sm">
-          Upload files or create a new folder to get started
-        </p>
-      </div>
+      <EmptyState
+        className="m-4 sm:m-6"
+        icon={<EmptyFolderIcon />}
+        title="This folder is empty"
+        description="Upload files or create a new folder to get started"
+      />
     );
   }
 
   return (
     <>
       {(isLimited || hasPrevWindow) && (
-        <Alert className="mb-3 border-yellow-300 bg-yellow-50 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-200">
+        <Alert variant="warning" className="mb-3">
+          <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Results limited</AlertTitle>
           <AlertDescription>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -380,7 +382,7 @@ export function FileList({
           </AlertDescription>
         </Alert>
       )}
-      <div className={cn("overflow-x-auto", isLimited && "bg-yellow-100/70 dark:bg-yellow-900/20")}>
+      <div className={cn("overflow-x-auto", isLimited && "bg-warning/5")}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -408,7 +410,7 @@ export function FileList({
                   )}
                 </TableHead>
               )}
-              <TableHead className="w-12" />
+              <TableHead className="w-14 pr-0" />
               <TableHead className="min-w-[120px]">
                 <button
                   type="button"
@@ -481,7 +483,7 @@ export function FileList({
       </div>
       {totalItems > pageSize && (
         <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm tabular-nums text-muted-foreground">
             Showing {pageStartIndex + 1}-{pageEndIndex} of {totalItems}
           </div>
           <div className="flex flex-wrap items-center gap-2">

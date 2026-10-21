@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, Plus, RefreshCw, Search } from 'lucide-react';
 import { Link } from 'react-router';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { BucketIcon } from '@/components/ui/bucket-icon';
+import { BucketIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConnectionCard } from '../components/ConnectionCard';
+import { EmptyState } from '../components/EmptyState';
 import { PageContainer } from '../components/PageContainer';
 import { useConnectionsQuery } from '../queries/connections';
 import { CONNECTION_NEW_URL } from '../utils/urlEncoding';
@@ -35,7 +36,7 @@ export function ConnectionsPage() {
   return (
     <PageContainer>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">Connections</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Connections</h1>
         <Button asChild className="h-11 w-full sm:w-auto">
           <Link to={CONNECTION_NEW_URL}>
             <Plus className="h-4 w-4" />
@@ -60,9 +61,12 @@ export function ConnectionsPage() {
       {query.isPending ? (
         <ul className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <li key={i} className="rounded-lg border p-4">
-              <Skeleton className="mb-2 h-5 w-40" />
-              <Skeleton className="h-3.5 w-64" />
+            <li key={i} className="flex items-center gap-3 rounded-xl border bg-card p-4">
+              <Skeleton className="h-10 w-10 rounded-lg" />
+              <div>
+                <Skeleton className="mb-2 h-5 w-40" />
+                <Skeleton className="h-3.5 w-64 max-w-[50vw]" />
+              </div>
             </li>
           ))}
         </ul>
@@ -79,19 +83,18 @@ export function ConnectionsPage() {
           </AlertDescription>
         </Alert>
       ) : connections.length === 0 ? (
-        <div className="flex flex-col items-center rounded-lg border border-dashed px-6 py-12 text-center">
-          <BucketIcon className="mb-4 h-12 w-12 text-muted-foreground/60" />
-          <h2 className="mb-1 text-lg font-semibold">No connections yet</h2>
-          <p className="mb-6 max-w-sm text-sm text-muted-foreground">
-            Add an AWS account or any S3-compatible endpoint. Credentials are encrypted and stored on this server.
-          </p>
+        <EmptyState
+          icon={<BucketIcon />}
+          title="No connections yet"
+          description="Add an AWS account or any S3-compatible endpoint. Credentials are encrypted and stored on this server."
+        >
           <Button asChild className="h-11">
             <Link to={CONNECTION_NEW_URL}>
               <Plus className="h-4 w-4" />
               New connection
             </Link>
           </Button>
-        </div>
+        </EmptyState>
       ) : filtered.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">No connections match "{filter.trim()}".</p>
       ) : (

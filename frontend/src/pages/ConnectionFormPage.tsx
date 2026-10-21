@@ -24,7 +24,7 @@ export function ConnectionFormPage() {
 
   return (
     <PageContainer className="max-w-xl">
-      <h1 className="mb-4 text-2xl font-bold">{isEdit ? 'Edit connection' : 'New connection'}</h1>
+      <h1 className="mb-4 text-2xl font-semibold tracking-tight">{isEdit ? 'Edit connection' : 'New connection'}</h1>
       <Card className="border-0 shadow-none sm:border sm:shadow-sm">
         <CardContent className="p-0 sm:p-6">
           <ConnectionForm key={connection?.id ?? 'new'} connection={connection} />

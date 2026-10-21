@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { AlertCircle, Cloud, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Navigate, useSearchParams } from 'react-router';
+import { BrandMark, Wordmark } from '@/components/BrandMark';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -41,12 +42,14 @@ export function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-dvh items-center justify-center bg-linear-to-br from-brand via-brand-2 to-brand-3 p-4">
+      <Card className="w-full max-w-sm border-white/10 shadow-2xl shadow-black/30">
         <CardContent className="p-6 sm:p-8">
-          <div className="mb-6 flex items-center justify-center gap-2">
-            <Cloud className="h-9 w-9 text-primary" />
-            <h1 className="text-2xl font-bold">s3browser</h1>
+          <div className="mb-6 flex flex-col items-center gap-3">
+            <BrandMark className="h-14 w-14" />
+            <h1 className="text-2xl">
+              <Wordmark />
+            </h1>
           </div>
 
           {isCheckingSession ? (

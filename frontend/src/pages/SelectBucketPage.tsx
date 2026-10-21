@@ -2,15 +2,16 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, ChevronRight, Pin, RefreshCw, Search } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { BucketIcon, CloudBucketIcon, EndpointIcon } from '@/components/icons';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { CenteredLoader } from '../components/CenteredLoader';
 import { describeEndpoint } from '../components/ConnectionCard';
+import { EmptyState } from '../components/EmptyState';
 import { PageContainer } from '../components/PageContainer';
 import { useConnectionRoute } from '../hooks/useConnectionRoute';
 import { refreshBuckets, useBucketsQuery, useValidateBucketMutation } from '../queries/buckets';
@@ -19,8 +20,12 @@ import { ApiHttpError } from '../services/api/client';
 import { formatRelativeTime } from '../utils/relativeTime';
 import { CONNECTIONS_URL, buildBrowseUrl, buildConnectionEditUrl } from '../utils/urlEncoding';
 
+// The ::before bar is the orange rule shown on hover/focus.
 const rowClass =
-  'flex min-h-11 items-center gap-3 px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none';
+  'relative flex min-h-12 items-center gap-3 px-3 py-2 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-transparent hover:bg-accent/60 hover:before:bg-primary focus-visible:bg-accent/60 focus-visible:outline-none focus-visible:before:bg-primary';
+const listClass = 'divide-y overflow-hidden rounded-xl border bg-card shadow-xs';
+const sectionLabelClass = 'text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground';
+const linkClass = 'font-medium text-primary-ink underline-offset-4 hover:underline';
 
 interface BucketRowProps {
   connectionId: number;
@@ -33,15 +38,17 @@ function BucketRow({ connectionId, name, trailing, pinned = false }: BucketRowPr
   return (
     <li>
       <Link to={buildBrowseUrl(connectionId, name, '')} className={rowClass}>
-        <BucketIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/12 text-primary-ink">
+          <BucketIcon className="h-4.5 w-4.5" />
+        </span>
         <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
         {pinned && (
-          <Badge variant="outline" className="shrink-0 gap-1 font-normal">
+          <Badge variant="outline" className="shrink-0 gap-1 border-primary/40 bg-primary/10 font-medium text-primary-ink">
             <Pin className="h-3 w-3" />
             default
           </Badge>
         )}
-        {trailing && <span className="shrink-0 text-xs text-muted-foreground">{trailing}</span>}
+        {trailing && <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{trailing}</span>}
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       </Link>
     </li>
@@ -104,23 +111,28 @@ export function SelectBucketPage() {
 
   return (
     <PageContainer className="max-w-2xl">
-      <div className="mb-5">
-        <h1 className="truncate text-2xl font-bold">{connection.profileName}</h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">{describeEndpoint(connection)}</p>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-          <Link to={buildConnectionEditUrl(connectionId)} className="text-primary underline-offset-4 hover:underline">
-            Edit connection
-          </Link>
-          <Link to={CONNECTIONS_URL} className="text-primary underline-offset-4 hover:underline">
-            Change connection
-          </Link>
+      <div className="mb-6 flex items-start gap-3">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-brand to-brand-2 text-brand-foreground shadow-xs">
+          {connection.endpoint ? <EndpointIcon className="h-6 w-6" /> : <CloudBucketIcon className="h-6 w-6" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{connection.profileName}</h1>
+          <p className="mt-0.5 truncate font-mono text-[13px] text-muted-foreground">{describeEndpoint(connection)}</p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            <Link to={buildConnectionEditUrl(connectionId)} className={linkClass}>
+              Edit connection
+            </Link>
+            <Link to={CONNECTIONS_URL} className={linkClass}>
+              Change connection
+            </Link>
+          </div>
         </div>
       </div>
 
       {hasRecentSection && (
         <section className="mb-6">
-          <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Recent</h2>
-          <ul className="divide-y rounded-lg border bg-card">
+          <h2 className={`mb-2 ${sectionLabelClass}`}>Recent</h2>
+          <ul className={listClass}>
             {connection.bucket && <BucketRow connectionId={connectionId} name={connection.bucket} pinned />}
             {recents.map((recent) => (
               <BucketRow
@@ -136,10 +148,10 @@ export function SelectBucketPage() {
 
       <section className="mb-6">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">
+          <h2 className={sectionLabelClass}>
             All buckets
             {bucketsQuery.isSuccess && buckets.length > 0 && (
-              <span className="font-normal">
+              <span className="font-normal tabular-nums">
                 {' '}
                 ({needle ? `${filteredBuckets.length} of ${buckets.length}` : buckets.length})
               </span>
@@ -158,15 +170,16 @@ export function SelectBucketPage() {
         </div>
 
         {bucketsQuery.isPending ? (
-          <ul className="divide-y rounded-lg border" aria-busy="true">
+          <ul className={listClass} aria-busy="true">
             {[0, 1, 2, 3].map((i) => (
-              <li key={i} className="flex min-h-11 items-center px-3">
+              <li key={i} className="flex min-h-12 items-center gap-3 px-3">
+                <Skeleton className="h-8 w-8 rounded-md" />
                 <Skeleton className="h-4 w-48" />
               </li>
             ))}
           </ul>
         ) : accessDenied ? (
-          <Alert>
+          <Alert variant="warning">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Cannot list buckets</AlertTitle>
             <AlertDescription>These keys may not list buckets. Open one by name below.</AlertDescription>
@@ -184,9 +197,12 @@ export function SelectBucketPage() {
             </AlertDescription>
           </Alert>
         ) : listEmpty ? (
-          <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-            No buckets are visible to these keys.
-          </p>
+          <EmptyState
+            className="py-8"
+            icon={<BucketIcon />}
+            title="No buckets yet"
+            description="No buckets are visible to these keys."
+          />
         ) : (
           <>
             {buckets.length > 5 && (
@@ -204,7 +220,7 @@ export function SelectBucketPage() {
             {filteredBuckets.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">No buckets match "{filter.trim()}".</p>
             ) : (
-              <ul className="divide-y rounded-lg border bg-card">
+              <ul className={listClass}>
                 {filteredBuckets.map((bucket) => (
                   <BucketRow
                     connectionId={connectionId}
@@ -222,7 +238,7 @@ export function SelectBucketPage() {
       <section>
         {showManual ? (
           <form onSubmit={(event) => void handleManualSubmit(event)} className="space-y-2">
-            <h2 className="text-sm font-semibold text-muted-foreground">Open a bucket by name</h2>
+            <h2 className={sectionLabelClass}>Open a bucket by name</h2>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 placeholder="my-bucket-name"
@@ -233,7 +249,7 @@ export function SelectBucketPage() {
                 }}
                 required
                 autoComplete="off"
-                className="h-11 flex-1"
+                className="h-11 flex-1 font-mono"
                 aria-label="Bucket name"
               />
               <Button type="submit" className="h-11" disabled={!manualName.trim() || validate.isPending}>
