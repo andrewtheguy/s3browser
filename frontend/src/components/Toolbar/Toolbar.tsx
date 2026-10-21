@@ -43,6 +43,11 @@ import { buildSearchUrl } from '../../utils/urlEncoding';
 const currentCrumbClass =
   'font-semibold text-foreground underline decoration-primary decoration-2 underline-offset-[5px]';
 
+/** Long paths overflow on phones; start scrolled to the end so the current folder is visible. */
+function scrollToEnd(element: HTMLDivElement | null) {
+  if (element) element.scrollLeft = element.scrollWidth;
+}
+
 const SEED_TEST_ITEM_COUNT = 10005;
 const seedEnv = import.meta.env as { MODE?: string; VITE_FEATURE_SEED_TEST_ITEMS?: string };
 const seedFeatureEnabled = seedEnv.VITE_FEATURE_SEED_TEST_ITEMS === 'true'
@@ -155,7 +160,12 @@ export function Toolbar({
               </TooltipTrigger>
               <TooltipContent>Bucket settings</TooltipContent>
             </Tooltip>
-            <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border bg-muted/40 px-2.5 py-1.5 [scrollbar-width:thin]">
+            <div
+              // Remount per path so scrollToEnd runs after every folder change.
+              key={`${pathSegments.join('/')}/${previewFileName ?? ''}`}
+              ref={scrollToEnd}
+              className="min-w-0 flex-1 overflow-x-auto rounded-lg border bg-muted/40 px-2.5 py-1.5 [scrollbar-width:thin]"
+            >
               <Breadcrumb>
                 <BreadcrumbList className="flex-nowrap">
                   <BreadcrumbItem>
