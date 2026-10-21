@@ -160,7 +160,7 @@ export function BatchDownloadDialog({
               resolvedTotalKeys === 0
             }
           >
-            {isDownloading ? <Spinner size="sm" className="text-white" /> : 'Download'}
+            {isDownloading ? <Spinner size="sm" className="text-primary-foreground" /> : 'Download'}
           </Button>
         </DialogFooter>
       </DialogContent>

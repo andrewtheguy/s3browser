@@ -18,6 +18,7 @@ use log::{info, warn};
 
 use crate::db::{Db, S3Connection};
 use crate::error::AppError;
+use crate::session::now_ms;
 use crate::validate::iso_z;
 
 pub const DEFAULT_REGION: &str = "us-east-1";
@@ -325,7 +326,8 @@ impl S3Factory {
     pub async fn context(&self, db: &Db, connection: S3Connection, bucket: Option<String>) -> anyhow::Result<S3Context> {
         let secret = db.decrypt_secret(&connection)?;
         let endpoint = normalize_endpoint(Some(&connection.endpoint));
-        let bucket = bucket.filter(|b| !b.is_empty()).or_else(|| connection.bucket.clone());
+        let requested = bucket.filter(|b| !b.is_empty());
+        let bucket = requested.clone().or_else(|| connection.bucket.clone());
         let mut region = connection.region.clone().unwrap_or_else(|| DEFAULT_REGION.to_string());
         if let (true, Some(bucket), None) = (connection.auto_detect_region, &bucket, &endpoint) {
             let key = format!("{}:{bucket}", connection.id);
@@ -354,7 +356,7 @@ impl S3Factory {
             bucket,
             endpoint,
         };
-        db.touch_connection(connection.id).await?;
+        db.touch(connection.id, requested.as_deref(), now_ms()).await?;
         Ok(S3Context {
             client: self.client(&credentials),
             connection,

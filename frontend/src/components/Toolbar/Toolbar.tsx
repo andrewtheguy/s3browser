@@ -1,21 +1,18 @@
 import { Fragment, useCallback, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 import {
-  Home,
   Upload,
   FolderPlus,
   RefreshCw,
-  LogOut,
   Trash2,
   Download,
-  ArrowLeftRight,
   Info,
   FlaskConical,
   History,
   MoreVertical,
   Search,
 } from 'lucide-react';
-import { BucketIcon } from '@/components/ui/bucket-icon';
+import { BucketIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -38,8 +35,18 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
-import { useBrowserContext, useS3ClientContext } from '../../contexts';
-import { buildSelectBucketUrl, buildSearchUrl } from '../../utils/urlEncoding';
+import { useBrowserContext } from '../../contexts';
+import { useBucketRoute } from '../../hooks/useBucketRoute';
+import { useConnectionQuery } from '../../queries/connections';
+import { buildSearchUrl } from '../../utils/urlEncoding';
+
+const currentCrumbClass =
+  'font-semibold text-foreground underline decoration-primary decoration-2 underline-offset-[5px]';
+
+/** Long paths overflow on phones; start scrolled to the end so the current folder is visible. */
+function scrollToEnd(element: HTMLDivElement | null) {
+  if (element) element.scrollLeft = element.scrollWidth;
+}
 
 const SEED_TEST_ITEM_COUNT = 10005;
 const seedEnv = import.meta.env as { MODE?: string; VITE_FEATURE_SEED_TEST_ITEMS?: string };
@@ -89,8 +96,9 @@ export function Toolbar({
   previewFileName = null,
 }: ToolbarProps) {
   const navigate = useNavigate();
-  const { connectionId } = useParams<{ connectionId?: string }>();
-  const { credentials, disconnect, activeConnectionId, activeProfileName, activeSearchEnabled } = useS3ClientContext();
+  const { connectionId, bucket } = useBucketRoute();
+  const { data: connection } = useConnectionQuery(connectionId);
+  const activeSearchEnabled = connection?.searchEnabled ?? false;
   const { pathSegments, navigateTo, refresh, isLoading } = useBrowserContext();
 
   const versionsButtonLabel = useMemo(() => {
@@ -119,53 +127,10 @@ export function Toolbar({
     return showVersions ? 'Hide versions' : 'Show versions';
   }, [bucketVersioningStatus, showVersions, versioningSupported]);
 
-  const handleDisconnect = useCallback(async () => {
-    try {
-      await disconnect();
-    } catch (error) {
-      console.error('Disconnect failed:', error);
-    } finally {
-      void navigate('/');
-    }
-  }, [disconnect, navigate]);
-
-  const handleChooseConnection = useCallback(() => {
-    void navigate('/');
-  }, [navigate]);
-
   const handleSearch = useCallback(() => {
-    const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
-    const connId = !isNaN(parsedId) && parsedId > 0 ? parsedId : activeConnectionId;
-
-    if (!connId || connId <= 0) {
-      console.error('Cannot search: no valid connection ID available');
-      void navigate('/');
-      return;
-    }
-
-    const bucket = credentials?.bucket;
-    if (!bucket) {
-      console.error('Cannot search: no bucket selected');
-      void navigate('/');
-      return;
-    }
-
     const currentPrefix = pathSegments.length > 0 ? pathSegments.join('/') + '/' : '';
-    void navigate(buildSearchUrl(connId, bucket, currentPrefix));
-  }, [connectionId, activeConnectionId, credentials?.bucket, navigate, pathSegments]);
-
-  const handleChangeBucket = useCallback(() => {
-    const parsedId = connectionId ? parseInt(connectionId, 10) : NaN;
-    const connId = !isNaN(parsedId) && parsedId > 0 ? parsedId : activeConnectionId;
-
-    if (!connId || connId <= 0) {
-      console.error('Cannot change bucket: no valid connection ID available');
-      void navigate('/');
-      return;
-    }
-
-    void navigate(buildSelectBucketUrl(connId));
-  }, [connectionId, activeConnectionId, navigate]);
+    void navigate(buildSearchUrl(connectionId, bucket, currentPrefix));
+  }, [connectionId, bucket, navigate, pathSegments]);
 
   const handleBreadcrumbClick = (index: number) => {
     if (index === -1) {
@@ -178,59 +143,91 @@ export function Toolbar({
 
   return (
     <TooltipProvider>
-      <div className="p-4 border-b">
-        <div className="flex items-center justify-between mb-2 sm:mb-4">
-          <div className="flex items-center gap-1">
+      <div className="border-b p-3 sm:p-4">
+        <div className="flex items-center gap-2 sm:justify-between">
+          <div className="flex min-w-0 flex-1 items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleChooseConnection}
-                  className="min-w-0"
+                  variant="ghost"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 sm:h-9 sm:w-9"
+                  onClick={onBucketInfoClick}
+                  aria-label="Bucket settings"
                 >
-                  <ArrowLeftRight className="h-4 w-4 mr-1" />
-                  <span className="block max-w-[10rem] truncate sm:max-w-none">
-                    {activeProfileName ?? '—'}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Change connection profile</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleChangeBucket}
-                  className="min-w-0"
-                >
-                  <BucketIcon className="h-4 w-4 mr-1" />
-                  <span className="block max-w-[10rem] truncate sm:max-w-none">
-                    {credentials?.bucket ?? '—'}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Click to change bucket</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onBucketInfoClick}>
                   <Info className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Bucket settings</TooltipContent>
             </Tooltip>
+            <div
+              // Remount per path so scrollToEnd runs after every folder change.
+              key={`${pathSegments.join('/')}/${previewFileName ?? ''}`}
+              ref={scrollToEnd}
+              className="min-w-0 flex-1 overflow-x-auto rounded-lg border bg-muted/40 px-2.5 py-1.5 [scrollbar-width:thin]"
+            >
+              <Breadcrumb>
+                <BreadcrumbList className="flex-nowrap">
+                  <BreadcrumbItem>
+                    {pathSegments.length === 0 && !previewFileName ? (
+                      <BreadcrumbPage className={`flex items-center ${currentCrumbClass}`} title={`${bucket} root`}>
+                        <BucketIcon className="h-4 w-4" />
+                        <span className="ml-1.5 whitespace-nowrap">{bucket}</span>
+                      </BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink
+                        className="flex cursor-pointer items-center hover:text-primary-ink"
+                        onClick={() => handleBreadcrumbClick(-1)}
+                        title={`${bucket} root`}
+                      >
+                        <BucketIcon className="h-4 w-4" />
+                        <span className="ml-1.5 whitespace-nowrap">{bucket}</span>
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+
+                  {pathSegments.map((segment, index) => {
+                    // In preview mode the file name is the leaf, so every folder segment is clickable.
+                    const isLast = index === pathSegments.length - 1 && !previewFileName;
+
+                    return (
+                      <Fragment key={index}>
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem className="whitespace-nowrap">
+                          {isLast ? (
+                            <BreadcrumbPage className={currentCrumbClass}>{segment}</BreadcrumbPage>
+                          ) : (
+                            <BreadcrumbLink className="cursor-pointer" onClick={() => handleBreadcrumbClick(index)}>
+                              {segment}
+                            </BreadcrumbLink>
+                          )}
+                        </BreadcrumbItem>
+                      </Fragment>
+                    );
+                  })}
+
+                  {previewFileName && (
+                    <>
+                      <BreadcrumbSeparator />
+                      <BreadcrumbItem className="whitespace-nowrap">
+                        <BreadcrumbPage className={currentCrumbClass}>{previewFileName}</BreadcrumbPage>
+                      </BreadcrumbItem>
+                    </>
+                  )}
+                </BreadcrumbList>
+              </Breadcrumb>
+            </div>
           </div>
 
           {/* Mobile actions */}
-          <div className="flex sm:hidden gap-1">
+          <div className="flex shrink-0 gap-1 sm:hidden">
             {selectionMode && selectedCount > 0 && onBatchDownload && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
                     size="icon"
+                    className="h-11 w-11"
                     onClick={onBatchDownload}
                     disabled={isDownloading}
                   >
@@ -247,7 +244,7 @@ export function Toolbar({
                   <Button
                     variant="outline"
                     size="icon"
-                    className="text-destructive border-destructive hover:bg-destructive/10"
+                    className="h-11 w-11 border-destructive text-destructive hover:bg-destructive/10"
                     onClick={onBatchDelete}
                     disabled={isDeleting}
                   >
@@ -261,7 +258,7 @@ export function Toolbar({
             {/* More menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="h-11 w-11">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -308,24 +305,15 @@ export function Toolbar({
                   </DropdownMenuItem>
                 )}
 
-                <DropdownMenuSeparator />
-
-                <DropdownMenuItem
-                  onClick={handleDisconnect}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
 
           {/* Desktop actions */}
-          <div className="hidden sm:flex gap-2">
+          <div className="hidden shrink-0 gap-2 sm:flex">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={refresh} disabled={isLoading}>
+                <Button variant="ghost" size="icon" onClick={refresh} disabled={isLoading} aria-label="Refresh">
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -454,73 +442,8 @@ export function Toolbar({
               </Tooltip>
             )}
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={handleDisconnect} className="text-destructive hover:text-destructive">
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Sign Out</TooltipContent>
-            </Tooltip>
           </div>
         </div>
-
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              {pathSegments.length === 0 ? (
-                <BreadcrumbPage className="flex items-center">
-                  <Home className="h-4 w-4 mr-1" />
-                  Home
-                </BreadcrumbPage>
-              ) : (
-                <BreadcrumbLink
-                  className="flex items-center cursor-pointer"
-                  onClick={() => handleBreadcrumbClick(-1)}
-                >
-                  <Home className="h-4 w-4 mr-1" />
-                  Home
-                </BreadcrumbLink>
-              )}
-            </BreadcrumbItem>
-
-            {pathSegments.map((segment, index) => {
-              // In preview mode the file name is the leaf, so every folder segment is clickable.
-              const isLast = index === pathSegments.length - 1 && !previewFileName;
-
-              return (
-                <Fragment key={index}>
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    {isLast ? (
-                      <BreadcrumbPage className="font-medium">
-                        {segment}
-                      </BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink
-                        className="cursor-pointer"
-                        onClick={() => handleBreadcrumbClick(index)}
-                      >
-                        {segment}
-                      </BreadcrumbLink>
-                    )}
-                  </BreadcrumbItem>
-                </Fragment>
-              );
-            })}
-
-            {previewFileName && (
-              <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage className="font-medium">
-                    {previewFileName}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </>
-            )}
-          </BreadcrumbList>
-        </Breadcrumb>
       </div>
     </TooltipProvider>
   );

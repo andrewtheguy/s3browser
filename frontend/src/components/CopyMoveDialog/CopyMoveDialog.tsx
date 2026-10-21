@@ -181,7 +181,7 @@ export function CopyMoveDialog({
             disabled={isExecuting || isResolving || !!resolutionError}
           >
             {isExecuting ? (
-              <Spinner size="sm" className="text-white" />
+              <Spinner size="sm" className="text-primary-foreground" />
             ) : (
               actionLabel
             )}

@@ -1,6 +1,6 @@
 [package]
 name = "s3browser"
-version = "0.1.12"
+version = "0.1.13"
 edition = "2024"
 description = "Web file manager for AWS S3 and S3-compatible storage"
 license = "MIT"

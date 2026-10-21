@@ -44,6 +44,13 @@ pub fn now_secs() -> i64 {
         .unwrap_or_default()
 }
 
+pub fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or_default()
+}
+
 pub fn ct_eq(a: &str, b: &str) -> bool {
     a.as_bytes().ct_eq(b.as_bytes()).into()
 }
@@ -149,7 +156,7 @@ pub async fn api_auth(State(state): State<AppState>, req: Request, next: Next) -
         return next.run(req).await;
     }
     if !is_authenticated(&state, req.headers()) {
-        let mut response = AppError::status(StatusCode::UNAUTHORIZED, "Not authenticated").into_response();
+        let mut response = AppError::coded(StatusCode::UNAUTHORIZED, "Not authenticated", "NotAuthenticated").into_response();
         response.headers_mut().append(header::SET_COOKIE, clear_cookie());
         return response;
     }

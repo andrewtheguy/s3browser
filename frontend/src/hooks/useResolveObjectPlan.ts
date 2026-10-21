@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
-import { useParams } from 'react-router';
-import { useS3ClientContext } from '../contexts';
+import { useBucketRoute } from './useBucketRoute';
 import { listObjects } from '../services/api';
 import type { S3Object } from '../types';
 
@@ -69,13 +68,11 @@ function throwIfAborted(signal?: AbortSignal) {
 }
 
 export function useResolveObjectPlan() {
-  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
 
   const resolveObjectPlan = useCallback(
     async (items: S3Object[], options: ResolveObjectPlanOptions = {}): Promise<ObjectPlan> => {
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -192,7 +189,7 @@ export function useResolveObjectPlan() {
         folderKeys: includeVersions ? [] : Array.from(folderDeleteKeys),
       };
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   return { resolveObjectPlan };

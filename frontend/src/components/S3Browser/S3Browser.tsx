@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate } from 'react-router';
 import {
   Upload,
   FolderPlus,
@@ -34,7 +34,7 @@ import { FolderPickerDialog, type FolderPickerResult } from '../FolderPickerDial
 import { CopyMoveDialog } from '../CopyMoveDialog';
 import { BucketInfoDialog } from '../BucketInfoDialog';
 import { ManualCopyDialog } from '../ManualCopyDialog/ManualCopyDialog';
-import { useBrowserContext, useS3ClientContext } from '../../contexts';
+import { useBrowserContext } from '../../contexts';
 import {
   useDelete,
   useUpload,
@@ -44,6 +44,7 @@ import {
   useCopyMove,
   useSeedTestItems,
   useResolveObjectPlan,
+  useBucketRoute,
 } from '../../hooks';
 import type { ObjectPlan } from '../../hooks/useResolveObjectPlan';
 import { FEATURES } from '../../config';
@@ -110,9 +111,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     bucketVersioningStatus,
   } = useBrowserContext();
   const navigate = useNavigate();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const { activeConnectionId, credentials } = useS3ClientContext();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
   const { remove, removeMany, resolveObjectPlan: resolveDeletePlan, isDeleting: isDeletingHook } = useDelete();
   const { createNewFolder } = useUpload();
   const { copyPresignedUrl, copyS3Uri } = usePresignedUrl();
@@ -1031,8 +1030,8 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
   }, [previewKey, preview.item]);
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      <div className="flex-1 flex flex-col mx-0 my-4 sm:m-4 bg-card rounded-lg border shadow-sm overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <div className="flex-1 flex flex-col min-h-0 mx-0 my-0 sm:m-4 bg-card sm:rounded-xl sm:border sm:shadow-xs overflow-hidden">
         <Toolbar
           onUploadClick={handleUploadClick}
           onCreateFolderClick={handleCreateFolderClick}
@@ -1089,13 +1088,14 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
             </div>
           )}
           <TooltipProvider>
-            <div className="flex sm:hidden items-center justify-between p-2 border-t bg-card">
+            <div className="flex sm:hidden items-center justify-between p-2 border-t bg-card/95 backdrop-blur">
               <div className="flex flex-wrap gap-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant={selectionMode ? 'default' : 'outline'}
                       size="icon"
+                      className="h-11 w-11"
                       onClick={handleToggleSelection}
                       aria-label={selectionMode ? 'Cancel selection' : 'Select items'}
                     >
@@ -1106,7 +1106,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={handleCreateFolderClick}>
+                    <Button variant="ghost" size="icon" className="h-11 w-11" onClick={handleCreateFolderClick} aria-label="New folder">
                       <FolderPlus className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
@@ -1114,7 +1114,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="default" size="icon" onClick={handleUploadClick}>
+                    <Button variant="default" size="icon" className="h-11 w-11" onClick={handleUploadClick} aria-label="Upload">
                       <Upload className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
@@ -1122,7 +1122,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
                 </Tooltip>
               </div>
               {showVersions && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                <div className="flex items-center gap-1.5 rounded-full bg-info/10 px-2.5 py-1 text-xs font-medium text-info">
                   <History className="h-3.5 w-3.5" />
                   <span>All versions</span>
                 </div>

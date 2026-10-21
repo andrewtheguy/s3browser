@@ -1,10 +1,10 @@
-export { useS3Client } from './useS3Client';
+export { useBucketRoute } from './useBucketRoute';
+export { useConnectionRoute } from './useConnectionRoute';
 export { useListObjects } from './useListObjects';
 export { useUpload, type CompletedStats } from './useUpload';
 export { useDownload } from './useDownload';
 export { useDelete } from './useDelete';
 export { useCopyMove } from './useCopyMove';
-export { useConnectionHistory } from './useConnectionHistory';
 export { usePresignedUrl } from './usePresignedUrl';
 export { usePreview } from './usePreview';
 export { useSeedTestItems } from './useSeedTestItems';

@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useParams } from 'react-router';
-import { useS3ClientContext } from '../contexts';
+import { useBucketRoute } from './useBucketRoute';
 import { buildObjectUrl, getObjectText } from '../services/api';
 import { isPreviewableFile, getMimeType, type EmbedType } from '../utils/previewUtils';
 import { formatFileSize } from '../utils/formatters';
@@ -20,9 +19,7 @@ interface PreviewState {
 }
 
 export function usePreview() {
-  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
 
   const [state, setState] = useState<PreviewState>({
     isOpen: false,
@@ -53,7 +50,7 @@ export function usePreview() {
 
   const openPreview = useCallback(
     async (item: S3Object) => {
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         return;
       }
 
@@ -172,7 +169,7 @@ export function usePreview() {
         }));
       }
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   const closePreview = useCallback(() => {

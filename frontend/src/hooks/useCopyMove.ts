@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useParams } from 'react-router';
-import { useS3ClientContext } from '../contexts';
+import { useBucketRoute } from './useBucketRoute';
 import {
   copyObject,
   copyObjects,
@@ -31,16 +30,14 @@ function throwIfAborted(signal?: AbortSignal) {
 }
 
 export function useCopyMove() {
-  const { isConnected, activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
   const [isCopying, setIsCopying] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const copy = useCallback(
     async (sourceKey: string, destinationKey: string, signal?: AbortSignal): Promise<void> => {
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -57,12 +54,12 @@ export function useCopyMove() {
         setIsCopying(false);
       }
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   const move = useCallback(
     async (sourceKey: string, destinationKey: string, signal?: AbortSignal): Promise<void> => {
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -79,7 +76,7 @@ export function useCopyMove() {
         setIsMoving(false);
       }
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   const copyMany = useCallback(
@@ -91,7 +88,7 @@ export function useCopyMove() {
         return { successful: [], errors: [] };
       }
 
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -130,7 +127,7 @@ export function useCopyMove() {
         setIsCopying(false);
       }
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   const moveMany = useCallback(
@@ -142,7 +139,7 @@ export function useCopyMove() {
         return { successful: [], errors: [] };
       }
 
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -181,7 +178,7 @@ export function useCopyMove() {
         setIsMoving(false);
       }
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   const resolveCopyMovePlan = useCallback(
@@ -190,7 +187,7 @@ export function useCopyMove() {
       destPrefix: string,
       options: ResolveCopyMovePlanOptions = {}
     ): Promise<CopyMovePlan> => {
-      if (!isConnected || !activeConnectionId || !bucket) {
+      if (!activeConnectionId || !bucket) {
         throw new Error('Not connected to S3');
       }
 
@@ -260,7 +257,7 @@ export function useCopyMove() {
 
       return { operations, folderKeys };
     },
-    [isConnected, activeConnectionId, bucket]
+    [activeConnectionId, bucket]
   );
 
   return {

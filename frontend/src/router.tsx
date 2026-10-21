@@ -1,51 +1,40 @@
 import { createBrowserRouter } from 'react-router';
-import { RootLayout } from './layouts/RootLayout';
-import { HomePage } from './pages/HomePage';
-import { SelectBucketPage } from './pages/SelectBucketPage';
+import { RedirectHome } from './components/RedirectHome';
+import { RequireAuth } from './components/RequireAuth';
+import { AppLayout } from './layouts/AppLayout';
+import { ConnectionLayout } from './layouts/ConnectionLayout';
 import { BrowsePage } from './pages/BrowsePage';
+import { ConnectionFormPage } from './pages/ConnectionFormPage';
+import { ConnectionsPage } from './pages/ConnectionsPage';
+import { LoginPage } from './pages/LoginPage';
 import { SearchPage } from './pages/SearchPage';
-import { AuthGuard } from './components/AuthGuard';
+import { SelectBucketPage } from './pages/SelectBucketPage';
+import { LOGIN_URL } from './utils/urlEncoding';
 
 export const router = createBrowserRouter([
+  { path: LOGIN_URL, element: <LoginPage /> },
   {
     path: '/',
-    element: <RootLayout />,
+    element: <RequireAuth />,
     children: [
       {
-        index: true,
-        element: <HomePage />,
-      },
-      {
-        path: 'connection/:connectionId/browse',
-        element: (
-          <AuthGuard>
-            <SelectBucketPage />
-          </AuthGuard>
-        ),
-      },
-      {
-        path: 'connection/:connectionId/browse/:bucket/*',
-        element: (
-          <AuthGuard>
-            <BrowsePage />
-          </AuthGuard>
-        ),
-      },
-      {
-        path: 'connection/:connectionId/preview/:bucket/*',
-        element: (
-          <AuthGuard>
-            <BrowsePage />
-          </AuthGuard>
-        ),
-      },
-      {
-        path: 'connection/:connectionId/search/:bucket',
-        element: (
-          <AuthGuard>
-            <SearchPage />
-          </AuthGuard>
-        ),
+        element: <AppLayout />,
+        children: [
+          { index: true, element: <ConnectionsPage /> },
+          { path: 'connection/new', element: <ConnectionFormPage /> },
+          {
+            path: 'connection/:connectionId',
+            element: <ConnectionLayout />,
+            children: [
+              { index: true, element: <SelectBucketPage /> },
+              { path: 'edit', element: <ConnectionFormPage /> },
+              { path: 'browse/:bucket/*', element: <BrowsePage /> },
+              { path: 'preview/:bucket/*', element: <BrowsePage /> },
+              { path: 'search/:bucket', element: <SearchPage /> },
+            ],
+          },
+          { path: '*', element: <RedirectHome reason="Page not found." /> },
+        ],
       },
     ],
   },

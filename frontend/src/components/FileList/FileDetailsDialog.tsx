@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router';
 import {
   Dialog,
   DialogContent,
@@ -15,7 +14,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import { Spinner } from '@/components/ui/spinner';
-import { useS3ClientContext } from '../../contexts';
+import { useBucketRoute } from '../../hooks/useBucketRoute';
 import { getObjectMetadata, type ObjectMetadata } from '../../services/api/objects';
 import type { S3Object } from '../../types';
 import { formatFileSizeDetailed, formatDateFull } from '../../utils/formatters';
@@ -27,9 +26,7 @@ interface FileDetailsDialogProps {
 }
 
 export function FileDetailsDialog({ open, item, onClose }: FileDetailsDialogProps) {
-  const { activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
 
   const [metadata, setMetadata] = useState<ObjectMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(false);

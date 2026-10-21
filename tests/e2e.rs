@@ -379,6 +379,7 @@ async fn auth_and_connections() {
     assert_eq!(connections.len(), 1);
     assert_eq!(connections[0]["bucket"], fx.bucket.as_str());
     assert_eq!(connections[0]["searchEnabled"], true);
+    assert_eq!(connections[0]["recentBuckets"], json!([]));
     assert!(connections[0].get("secretAccessKey").is_none());
 
     let (status, body) = server.get_json(&format!("/api/auth/buckets/{}", server.connection)).await;
@@ -406,6 +407,20 @@ async fn auth_and_connections() {
         .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 
+    // Testing an existing connection without retyping its secret uses the stored one.
+    let (status, body) = server
+        .post_json(
+            "/api/auth/test-connection",
+            json!({
+                "connectionId": server.connection,
+                "accessKeyId": fx.services.s3_access_key_id,
+                "endpoint": fx.services.s3_endpoint,
+                "region": fx.services.s3_region,
+            }),
+        )
+        .await;
+    assert_eq!((status, body), (StatusCode::OK, json!({ "success": true })));
+
     let (status, body) = server
         .post_json(&format!("/api/auth/connections/{}/export", server.connection), json!({ "format": "aws" }))
         .await;
@@ -427,6 +442,11 @@ async fn auth_and_connections() {
     server.connection = connection;
     assert_eq!(server.list(&fx.bucket, "").await, Vec::<String>::new());
 
+    // Opening a bucket records it as recently used on the connection.
+    let (status, body) = server.get_json("/api/auth/connections").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["connections"][0]["recentBuckets"][0]["name"], fx.bucket.as_str(), "{body}");
+
     let response = server
         .http
         .delete(server.url(&format!("/api/auth/connections/{connection}")))
@@ -440,7 +460,7 @@ async fn auth_and_connections() {
     let (status, _) = server.post_json("/api/auth/logout", json!({})).await;
     assert_eq!(status, StatusCode::OK);
     let (status, body) = server.get_json("/api/auth/connections").await;
-    assert_eq!((status, body), (StatusCode::UNAUTHORIZED, json!({ "error": "Not authenticated" })));
+    assert_eq!((status, body), (StatusCode::UNAUTHORIZED, json!({ "error": "Not authenticated", "code": "NotAuthenticated" })));
     drop(server);
     fx.cleanup().await;
 }
@@ -968,7 +988,7 @@ async fn api_routing_failures_are_json() {
         assert!(cleared.starts_with("s3browser_auth_token=\"\"") && cleared.contains("Max-Age=0"), "{cleared}");
         assert_eq!(
             send_json_response(response).await,
-            (StatusCode::UNAUTHORIZED, json!({ "error": "Not authenticated" })),
+            (StatusCode::UNAUTHORIZED, json!({ "error": "Not authenticated", "code": "NotAuthenticated" })),
             "{path}"
         );
     }

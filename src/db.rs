@@ -47,6 +47,17 @@ pub struct S3Connection {
     pub last_used_at: i64,
 }
 
+/// A bucket the user opened on a connection; `last_used_at` is unix milliseconds.
+#[derive(Clone, Debug, PartialEq, sqlx::FromRow)]
+pub struct RecentBucket {
+    pub connection_id: i64,
+    pub bucket: String,
+    pub last_used_at: i64,
+}
+
+/// How many recently opened buckets are remembered per connection.
+pub const RECENT_BUCKETS_LIMIT: i64 = 8;
+
 pub struct SaveConnection<'a> {
     pub id: Option<i64>,
     pub profile_name: &'a str,
@@ -108,6 +119,16 @@ impl Db {
                auto_detect_region INTEGER DEFAULT 1,
                last_used_at INTEGER DEFAULT (unixepoch())
              )",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS s3_connection_recent_buckets (
+               connection_id INTEGER NOT NULL REFERENCES s3_connections(id) ON DELETE CASCADE,
+               bucket TEXT NOT NULL,
+               last_used_at INTEGER NOT NULL,
+               PRIMARY KEY (connection_id, bucket)
+             ) WITHOUT ROWID",
         )
         .execute(&pool)
         .await?;
@@ -220,12 +241,58 @@ impl Db {
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn touch_connection(&self, id: i64) -> sqlx::Result<()> {
+    /// Mark a connection as used now and, when the request named a bucket,
+    /// move that bucket to the front of the connection's recent buckets.
+    pub async fn touch(&self, connection_id: i64, bucket: Option<&str>, now_ms: i64) -> sqlx::Result<()> {
         sqlx::query("UPDATE s3_connections SET last_used_at = unixepoch() WHERE id = ?")
-            .bind(id)
+            .bind(connection_id)
             .execute(&self.pool)
             .await?;
+        let Some(bucket) = bucket else {
+            return Ok(());
+        };
+        sqlx::query(
+            "INSERT INTO s3_connection_recent_buckets (connection_id, bucket, last_used_at) VALUES (?, ?, ?)
+             ON CONFLICT(connection_id, bucket) DO UPDATE SET last_used_at = excluded.last_used_at",
+        )
+        .bind(connection_id)
+        .bind(bucket)
+        .bind(now_ms)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query(
+            "DELETE FROM s3_connection_recent_buckets
+             WHERE connection_id = ? AND bucket NOT IN (
+               SELECT bucket FROM s3_connection_recent_buckets WHERE connection_id = ?
+               ORDER BY last_used_at DESC, bucket ASC LIMIT ?
+             )",
+        )
+        .bind(connection_id)
+        .bind(connection_id)
+        .bind(RECENT_BUCKETS_LIMIT)
+        .execute(&self.pool)
+        .await?;
         Ok(())
+    }
+
+    /// Recent buckets of every connection, most recent first within each connection.
+    pub async fn recent_buckets(&self) -> sqlx::Result<Vec<RecentBucket>> {
+        sqlx::query_as(
+            "SELECT connection_id, bucket, last_used_at FROM s3_connection_recent_buckets
+             ORDER BY connection_id, last_used_at DESC, bucket ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    pub async fn recent_buckets_for(&self, connection_id: i64) -> sqlx::Result<Vec<RecentBucket>> {
+        sqlx::query_as(
+            "SELECT connection_id, bucket, last_used_at FROM s3_connection_recent_buckets
+             WHERE connection_id = ? ORDER BY last_used_at DESC, bucket ASC",
+        )
+        .bind(connection_id)
+        .fetch_all(&self.pool)
+        .await
     }
 
     pub fn decrypt_secret(&self, connection: &S3Connection) -> anyhow::Result<String> {
@@ -625,6 +692,45 @@ mod tests {
         assert_eq!(db.connections().await.unwrap().len(), 1);
         assert!(db.delete_connection(saved.id).await.unwrap());
         assert!(!db.delete_connection(saved.id).await.unwrap());
+        db.close().await;
+    }
+
+    #[tokio::test]
+    async fn touch_keeps_the_most_recent_buckets_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(&dir.path().join("s3browser.db"), KEY).await.unwrap();
+        let saved = db.save_connection(save("prod", Some("s3cret"))).await.unwrap();
+        let other = db.save_connection(save("other", Some("s3cret"))).await.unwrap();
+
+        // Touching without a bucket records nothing.
+        db.touch(saved.id, None, 1).await.unwrap();
+        assert!(db.recent_buckets_for(saved.id).await.unwrap().is_empty());
+
+        for i in 1..=(RECENT_BUCKETS_LIMIT + 1) {
+            db.touch(saved.id, Some(&format!("b{i}")), 1_000 + i).await.unwrap();
+        }
+        db.touch(other.id, Some("elsewhere"), 5_000).await.unwrap();
+        let names = |rows: Vec<RecentBucket>| rows.into_iter().map(|r| r.bucket).collect::<Vec<_>>();
+
+        let recent = db.recent_buckets_for(saved.id).await.unwrap();
+        assert_eq!(recent.len() as i64, RECENT_BUCKETS_LIMIT);
+        assert_eq!(recent[0], RecentBucket { connection_id: saved.id, bucket: "b9".into(), last_used_at: 1_009 });
+        assert!(!names(recent.clone()).contains(&"b1".to_string()), "oldest bucket is pruned");
+
+        // Re-opening a bucket moves it to the front without adding a row.
+        db.touch(saved.id, Some("b2"), 9_000).await.unwrap();
+        let recent = names(db.recent_buckets_for(saved.id).await.unwrap());
+        assert_eq!(recent.len() as i64, RECENT_BUCKETS_LIMIT);
+        assert_eq!(&recent[..2], ["b2", "b9"]);
+
+        let all = db.recent_buckets().await.unwrap();
+        assert_eq!(all.len() as i64, RECENT_BUCKETS_LIMIT + 1);
+        assert!(all.iter().any(|r| r.connection_id == other.id && r.bucket == "elsewhere"));
+
+        // Deleting the connection drops its recent buckets.
+        assert!(db.delete_connection(saved.id).await.unwrap());
+        assert!(db.recent_buckets_for(saved.id).await.unwrap().is_empty());
+        assert_eq!(names(db.recent_buckets().await.unwrap()), ["elsewhere"]);
         db.close().await;
     }
 

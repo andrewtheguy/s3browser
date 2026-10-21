@@ -10,9 +10,10 @@ export interface LoginResponse {
 }
 
 export interface S3ConnectionCredentials {
+  /** Set when editing or testing a saved connection; its stored secret is used when none is sent. */
   connectionId?: number;
   accessKeyId: string;
-  secretAccessKey: string;
+  secretAccessKey?: string;
   region?: string;
   bucket?: string;
   endpoint?: string;
@@ -42,6 +43,12 @@ export interface ValidateBucketResponse {
   bucket: string;
 }
 
+export interface RecentBucket {
+  name: string;
+  /** Unix milliseconds. */
+  lastUsedAt: number;
+}
+
 export interface ServerSavedConnection {
   id: number;
   profileName: string;
@@ -51,8 +58,15 @@ export interface ServerSavedConnection {
   bucket: string | null;
   region: string | null;
   autoDetectRegion: boolean;
+  /** Unix milliseconds. */
   lastUsedAt: number;
   searchEnabled: boolean;
+  /** Buckets opened on this connection, most recent first. */
+  recentBuckets: RecentBucket[];
+}
+
+export interface TestConnectionResponse {
+  success: boolean;
 }
 
 export interface ConnectionsResponse {
@@ -112,9 +126,16 @@ export async function validateBucket(connectionId: number, bucket: string): Prom
   return response;
 }
 
-export async function getConnections(options?: { clearRegionCache?: boolean }): Promise<ServerSavedConnection[]> {
-  const query = options?.clearRegionCache ? '?clear_region_cache=1' : '';
-  const response = await apiGet<ConnectionsResponse>(`/auth/connections${query}`);
+export async function testConnection(credentials: S3ConnectionCredentials): Promise<TestConnectionResponse> {
+  const response = await apiPost<TestConnectionResponse>('/auth/test-connection', credentials);
+  if (!response) {
+    throw new Error('Failed to test connection: empty response');
+  }
+  return response;
+}
+
+export async function getConnections(): Promise<ServerSavedConnection[]> {
+  const response = await apiGet<ConnectionsResponse>('/auth/connections');
   if (!response) {
     throw new Error('Failed to get connections: empty response');
   }

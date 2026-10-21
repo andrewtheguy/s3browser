@@ -1,8 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  Folder,
   FolderPlus,
-  Home,
   ArrowLeft,
   Pencil,
   Check,
@@ -15,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { BucketIcon, FolderIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -34,8 +33,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useS3ClientContext } from '../../contexts';
-import { useParams } from 'react-router';
+import { useBucketRoute } from '../../hooks/useBucketRoute';
 import { listObjects, createFolder } from '../../services/api';
 import type { S3Object } from '../../types';
 
@@ -63,9 +61,7 @@ export function FolderPickerDialog({
   onConfirm,
   onCancel,
 }: FolderPickerDialogProps) {
-  const { activeConnectionId, credentials } = useS3ClientContext();
-  const { bucket: urlBucket } = useParams<{ bucket: string }>();
-  const bucket = urlBucket || credentials?.bucket;
+  const { connectionId: activeConnectionId, bucket } = useBucketRoute();
 
   const [browsePath, setBrowsePath] = useState('');
   const [folders, setFolders] = useState<S3Object[]>([]);
@@ -315,7 +311,7 @@ export function FolderPickerDialog({
                       }}
                       className={`flex items-center ${isManualInput ? 'pointer-events-none opacity-50' : ''}`}
                     >
-                      <Home className="h-4 w-4 mr-1" />
+                      <BucketIcon className="h-4 w-4 mr-1" />
                       Root
                     </BreadcrumbLink>
                   </BreadcrumbItem>
@@ -381,7 +377,7 @@ export function FolderPickerDialog({
 
           {/* Validation error */}
           {validationError && validationError !== 'Name cannot be empty' && !validationError.includes('cannot contain') && (
-            <Alert className="mx-6 mt-3 border-yellow-500 bg-yellow-50 text-yellow-800">
+            <Alert variant="warning" className="mx-6 mt-3 w-auto">
               <AlertDescription>{validationError}</AlertDescription>
             </Alert>
           )}
@@ -403,9 +399,9 @@ export function FolderPickerDialog({
                     <button
                       key={folder.key}
                       onClick={() => handleFolderClick(folder.key)}
-                      className="w-full flex items-center gap-3 px-6 py-2 hover:bg-muted transition-colors text-left"
+                      className="w-full flex min-h-11 items-center gap-3 px-6 py-2 hover:bg-accent transition-colors text-left"
                     >
-                      <Folder className="h-5 w-5 text-yellow-500 shrink-0" />
+                      <FolderIcon className="text-primary-ink" />
                       <span className="truncate max-w-[300px]">{folder.name}</span>
                     </button>
                   ))}
