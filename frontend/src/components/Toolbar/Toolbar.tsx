@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import {
   Upload,
   FolderPlus,
+  Home,
   RefreshCw,
   Trash2,
   Download,
@@ -12,7 +13,6 @@ import {
   MoreVertical,
   Search,
 } from 'lucide-react';
-import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -157,17 +157,18 @@ export function Toolbar({
                 <BreadcrumbList className="flex-nowrap">
                   <BreadcrumbItem>
                     {pathSegments.length === 0 && !previewFileName ? (
-                      <BreadcrumbPage className="flex items-center font-medium">
-                        <BucketIcon className="mr-1 h-4 w-4" />
-                        {bucket}
+                      <BreadcrumbPage className="flex items-center font-medium" title={`${bucket} root`}>
+                        <Home className="h-4 w-4" aria-hidden="true" />
+                        <span className="sr-only">Root</span>
                       </BreadcrumbPage>
                     ) : (
                       <BreadcrumbLink
                         className="flex cursor-pointer items-center"
                         onClick={() => handleBreadcrumbClick(-1)}
+                        title={`${bucket} root`}
                       >
-                        <BucketIcon className="mr-1 h-4 w-4" />
-                        {bucket}
+                        <Home className="h-4 w-4" aria-hidden="true" />
+                        <span className="sr-only">Root</span>
                       </BreadcrumbLink>
                     )}
                   </BreadcrumbItem>

@@ -1,8 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, Cloud, RefreshCw } from 'lucide-react';
 import { Navigate, useSearchParams } from 'react-router';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -46,7 +45,7 @@ export function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardContent className="p-6 sm:p-8">
           <div className="mb-6 flex items-center justify-center gap-2">
-            <BucketIcon className="h-9 w-9 text-primary" />
+            <Cloud className="h-9 w-9 text-primary" />
             <h1 className="text-2xl font-bold">s3browser</h1>
           </div>
 

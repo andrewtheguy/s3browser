@@ -1,4 +1,4 @@
-import { ChevronRight, LogOut, Monitor, Moon, Settings, Sun } from 'lucide-react';
+import { ChevronRight, Cloud, LogOut, Monitor, Moon, Server, Settings, Sun } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { BucketIcon } from '@/components/ui/bucket-icon';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ import {
 } from '../../utils/urlEncoding';
 
 const crumbClass =
-  'min-w-0 truncate rounded px-1.5 py-1 text-sm hover:bg-accent hover:text-accent-foreground max-w-[9rem] sm:max-w-xs';
+  'flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-sm hover:bg-accent hover:text-accent-foreground max-w-[9rem] sm:max-w-xs';
 
 export function AppHeader() {
   const params = useParams<{ connectionId?: string; bucket?: string }>();
@@ -47,14 +47,15 @@ export function AppHeader() {
           to={CONNECTIONS_URL}
           className="flex h-10 shrink-0 items-center gap-2 rounded px-1.5 font-semibold hover:bg-accent"
         >
-          <BucketIcon className="h-5 w-5 text-primary" />
+          <Cloud className="h-5 w-5 text-primary" />
           <span className="hidden sm:inline">s3browser</span>
         </Link>
         {connectionId !== null && (
           <>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <Link to={buildSelectBucketUrl(connectionId)} className={crumbClass} title={connection?.profileName}>
-              {connection?.profileName ?? '…'}
+              <Server className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="truncate">{connection?.profileName ?? '…'}</span>
             </Link>
           </>
         )}
@@ -62,7 +63,8 @@ export function AppHeader() {
           <>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <Link to={buildBrowseUrl(connectionId, bucket, '')} className={crumbClass} title={bucket}>
-              {bucket}
+              <BucketIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{bucket}</span>
             </Link>
           </>
         )}

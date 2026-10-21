@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useSaveConnectionMutation, useTestConnectionMutation } from '../../queries/connections';
 import type { S3ConnectionCredentials, ServerSavedConnection } from '../../services/api/auth';
-import { CONNECTIONS_URL, buildBrowseUrl, buildSelectBucketUrl } from '../../utils/urlEncoding';
+import { CONNECTIONS_URL } from '../../utils/urlEncoding';
 import { DeleteConnectionDialog } from '../ConnectionCard';
 
 function isValidUrl(value: string): boolean {
@@ -65,7 +65,7 @@ export function ConnectionForm({ connection }: ConnectionFormProps) {
   const [endpointTouched, setEndpointTouched] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<null | 'save' | 'open'>(null);
+  const [saving, setSaving] = useState(false);
 
   const endpointValid = useAwsDefault || (formData.endpoint.trim() !== '' && isValidUrl(formData.endpoint));
   const nameValid = isValidProfileName(formData.profileName.trim());
@@ -104,30 +104,22 @@ export function ConnectionForm({ connection }: ConnectionFormProps) {
     }
   };
 
-  const handleSave = async (openAfter: boolean) => {
-    setPendingAction(openAfter ? 'open' : 'save');
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const result = await saveMutation.mutateAsync(buildCredentials());
+      await saveMutation.mutateAsync(buildCredentials());
       toast.success(isEdit ? 'Connection saved' : 'Connection created');
-      if (openAfter) {
-        void navigate(
-          result.bucket
-            ? buildBrowseUrl(result.connectionId, result.bucket, '')
-            : buildSelectBucketUrl(result.connectionId),
-        );
-      } else {
-        void navigate(CONNECTIONS_URL);
-      }
+      void navigate(CONNECTIONS_URL);
     } catch {
       // saveMutation.error is rendered below.
     } finally {
-      setPendingAction(null);
+      setSaving(false);
     }
   };
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (formValid && !busy) void handleSave(true);
+    if (formValid && !busy) void handleSave();
   };
 
   const showNameError = nameTouched && !nameValid;
@@ -309,17 +301,8 @@ export function ConnectionForm({ connection }: ConnectionFormProps) {
         >
           {testMutation.isPending ? <Spinner size="sm" /> : 'Test connection'}
         </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-11"
-          onClick={() => void handleSave(false)}
-          disabled={!formValid || busy}
-        >
-          {pendingAction === 'save' ? <Spinner size="sm" /> : 'Save'}
-        </Button>
         <Button type="submit" className="h-11" disabled={!formValid || busy}>
-          {pendingAction === 'open' ? <Spinner size="sm" className="text-primary-foreground" /> : 'Save & open'}
+          {saving ? <Spinner size="sm" className="text-primary-foreground" /> : 'Save'}
         </Button>
       </div>
 
