@@ -162,15 +162,23 @@ pub fn validate_content_type(value: Option<&str>) -> Option<String> {
     Some(value.to_string())
 }
 
-/// An ASCII-only filename safe inside a quoted header parameter.
-pub fn sanitize_filename(filename: &str) -> String {
-    let mapped: String = filename
+/// A filename without control or quoting characters and with whitespace
+/// collapsed; non-ASCII characters are kept.
+pub fn clean_filename(filename: &str) -> String {
+    let kept: String = filename
         .chars()
         .filter(|&c| !is_control(c) && c != '"' && c != ';')
-        .map(|c| if c.is_ascii() { c } else { '_' })
         .collect();
-    let collapsed = mapped.split_whitespace().collect::<Vec<_>>().join(" ");
+    let collapsed = kept.split_whitespace().collect::<Vec<_>>().join(" ");
     if collapsed.is_empty() { "download".to_string() } else { collapsed }
+}
+
+/// An ASCII-only filename safe inside a quoted header parameter.
+pub fn sanitize_filename(filename: &str) -> String {
+    clean_filename(filename)
+        .chars()
+        .map(|c| if c.is_ascii() { c } else { '_' })
+        .collect()
 }
 
 /// Percent-encode everything but unreserved characters and `safe`, as
@@ -279,6 +287,8 @@ mod tests {
         assert_eq!(sanitize_filename("a\"b;c\u{1}  d.txt "), "abc d.txt");
         assert_eq!(sanitize_filename("報告.pdf"), "__.pdf");
         assert_eq!(sanitize_filename("\"\""), "download");
+        assert_eq!(clean_filename(" 報告\u{1}  \"一\".zip "), "報告 一.zip");
+        assert_eq!(clean_filename(";"), "download");
         assert_eq!(
             build_content_disposition("attachment", "報告 1.pdf"),
             "attachment; filename=\"__ 1.pdf\"; filename*=UTF-8''%E5%A0%B1%E5%91%8A%201.pdf"

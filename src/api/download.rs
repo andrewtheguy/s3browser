@@ -29,7 +29,7 @@ use crate::s3::ErrorInfo;
 use crate::server::{ApiJson, ApiPath, ApiQuery, AppState, BucketPath};
 use crate::session::now_secs;
 use crate::validate::{
-    MAX_KEY_BYTES, build_content_disposition, extract_file_name, has_unsafe_chars, sanitize_filename,
+    MAX_KEY_BYTES, build_content_disposition, clean_filename, extract_file_name, has_unsafe_chars,
     sanitize_version_id, validate_content_type, validate_object_key,
 };
 use crate::zip::ZipWriter;
@@ -331,7 +331,7 @@ async fn create_batch_zip_ticket(
             name: entry.name,
         });
     }
-    let mut archive_name = sanitize_filename(body.archive_name.as_deref().unwrap_or("download.zip"));
+    let mut archive_name = clean_filename(body.archive_name.as_deref().unwrap_or("download.zip"));
     if !archive_name.to_lowercase().ends_with(".zip") {
         archive_name.push_str(".zip");
     }

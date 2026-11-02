@@ -711,7 +711,7 @@ async fn batch_zip_download() {
         .post_json(
             &server.bucket_path("download", bucket, "/batch-zip-ticket"),
             json!({
-                "archiveName": "bundle.zip",
+                "archiveName": "照片 2024",
                 "entries": [
                     { "key": "photos/2024/a.bin", "name": "2024/a.bin" },
                     { "key": "notes.txt", "name": "notes.txt" },
@@ -726,7 +726,10 @@ async fn batch_zip_download() {
     let response = server.http.get(server.url(&path)).send().await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let disposition = response.headers()[header::CONTENT_DISPOSITION].to_str().unwrap().to_string();
-    assert!(disposition.contains("bundle.zip"), "{disposition}");
+    assert_eq!(
+        disposition,
+        "attachment; filename=\"__ 2024.zip\"; filename*=UTF-8''%E7%85%A7%E7%89%87%202024.zip"
+    );
     let bytes = response.bytes().await.unwrap();
 
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes.to_vec())).expect("valid zip");
