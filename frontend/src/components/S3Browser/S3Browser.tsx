@@ -86,9 +86,9 @@ function relativeArchiveName(currentPath: string, key: string): string {
   return relativeKey.replace(/^\/+/, '').split('/').filter(Boolean).join('/');
 }
 
-// Suggested archive filename derived from the current folder's basename.
-function deriveArchiveName(currentPath: string): string {
-  const base = currentPath
+// Suggested archive filename derived from a folder path's basename.
+function deriveArchiveName(folderPath: string): string {
+  const base = folderPath
     .replace(/\/+$/, '')
     .split('/')
     .filter(Boolean)
@@ -666,7 +666,11 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
       return;
     }
 
-    const archiveName = deriveArchiveName(currentPath);
+    // A lone folder is named after itself; anything else after the current folder.
+    const [onlyItem] = itemsToDownload;
+    const archiveName = deriveArchiveName(
+      itemsToDownload.length === 1 && onlyItem.isFolder ? onlyItem.key : currentPath
+    );
     setIsDownloadingBatch(true);
     try {
       const ticket = await createBatchZipTicket(activeConnectionId, bucket, entries, archiveName);
@@ -693,6 +697,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     activeConnectionId,
     bucket,
     downloadPlan,
+    itemsToDownload,
     currentPath,
     handleBatchDownloadCancel,
   ]);
