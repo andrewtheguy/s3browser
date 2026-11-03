@@ -221,8 +221,10 @@ pub fn quote(value: &str, safe: &str) -> String {
 }
 
 pub fn build_content_disposition(disposition: &str, raw_filename: &str) -> String {
-    let ascii_name = sanitize_filename(raw_filename);
-    let encoded = quote(raw_filename, "/");
+    let filtered: String = raw_filename.chars().filter(|&c| !is_filename_noise(c)).collect();
+    let name = if filtered.trim().is_empty() { "download" } else { filtered.as_str() };
+    let ascii_name = sanitize_filename(name);
+    let encoded = quote(name, "/");
     format!("{disposition}; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}")
 }
 
@@ -321,6 +323,14 @@ mod tests {
         assert_eq!(
             build_content_disposition("attachment", "報告 1.pdf"),
             "attachment; filename=\"__ 1.pdf\"; filename*=UTF-8''%E5%A0%B1%E5%91%8A%201.pdf"
+        );
+        assert_eq!(
+            build_content_disposition("attachment", "a\u{202E}\u{200B}b\".txt"),
+            "attachment; filename=\"ab.txt\"; filename*=UTF-8''ab.txt"
+        );
+        assert_eq!(
+            build_content_disposition("inline", "\u{202E}"),
+            "inline; filename=\"download\"; filename*=UTF-8''download"
         );
         assert_eq!(quote("a b/c~", ""), "a%20b%2Fc~");
     }
