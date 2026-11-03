@@ -666,7 +666,12 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
       return;
     }
 
-    const archiveName = deriveArchiveName(currentPath);
+    // A lone folder is named after itself; anything else after the current folder.
+    const [onlyItem] = itemsToDownload;
+    const archiveName =
+      itemsToDownload.length === 1 && onlyItem.isFolder && onlyItem.name
+        ? `${onlyItem.name}.zip`
+        : deriveArchiveName(currentPath);
     setIsDownloadingBatch(true);
     try {
       const ticket = await createBatchZipTicket(activeConnectionId, bucket, entries, archiveName);
@@ -693,6 +698,7 @@ export function S3Browser({ previewKey = null }: S3BrowserProps) {
     activeConnectionId,
     bucket,
     downloadPlan,
+    itemsToDownload,
     currentPath,
     handleBatchDownloadCancel,
   ]);

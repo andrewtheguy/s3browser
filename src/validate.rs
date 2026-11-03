@@ -162,15 +162,47 @@ pub fn validate_content_type(value: Option<&str>) -> Option<String> {
     Some(value.to_string())
 }
 
+/// Longest archive filename kept, in bytes, before `.zip` is appended; keeps
+/// the percent-encoded `filename*` header parameter small.
+pub const MAX_FILENAME_BYTES: usize = 255;
+
+/// Characters dropped from every filename: controls (C0, DEL, C1), header
+/// quoting characters, and invisible formatting characters (zero-width,
+/// bidi controls, line/paragraph separators, BOM) that can disguise a name.
+fn is_filename_noise(c: char) -> bool {
+    c.is_control()
+        || c == '"'
+        || c == ';'
+        || matches!(c, '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{2028}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}')
+}
+
+fn collapse_whitespace(value: &str) -> String {
+    let collapsed = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() { "download".to_string() } else { collapsed }
+}
+
+/// A filename without control, quoting or invisible formatting characters,
+/// whitespace collapsed and capped at `MAX_FILENAME_BYTES`; other non-ASCII
+/// characters are kept.
+pub fn clean_filename(filename: &str) -> String {
+    let kept: String = filename.chars().filter(|&c| !is_filename_noise(c)).collect();
+    let mut cleaned = collapse_whitespace(&kept);
+    if cleaned.len() > MAX_FILENAME_BYTES {
+        let cut = cleaned.floor_char_boundary(MAX_FILENAME_BYTES);
+        cleaned.truncate(cut);
+        cleaned = collapse_whitespace(&cleaned);
+    }
+    cleaned
+}
+
 /// An ASCII-only filename safe inside a quoted header parameter.
 pub fn sanitize_filename(filename: &str) -> String {
     let mapped: String = filename
         .chars()
-        .filter(|&c| !is_control(c) && c != '"' && c != ';')
+        .filter(|&c| !is_filename_noise(c))
         .map(|c| if c.is_ascii() { c } else { '_' })
         .collect();
-    let collapsed = mapped.split_whitespace().collect::<Vec<_>>().join(" ");
-    if collapsed.is_empty() { "download".to_string() } else { collapsed }
+    collapse_whitespace(&mapped)
 }
 
 /// Percent-encode everything but unreserved characters and `safe`, as
@@ -189,8 +221,10 @@ pub fn quote(value: &str, safe: &str) -> String {
 }
 
 pub fn build_content_disposition(disposition: &str, raw_filename: &str) -> String {
-    let ascii_name = sanitize_filename(raw_filename);
-    let encoded = quote(raw_filename, "/");
+    let filtered: String = raw_filename.chars().filter(|&c| !is_filename_noise(c)).collect();
+    let name = if filtered.trim().is_empty() { "download" } else { filtered.as_str() };
+    let ascii_name = sanitize_filename(name);
+    let encoded = quote(name, "/");
     format!("{disposition}; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}")
 }
 
@@ -279,9 +313,24 @@ mod tests {
         assert_eq!(sanitize_filename("a\"b;c\u{1}  d.txt "), "abc d.txt");
         assert_eq!(sanitize_filename("報告.pdf"), "__.pdf");
         assert_eq!(sanitize_filename("\"\""), "download");
+        assert_eq!(clean_filename(" 報告\u{1}  \"一\".zip "), "報告 一.zip");
+        assert_eq!(clean_filename(";"), "download");
+        assert_eq!(clean_filename("invoice\u{202E}fdp\u{200B}\u{85}.exe"), "invoicefdp.exe");
+        assert_eq!(sanitize_filename("報告\u{3000}1.pdf"), "___1.pdf");
+        let long = clean_filename(&"報".repeat(200));
+        assert_eq!(long, "報".repeat(MAX_FILENAME_BYTES / 3));
+        assert_eq!(clean_filename(&format!("{}  b", "a".repeat(MAX_FILENAME_BYTES - 1))), "a".repeat(MAX_FILENAME_BYTES - 1));
         assert_eq!(
             build_content_disposition("attachment", "報告 1.pdf"),
             "attachment; filename=\"__ 1.pdf\"; filename*=UTF-8''%E5%A0%B1%E5%91%8A%201.pdf"
+        );
+        assert_eq!(
+            build_content_disposition("attachment", "a\u{202E}\u{200B}b\".txt"),
+            "attachment; filename=\"ab.txt\"; filename*=UTF-8''ab.txt"
+        );
+        assert_eq!(
+            build_content_disposition("inline", "\u{202E}"),
+            "inline; filename=\"download\"; filename*=UTF-8''download"
         );
         assert_eq!(quote("a b/c~", ""), "a%20b%2Fc~");
     }
